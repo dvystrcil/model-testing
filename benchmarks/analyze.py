@@ -108,7 +108,11 @@ Please provide:
 4. Any surprising findings worth flagging
 """
 
-    print(f"Analyzing {len(results)} results with {ANALYSIS_MODEL}...", file=sys.stderr)
+    models_seen = sorted({r["model"] for r in results})
+    payloads_seen = sorted({r["payload"] for r in results})
+    print(f"[INFO] Analyzing {len(results)} results — models: {models_seen}", file=sys.stderr)
+    print(f"[INFO] Payloads: {payloads_seen}", file=sys.stderr)
+    print(f"[INFO] Sending to {ANALYSIS_MODEL} for summary...", file=sys.stderr)
     analysis = ollama_chat(args.ollama, [
         {"role": "system", "content": "You are a concise technical analyst. Use markdown. Be specific about numbers."},
         {"role": "user", "content": prompt},

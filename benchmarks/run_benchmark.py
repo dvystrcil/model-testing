@@ -20,6 +20,11 @@ from pathlib import Path
 
 import yaml
 
+
+def info(msg: str) -> None:
+    ts = datetime.datetime.now(datetime.UTC).strftime("%H:%M:%S")
+    print(f"[INFO {ts}] {msg}", flush=True)
+
 PAYLOADS_DIR = Path(__file__).parent / "payloads"
 RESULTS_DIR = Path(__file__).parent / "results"
 MODELS_FILE = Path(__file__).parent.parent / "models.yaml"
@@ -120,9 +125,9 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         for m in spec["payload"].get("messages", [])
     )
 
-    print(f"\n  payload={name}  msgs={msg_count}  ~{approx_tokens} tokens  model={model}  runs={runs}")
+    info(f"payload={name}  model={model}  msgs={msg_count}  ~{approx_tokens} tokens  runs={runs}")
     if forbidden:
-        print(f"  forbidden terms: {len(forbidden)}")
+        print(f"         forbidden terms: {len(forbidden)}")
 
     if dry_run:
         print("  [dry-run] would POST to", f"{ollama_url}/api/chat")
@@ -132,22 +137,22 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
 
     raw_results = []
     for i in range(runs):
-        if runs > 1:
-            print(f"  run {i+1}/{runs}...", end=" ", flush=True)
+        run_label = f"run {i+1}/{runs}  " if runs > 1 else ""
+        info(f"{run_label}sending request → ollama ({ollama_url})")
         r = run_once(spec, ollama_url, model)
         if r is None:
             continue
         raw_results.append(r)
         if runs > 1:
             violation_str = f"  VIOLATIONS={r['violations']}" if r["violations"] else ""
-            print(f"P-eval={r['ped']/1e9:.2f}s  gen={r['ed']/1e9:.2f}s  Q={r['facts_score']:.0%}{violation_str}")
+            info(f"{run_label}done  P-eval={r['ped']/1e9:.2f}s  gen={r['ed']/1e9:.2f}s  Q={r['facts_score']:.0%}{violation_str}")
         else:
-            print(f"  prompt_tokens={r['pec']}  prompt_eval={r['ped']/1e9:.2f}s  "
-                  f"gen_tokens={r['ec']}  gen={r['ed']/1e9:.2f}s  total={r['td']/1e9:.2f}s")
-            print(f"  facts={r['facts_score']:.0%} ({len(r['hits'])}/{len(facts)})  "
-                  f"hits={r['hits']}  misses={r['misses']}")
+            info(f"done  P-eval={r['ped']/1e9:.2f}s  gen={r['ed']/1e9:.2f}s  total={r['td']/1e9:.2f}s  "
+                 f"facts={r['facts_score']:.0%} ({len(r['hits'])}/{len(facts)})")
+            if r["misses"]:
+                print(f"         misses={r['misses']}")
             if r["violations"]:
-                print(f"  FORBIDDEN VIOLATIONS: {r['violations']}")
+                print(f"         FORBIDDEN VIOLATIONS: {r['violations']}")
 
     if not raw_results:
         return None
@@ -245,7 +250,9 @@ def main():
 
     results = []
     for model in models:
-        print(f"\n{'='*60}\nModel: {model}")
+        info(f"{'='*50}")
+        info(f"MODEL: {model}")
+        info(f"{'='*50}")
         for spec in specs:
             result = run_one(spec, args.ollama, model, args.runs, args.snippet_len, args.dry_run)
             if result is not None:
