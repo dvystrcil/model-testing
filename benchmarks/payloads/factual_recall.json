@@ -1,0 +1,47 @@
+{
+  "name": "factual_recall",
+  "description": "Retrieves facts established early in a long conversation — tests context retention under pressure",
+  "quality_facts": ["15 min", "7 day", "10 min", "100", "500", "unlimited"],
+  "quality_forbidden": [],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a helpful assistant for a software development team."
+      },
+      {
+        "role": "user",
+        "content": "We are building a FastAPI auth service. Here are the specs:\n- JWT access tokens expire in 15 min\n- Refresh tokens expire in 7 days\n- Password reset tokens expire in 10 min\n- Viewer role: 100 requests/min\n- Editor role: 500 requests/min\n- Admin role: unlimited requests\n\nConfirmed, let's build it."
+      },
+      {
+        "role": "assistant",
+        "content": "Got it. Building FastAPI auth service with those exact specs. Starting with the JWT implementation."
+      },
+      {"role": "user", "content": "Add asyncpg for database connections."},
+      {"role": "assistant", "content": "Added asyncpg connection pool with async context manager."},
+      {"role": "user", "content": "Add Redis for token blacklisting."},
+      {"role": "assistant", "content": "Added Redis client with token blacklist methods."},
+      {"role": "user", "content": "Add SQLAlchemy models for users and roles."},
+      {"role": "assistant", "content": "Created User and Role models with relationship mapping."},
+      {"role": "user", "content": "Add Alembic for migrations."},
+      {"role": "assistant", "content": "Configured Alembic with async support and initial migration."},
+      {"role": "user", "content": "Add OpenTelemetry tracing."},
+      {"role": "assistant", "content": "Added OTLP exporter with span instrumentation on all endpoints."},
+      {"role": "user", "content": "Add Celery for background tasks."},
+      {"role": "assistant", "content": "Configured Celery with Redis broker and result backend."},
+      {"role": "user", "content": "Add structlog for structured logging."},
+      {"role": "assistant", "content": "Added structlog with JSON renderer and request correlation IDs."},
+      {"role": "user", "content": "Add API versioning under /v1."},
+      {"role": "assistant", "content": "Added APIRouter with /v1 prefix and version negotiation middleware."},
+      {"role": "user", "content": "Add Redis caching for frequent queries."},
+      {"role": "assistant", "content": "Added cache decorator with configurable TTL and invalidation hooks."},
+      {
+        "role": "user",
+        "content": "List every token expiry time and role-based rate limit we established at the start. Be exact with all numbers."
+      }
+    ]
+  }
+}

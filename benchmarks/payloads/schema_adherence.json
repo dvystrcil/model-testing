@@ -1,0 +1,30 @@
+{
+  "name": "schema_adherence",
+  "description": "Given an existing config file as reference, create a new one for a different app. Tests whether the model follows the established schema or hallucinates new fields.",
+  "quality_facts": [
+    "argocd-image-updater.argoproj.io/v1alpha1",
+    "filebrowser-iu",
+    "kustomization:/overlays",
+    "dvystrcil/filebrowser"
+  ],
+  "quality_forbidden": [
+    "manifestTargets",
+    "base/deployment.yaml",
+    "spec.template.spec.containers"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a Kubernetes configuration assistant. When creating new config files, always match the exact schema and structure of existing files in the same directory. Do not add fields that do not appear in the existing examples."
+      },
+      {
+        "role": "user",
+        "content": "Here is an existing ImageUpdater config for open-webui:\n\n```yaml\napiVersion: argocd-image-updater.argoproj.io/v1alpha1\nkind: ImageUpdater\nmetadata:\n  name: open-webui-iu\nspec:\n  namespace: argocd\n  applicationRefs:\n    - namePattern: \"open-webui\"\n      images:\n        - alias: \"open-webui\"\n          imageName: \"ghcr.io/open-webui/open-webui:0.x\"\n      writeBackConfig:\n        method: \"git\"\n        gitConfig:\n          repository: \"https://github.com/dvystrcil/open-webui.git\"\n          branch: \"main\"\n          writeBackTarget: \"kustomization:/overlays\"\n```\n\nCreate an equivalent config for filebrowser. The image is `ghcr.io/gtsteffaniak/filebrowser`, the git repository is `https://github.com/dvystrcil/filebrowser-quantum.git`. Match the schema exactly — do not add any fields not present in the example above."
+      }
+    ]
+  }
+}

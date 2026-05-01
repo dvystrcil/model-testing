@@ -1,0 +1,31 @@
+{
+  "name": "instruction_following",
+  "description": "Tests whether the model respects explicit scope constraints — adds a new entry without touching existing ones.",
+  "quality_facts": [
+    "filebrowser",
+    "dvystrcil/filebrowser"
+  ],
+  "quality_forbidden": [
+    "wallos-iu",
+    "bellamy/wallos",
+    "I also updated",
+    "I modified",
+    "I changed wallos",
+    "updated wallos"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a Kubernetes configuration assistant. When asked to add a new entry, only output the new entry. Do NOT modify, rewrite, or mention changes to any existing entries."
+      },
+      {
+        "role": "user",
+        "content": "Here is the current ImageUpdater config for wallos (do not modify this):\n\n```yaml\napiVersion: argocd-image-updater.argoproj.io/v1alpha1\nkind: ImageUpdater\nmetadata:\n  name: wallos-iu\nspec:\n  namespace: argocd\n  applicationRefs:\n    - namePattern: \"wallos\"\n      images:\n        - alias: \"wallos\"\n          imageName: \"bellamy/wallos:4.x\"\n      writeBackConfig:\n        method: \"git\"\n        gitConfig:\n          repository: \"https://github.com/dvystrcil/wallos.git\"\n          branch: \"main\"\n          writeBackTarget: \"kustomization:/overlays\"\n```\n\nUsing the same schema, write ONLY the new ImageUpdater config for filebrowser. Image: `ghcr.io/gtsteffaniak/filebrowser:0.x`. Repo: `https://github.com/dvystrcil/filebrowser-quantum.git`. Output only the new file. Do not reference or rewrite the wallos config."
+      }
+    ]
+  }
+}

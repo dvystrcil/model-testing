@@ -1,0 +1,75 @@
+name: model-sweep
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'benchmarks/payloads/**'
+      - 'models.yaml'
+      - 'benchmarks/run_benchmark.py'
+      - 'benchmarks/analyze.py'
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'Single model to test (leave blank for all)'
+        required: false
+        default: ''
+      payload:
+        description: 'Payload name or "all"'
+        required: false
+        default: 'all'
+      runs:
+        description: 'Runs per model/payload pair'
+        required: false
+        default: '1'
+
+jobs:
+  sweep:
+    runs-on: model-testing-runner
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run benchmark sweep
+        id: sweep
+        env:
+          OLLAMA_URL: http://ollama.ollama.svc.cluster.local
+        run: |
+          MODEL_ARG=""
+          if [ -n "${{ github.event.inputs.model }}" ]; then
+            MODEL_ARG="--model ${{ github.event.inputs.model }}"
+          fi
+          PAYLOAD="${{ github.event.inputs.payload || 'all' }}"
+          RUNS="${{ github.event.inputs.runs || '1' }}"
+
+          RESULT_FILE=$(python benchmarks/run_benchmark.py \
+            --ollama "$OLLAMA_URL" \
+            --payload "$PAYLOAD" \
+            --runs "$RUNS" \
+            $MODEL_ARG | tail -1)
+
+          echo "result_file=$RESULT_FILE" >> "$GITHUB_OUTPUT"
+          echo "### Sweep complete: \`$RESULT_FILE\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Analyze results
+        env:
+          OLLAMA_URL: http://ollama.ollama.svc.cluster.local
+        run: |
+          python benchmarks/analyze.py \
+            "${{ steps.sweep.outputs.result_file }}" \
+            --ollama "$OLLAMA_URL" \
+            --out report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.run_id }}
+          path: |
+            benchmarks/results/
+            report.md
+          retention-days: 30
