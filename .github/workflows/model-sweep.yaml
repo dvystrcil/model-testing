@@ -32,9 +32,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: |
-          python3 -m venv /tmp/venv
-          /tmp/venv/bin/pip install -r requirements.txt
+        run: pip3 install --break-system-packages -r requirements.txt
 
       - name: Run benchmark sweep
         id: sweep
@@ -48,7 +46,7 @@ jobs:
           PAYLOAD="${{ github.event.inputs.payload || 'all' }}"
           RUNS="${{ github.event.inputs.runs || '1' }}"
 
-          RESULT_FILE=$(/tmp/venv/bin/python3 benchmarks/run_benchmark.py \
+          RESULT_FILE=$(python3 benchmarks/run_benchmark.py \
             --ollama "$OLLAMA_URL" \
             --payload "$PAYLOAD" \
             --runs "$RUNS" \
@@ -61,7 +59,7 @@ jobs:
         env:
           OLLAMA_URL: http://ollama.ollama.svc.cluster.local
         run: |
-          /tmp/venv/bin/python3 benchmarks/analyze.py \
+          python3 benchmarks/analyze.py \
             "${{ steps.sweep.outputs.result_file }}" \
             --ollama "$OLLAMA_URL" \
             --out report.md
