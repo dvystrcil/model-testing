@@ -1,6 +1,11 @@
 {
   "name": "schema_adherence",
-  "description": "Given an existing config file as reference, create a new one for a different app. Tests whether the model follows the established schema or hallucinates new fields. Uses keyword checks for CRD-specific field hallucinations (kubectl --dry-run=client does not validate CRD spec fields).",
+  "description": "Given an existing config file as reference, create a new one for a different app. Tests whether the model follows the established schema or hallucinates new fields. Validated against the live ImageUpdater CRD schema via kubectl --dry-run=server.",
+  "validate": {
+    "kubectl_dry_run": "server",
+    "yaml_type": "full_resource",
+    "namespace": "arc-runner"
+  },
   "quality_facts": [
     "argocd-image-updater.argoproj.io/v1alpha1",
     "filebrowser-iu",
