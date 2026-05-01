@@ -1,0 +1,37 @@
+{
+  "name": "stress_multi_constraint",
+  "description": "High-constraint K8s manifest generation — 10 simultaneous requirements across naming, labels, resources, probes, security, and topology. Finds which requirements models drop under cognitive load.",
+  "quality_facts": [
+    "app.kubernetes.io/name: ingest-api",
+    "app.kubernetes.io/version",
+    "app.kubernetes.io/managed-by: argocd",
+    "containerPort: 8080",
+    "readinessProbe",
+    "livenessProbe",
+    "memory: \"512Mi\"",
+    "memory: \"256Mi\"",
+    "runAsNonRoot: true",
+    "topologySpreadConstraints"
+  ],
+  "quality_forbidden": [
+    "privileged: true",
+    "runAsUser: 0",
+    "hostNetwork: true",
+    "latest"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a Kubernetes configuration expert. Generate complete, production-ready manifests that satisfy every stated requirement. Do not omit any requirement."
+      },
+      {
+        "role": "user",
+        "content": "Generate a Kubernetes Deployment manifest for a service called `ingest-api` that satisfies ALL of the following requirements. Missing even one will be considered a failure.\n\n1. Name and namespace: name=`ingest-api`, namespace=`data-plane`\n2. Labels on the deployment AND pod template must include all three: `app.kubernetes.io/name: ingest-api`, `app.kubernetes.io/version: \"1.0.0\"`, `app.kubernetes.io/managed-by: argocd`\n3. Replica count: 2\n4. Container image: `ghcr.io/dvystrcil/ingest-api:1.0.0` (no `latest` tag)\n5. Container port: 8080\n6. Resource requests: cpu=`100m`, memory=`256Mi`. Limits: cpu=`500m`, memory=`512Mi`\n7. Liveness probe: httpGet on path `/healthz` port 8080, initialDelaySeconds=10, periodSeconds=15\n8. Readiness probe: httpGet on path `/ready` port 8080, initialDelaySeconds=5, periodSeconds=10\n9. Security context on the pod: `runAsNonRoot: true`, `runAsUser: 1000`, `fsGroup: 1000`\n10. Topology spread: spread replicas across nodes using `topologyKey: kubernetes.io/hostname`, `maxSkew: 1`, `whenUnsatisfiable: DoNotSchedule`\n\nOutput only the YAML. No explanation."
+      }
+    ]
+  }
+}

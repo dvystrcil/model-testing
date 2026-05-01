@@ -85,6 +85,22 @@ def stddev(values: list[float]) -> float:
     return math.sqrt(sum((x - mean) ** 2 for x in values) / (len(values) - 1))
 
 
+def warmup_model(ollama_url: str, model: str) -> None:
+    info(f"warming up {model} — ensuring model is fully loaded into VRAM...")
+    payload = {
+        "model": model,
+        "stream": False,
+        "options": {"num_gpu": -1},
+        "messages": [{"role": "user", "content": "hi"}],
+    }
+    try:
+        resp = ollama_chat(ollama_url, payload)
+        load_ms = resp.get("total_duration", 0) / 1e6
+        info(f"warmup done  total={load_ms:.0f}ms")
+    except Exception as e:
+        info(f"warmup failed (continuing anyway): {e}")
+
+
 def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
     payload = json.loads(json.dumps(spec["payload"]))
     payload["model"] = model
@@ -236,7 +252,8 @@ def main():
     p.add_argument("--model",   default=None,           help="Single model override (default: all from models.yaml)")
     p.add_argument("--runs",    type=int, default=1,    help="Runs per model/payload pair")
     p.add_argument("--snippet-len", type=int, default=300, help="Response snippet length in results (0=omit)")
-    p.add_argument("--dry-run", action="store_true",    help="Print without executing")
+    p.add_argument("--dry-run",   action="store_true",    help="Print without executing")
+    p.add_argument("--no-warmup", action="store_true",    help="Skip per-model warmup request")
     args = p.parse_args()
 
     models = [args.model] if args.model else load_models(MODELS_FILE)
@@ -253,6 +270,8 @@ def main():
         info(f"{'='*50}")
         info(f"MODEL: {model}")
         info(f"{'='*50}")
+        if not args.dry_run and not args.no_warmup:
+            warmup_model(args.ollama, model)
         for spec in specs:
             result = run_one(spec, args.ollama, model, args.runs, args.snippet_len, args.dry_run)
             if result is not None:
