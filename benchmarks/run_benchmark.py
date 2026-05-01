@@ -263,8 +263,9 @@ def main():
 
     print_summary(results)
     if not args.dry_run and results:
-        print(f"\nResults written to {out_path}")
-        print(out_path)  # last line: path for CI to capture
+        info(f"Results written to {out_path}")
+        # Write path to a sidecar file so CI can read it without piping stdout
+        (RESULTS_DIR / ".last_result").write_text(str(out_path))
 
 
 if __name__ == "__main__":

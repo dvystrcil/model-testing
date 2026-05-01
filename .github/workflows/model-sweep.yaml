@@ -50,12 +50,13 @@ jobs:
           PAYLOAD="${{ github.event.inputs.payload || 'all' }}"
           RUNS="${{ github.event.inputs.runs || '1' }}"
 
-          RESULT_FILE=$(python benchmarks/run_benchmark.py \
+          python benchmarks/run_benchmark.py \
             --ollama "$OLLAMA_URL" \
             --payload "$PAYLOAD" \
             --runs "$RUNS" \
-            $MODEL_ARG | tail -1)
+            $MODEL_ARG
 
+          RESULT_FILE=$(cat benchmarks/results/.last_result)
           echo "result_file=$RESULT_FILE" >> "$GITHUB_OUTPUT"
           echo "### Sweep complete: \`$RESULT_FILE\`" >> "$GITHUB_STEP_SUMMARY"
 
