@@ -23,6 +23,10 @@ on:
         required: false
         default: '1'
 
+concurrency:
+  group: model-sweep
+  cancel-in-progress: true
+
 jobs:
   sweep:
     runs-on: model-testing-runner
