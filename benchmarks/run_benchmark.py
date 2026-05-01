@@ -17,6 +17,7 @@ import re
 import socket
 import subprocess
 import sys
+import textwrap
 import urllib.request
 from pathlib import Path
 
@@ -97,6 +98,83 @@ def strip_think(text: str) -> str:
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
+def extract_yaml(text: str) -> str:
+    """Strip markdown code fences and return the raw YAML content."""
+    lines = text.strip().splitlines()
+    # If there are no fences, return as-is
+    if not any(l.strip().startswith("```") for l in lines):
+        return text.strip()
+    result, in_fence = [], False
+    for line in lines:
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            result.append(line)
+    return "\n".join(result).strip()
+
+
+def wrap_container_spec(yaml_str: str) -> str:
+    """
+    Embed a container spec snippet into a minimal Pod manifest so kubectl
+    can validate it against the full K8s schema.
+
+    Handles two common model output shapes:
+      - starts with 'containers:' (full key included)
+      - starts with '- name:' (just the list item)
+    """
+    stripped = yaml_str.strip()
+    if stripped.startswith("containers:"):
+        containers_block = stripped
+    else:
+        # Assume it's a list item; add the key
+        containers_block = "containers:\n" + textwrap.indent(stripped, "  ")
+
+    pod = (
+        "apiVersion: v1\nkind: Pod\n"
+        "metadata:\n  name: schema-validate\n"
+        "spec:\n"
+        + textwrap.indent(containers_block, "  ")
+    )
+    return pod
+
+
+def validate_kubectl(yaml_str: str, dry_run: str = "client") -> list[str]:
+    """
+    Run `kubectl apply --dry-run=<dry_run>` against yaml_str.
+    Returns a list of unknown field names found in the error output.
+    Returns an empty list on success. Returns None signals are not used —
+    an empty list means clean, a non-empty list means violations found.
+    Failures in kubectl itself (binary not found, timeout) are logged and
+    return an empty list so the sweep continues.
+    """
+    try:
+        result = subprocess.run(
+            ["kubectl", "apply", f"--dry-run={dry_run}", "-f", "-"],
+            input=yaml_str.encode(),
+            capture_output=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            return []
+        stderr = result.stderr.decode()
+        fields = re.findall(r'unknown field[s]? "([^"]+)"', stderr)
+        if not fields:
+            # kubectl errored for a non-schema reason (e.g. malformed YAML);
+            # surface the raw message so it's visible in logs
+            info(f"[validate] kubectl error (non-schema): {stderr[:200]}")
+        return fields
+    except FileNotFoundError:
+        info("[validate] kubectl not found — skipping schema validation")
+        return []
+    except subprocess.TimeoutExpired:
+        info("[validate] kubectl timed out")
+        return []
+    except Exception as e:
+        info(f"[validate] unexpected error: {e}")
+        return []
+
+
 def grade(response_text: str, facts: list[str], forbidden: list[str]) -> dict:
     low = response_text.lower()
     hits = [f for f in facts if f.lower() in low]
@@ -151,6 +229,17 @@ def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
     forbidden = spec.get("quality_forbidden", [])
     g = grade(content, facts, forbidden)
 
+    schema_violations: list[str] = []
+    validate_cfg = spec.get("validate")
+    if validate_cfg:
+        raw_yaml = extract_yaml(content)
+        if validate_cfg.get("yaml_type") == "container_spec":
+            raw_yaml = wrap_container_spec(raw_yaml)
+        dry_run = validate_cfg.get("kubectl_dry_run", "client")
+        schema_violations = validate_kubectl(raw_yaml, dry_run)
+        if schema_violations:
+            info(f"[validate] unknown K8s fields: {schema_violations}")
+
     return {
         "pec": resp.get("prompt_eval_count", 0),
         "ped": resp.get("prompt_eval_duration", 0),
@@ -158,6 +247,7 @@ def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
         "ed":  resp.get("eval_duration", 0),
         "td":  resp.get("total_duration", 0),
         "content": content,
+        "schema_violations": schema_violations,
         **g,
     }
 
@@ -167,6 +257,7 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
     name = spec["name"]
     facts = spec.get("quality_facts", [])
     forbidden = spec.get("quality_forbidden", [])
+    validates = bool(spec.get("validate"))
 
     msg_count = len(spec["payload"].get("messages", []))
     approx_tokens = sum(
@@ -174,7 +265,8 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         for m in spec["payload"].get("messages", [])
     )
 
-    info(f"payload={name}  model={model}  msgs={msg_count}  ~{approx_tokens} tokens  runs={runs}")
+    info(f"payload={name}  model={model}  msgs={msg_count}  ~{approx_tokens} tokens  runs={runs}"
+         + ("  +kubectl-validate" if validates else ""))
     if forbidden:
         print(f"         forbidden terms: {len(forbidden)}")
 
@@ -182,6 +274,9 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         print("  [dry-run] would POST to", f"{ollama_url}/api/chat")
         print("  [dry-run] quality_facts:", facts)
         print("  [dry-run] quality_forbidden:", forbidden)
+        if validates:
+            cfg = spec["validate"]
+            print(f"  [dry-run] kubectl validate: dry_run={cfg.get('kubectl_dry_run', 'client')}  yaml_type={cfg.get('yaml_type', 'full_resource')}")
         return None
 
     raw_results = []
@@ -194,7 +289,8 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         raw_results.append(r)
         if runs > 1:
             violation_str = f"  VIOLATIONS={r['violations']}" if r["violations"] else ""
-            info(f"{run_label}done  P-eval={r['ped']/1e9:.2f}s  gen={r['ed']/1e9:.2f}s  Q={r['facts_score']:.0%}{violation_str}")
+            schema_str = f"  SCHEMA={r['schema_violations']}" if r.get("schema_violations") else ""
+            info(f"{run_label}done  P-eval={r['ped']/1e9:.2f}s  gen={r['ed']/1e9:.2f}s  Q={r['facts_score']:.0%}{violation_str}{schema_str}")
         else:
             info(f"done  P-eval={r['ped']/1e9:.2f}s  gen={r['ed']/1e9:.2f}s  total={r['td']/1e9:.2f}s  "
                  f"facts={r['facts_score']:.0%} ({len(r['hits'])}/{len(facts)})")
@@ -202,6 +298,8 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
                 print(f"         misses={r['misses']}")
             if r["violations"]:
                 print(f"         FORBIDDEN VIOLATIONS: {r['violations']}")
+            if r.get("schema_violations"):
+                print(f"         SCHEMA VIOLATIONS: {r['schema_violations']}")
 
     if not raw_results:
         return None
@@ -221,6 +319,8 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
     all_violations = list({v for r in raw_results for v in r["violations"]})
     all_misses = list({m for r in raw_results for m in r["misses"]})
     all_hits   = [f for f in facts if f not in all_misses]
+    # Union of schema violations seen across all runs (None if validation not configured)
+    all_schema_violations = list({v for r in raw_results for v in r.get("schema_violations", [])}) if validates else None
 
     prompt_tps = pec / (avg_ped / 1e9) if avg_ped > 0 else 0
     gen_tps    = avg_ec / (avg_ed / 1e9) if avg_ed > 0 else 0
@@ -232,6 +332,8 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
               f"facts={avg_facts:.0%}")
         if all_violations:
             print(f"  FORBIDDEN VIOLATIONS (any run): {all_violations}")
+        if all_schema_violations:
+            print(f"  SCHEMA VIOLATIONS (any run): {all_schema_violations}")
 
     return {
         "ts": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -254,6 +356,7 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         "quality_hits": all_hits,
         "quality_misses": all_misses,
         "forbidden_violations": all_violations,
+        "schema_violations": all_schema_violations,
         "response_snippet": raw_results[-1]["content"][:snippet_len] if snippet_len > 0 else "",
     }
 
@@ -261,13 +364,18 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
 def print_summary(results: list[dict]) -> None:
     if not results:
         return
-    print("\n" + "=" * 90)
-    print(f"{'Model':<25} {'Payload':<25} {'P-Eval':>8} {'Gen-Tok':>8} {'Gen':>7} {'Facts':>6} {'Viol':>5}")
-    print("-" * 90)
+    has_schema = any(r.get("schema_violations") is not None for r in results)
+    width = 100 if has_schema else 90
+    print("\n" + "=" * width)
+    header = f"{'Model':<25} {'Payload':<25} {'P-Eval':>8} {'Gen-Tok':>8} {'Gen':>7} {'Facts':>6} {'Viol':>5}"
+    if has_schema:
+        header += f" {'Schema':>7}"
+    print(header)
+    print("-" * width)
     for r in results:
         viol = len(r.get("forbidden_violations", []))
         viol_str = f"{'!'+str(viol):>5}" if viol else f"{'0':>5}"
-        print(
+        line = (
             f"{r['model']:<25} {r['payload']:<25} "
             f"{r['prompt_eval_duration']/1e9:>7.2f}s "
             f"{r['eval_count']:>8} "
@@ -275,7 +383,17 @@ def print_summary(results: list[dict]) -> None:
             f"{r['facts_score']:>5.0%} "
             f"{viol_str}"
         )
-    print("=" * 90)
+        if has_schema:
+            sv = r.get("schema_violations")
+            if sv is None:
+                schema_str = f"{'—':>7}"
+            elif sv:
+                schema_str = f"{'!'+str(len(sv)):>7}"
+            else:
+                schema_str = f"{'0':>7}"
+            line += f" {schema_str}"
+        print(line)
+    print("=" * width)
 
 
 def main():
@@ -292,7 +410,10 @@ def main():
     models = [args.model] if args.model else load_models(MODELS_FILE)
     specs = load_payloads(args.payload)
 
+    validated_payloads = [s["name"] for s in specs if s.get("validate")]
     print(f"Benchmark sweep: models={models}  payloads={[s['name'] for s in specs]}  runs={args.runs}")
+    if validated_payloads:
+        info(f"kubectl schema validation enabled for: {validated_payloads}")
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -315,7 +436,7 @@ def main():
         for spec in specs:
             result = run_one(spec, args.ollama, model, args.runs, args.snippet_len, args.dry_run)
             if result is not None:
-                result.update(meta)  # embed ollama_version, hostname, git_commit into every row
+                result.update(meta)
                 results.append(result)
                 with open(out_path, "a") as f:
                     f.write(json.dumps(result) + "\n")
@@ -324,7 +445,6 @@ def main():
     print_summary(results)
     if not args.dry_run and results:
         info(f"Results written to {out_path}")
-        # Write path to a sidecar file so CI can read it without piping stdout
         (RESULTS_DIR / ".last_result").write_text(str(out_path))
 
 

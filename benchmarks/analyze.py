@@ -64,18 +64,31 @@ def build_env_block(meta: dict | None, path: Path) -> str:
 
 
 def build_summary_table(results: list[dict]) -> str:
-    lines = [
-        "| Model | Payload | Facts | Violations | Gen Tok | Gen Time | Gen TPS |",
-        "|-------|---------|-------|------------|---------|----------|---------|",
-    ]
+    has_schema = any(r.get("schema_violations") is not None for r in results)
+    header = "| Model | Payload | Facts | Violations | Gen Tok | Gen Time | Gen TPS |"
+    sep    = "|-------|---------|-------|------------|---------|----------|---------|"
+    if has_schema:
+        header += " Schema |"
+        sep    += "--------|"
+    lines = [header, sep]
     for r in results:
         viol = r.get("forbidden_violations", [])
         viol_str = f"**{len(viol)} ❌** `{'`, `'.join(viol)}`" if viol else "✅ 0"
-        lines.append(
+        row = (
             f"| `{r['model']}` | {r['payload']} | {r['facts_score']:.0%} "
             f"| {viol_str} | {r['eval_count']} | {r['eval_duration']/1e9:.2f}s "
             f"| {r['gen_tps']:.1f} |"
         )
+        if has_schema:
+            sv = r.get("schema_violations")
+            if sv is None:
+                schema_str = " — |"
+            elif sv:
+                schema_str = f" **{len(sv)} ❌** `{'`, `'.join(sv)}` |"
+            else:
+                schema_str = " ✅ 0 |"
+            row += schema_str
+        lines.append(row)
     return "\n".join(lines)
 
 
@@ -113,6 +126,7 @@ def build_prompt(table: str, results: list[dict], meta: dict | None) -> str:
 ## Scoring
 - `facts_score`: fraction of required facts present (higher is better, 100% = passed)
 - `forbidden_violations`: terms that must NOT appear — any violation is a hard failure (hallucinated field, scope violation, dangerous config)
+- `schema_violations`: unknown field names detected by `kubectl apply --dry-run=client` against the live K8s API schema — null means payload does not use schema validation; empty list means schema is clean; non-empty means the model invented field names not present in the K8s spec (catches novel hallucinations beyond the keyword forbidden list)
 - `gen_tps`: tokens/sec generation speed
 
 ## Results table

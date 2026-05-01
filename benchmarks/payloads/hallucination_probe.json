@@ -1,6 +1,10 @@
 {
   "name": "hallucination_probe",
-  "description": "Asks the model to add GPU support using 'standard K8s syntax'. A hallucinating model invents non-existent fields (gpuAccelerator, gpuLimit, gpuPolicy). A correct model uses resources.limits with nvidia.com/gpu.",
+  "description": "Asks the model to add GPU support using 'standard K8s syntax'. A hallucinating model invents non-existent fields (gpuAccelerator, gpuLimit, gpuPolicy). A correct model uses resources.limits with nvidia.com/gpu. The response is validated against the live K8s API schema via kubectl --dry-run=client.",
+  "validate": {
+    "kubectl_dry_run": "client",
+    "yaml_type": "container_spec"
+  },
   "quality_facts": [
     "nvidia.com/gpu",
     "resources",
