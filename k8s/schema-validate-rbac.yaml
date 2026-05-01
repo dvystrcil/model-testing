@@ -1,0 +1,23 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: schema-validate
+  namespace: arc-runner
+rules:
+- apiGroups: ["argocd-image-updater.argoproj.io"]
+  resources: ["imageupdaters"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: schema-validate-model-testing
+  namespace: arc-runner
+subjects:
+- kind: ServiceAccount
+  name: model-testing-runner-gha-rs-no-permission
+  namespace: arc-runner
+roleRef:
+  kind: Role
+  name: schema-validate
+  apiGroup: rbac.authorization.k8s.io
