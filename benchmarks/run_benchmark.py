@@ -97,6 +97,40 @@ def strip_think(text: str) -> str:
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
+def judge_once(response_text: str, judge_context: str, judge_model: str, ollama_url: str) -> list[str] | None:
+    """Call a judge model to detect hallucinated field names. Returns list of violations, or None on failure."""
+    prompt = (
+        f"Context: {judge_context}\n\n"
+        f"Output to validate:\n{response_text}\n\n"
+        "List any field names in this output that do not exist in the schema described above. "
+        "Only flag field name hallucinations (invented keys), not value errors.\n"
+        'Respond ONLY with JSON: {"violations": ["field1"], "reasoning": "one sentence"}\n'
+        'If there are no violations: {"violations": [], "reasoning": "all fields are valid"}'
+    )
+    payload = {
+        "model": judge_model,
+        "stream": False,
+        "options": {"num_gpu": -1},
+        "messages": [
+            {"role": "system", "content": "You are a strict schema validator. Respond only with the JSON asked for. No extra text."},
+            {"role": "user", "content": prompt},
+        ],
+    }
+    try:
+        resp = ollama_chat(ollama_url, payload)
+        raw = strip_think(resp.get("message", {}).get("content", ""))
+        # Extract JSON even if the model wraps it in a code block
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not match:
+            info(f"[judge] could not parse JSON from response: {raw[:120]}")
+            return None
+        data = json.loads(match.group())
+        return data.get("violations", [])
+    except Exception as e:
+        info(f"[judge] error: {e}")
+        return None
+
+
 def grade(response_text: str, facts: list[str], forbidden: list[str]) -> dict:
     low = response_text.lower()
     hits = [f for f in facts if f.lower() in low]
@@ -134,7 +168,7 @@ def warmup_model(ollama_url: str, model: str) -> None:
         info(f"warmup failed (continuing anyway): {e}")
 
 
-def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
+def run_once(spec: dict, ollama_url: str, model: str, judge_model: str | None = None) -> dict | None:
     payload = json.loads(json.dumps(spec["payload"]))
     payload["model"] = model
     payload["stream"] = False
@@ -151,6 +185,10 @@ def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
     forbidden = spec.get("quality_forbidden", [])
     g = grade(content, facts, forbidden)
 
+    judge_violations: list[str] | None = None
+    if judge_model and spec.get("use_judge") and spec.get("judge_context"):
+        judge_violations = judge_once(content, spec["judge_context"], judge_model, ollama_url)
+
     return {
         "pec": resp.get("prompt_eval_count", 0),
         "ped": resp.get("prompt_eval_duration", 0),
@@ -158,12 +196,13 @@ def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
         "ed":  resp.get("eval_duration", 0),
         "td":  resp.get("total_duration", 0),
         "content": content,
+        "judge_violations": judge_violations,
         **g,
     }
 
 
 def run_one(spec: dict, ollama_url: str, model: str, runs: int,
-            snippet_len: int, dry_run: bool) -> dict | None:
+            snippet_len: int, dry_run: bool, judge_model: str | None = None) -> dict | None:
     name = spec["name"]
     facts = spec.get("quality_facts", [])
     forbidden = spec.get("quality_forbidden", [])
@@ -188,13 +227,14 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
     for i in range(runs):
         run_label = f"run {i+1}/{runs}  " if runs > 1 else ""
         info(f"{run_label}sending request → ollama ({ollama_url})")
-        r = run_once(spec, ollama_url, model)
+        r = run_once(spec, ollama_url, model, judge_model=judge_model)
         if r is None:
             continue
         raw_results.append(r)
         if runs > 1:
             violation_str = f"  VIOLATIONS={r['violations']}" if r["violations"] else ""
-            info(f"{run_label}done  P-eval={r['ped']/1e9:.2f}s  gen={r['ed']/1e9:.2f}s  Q={r['facts_score']:.0%}{violation_str}")
+            judge_str = f"  JUDGE={r['judge_violations']}" if r.get("judge_violations") else ""
+            info(f"{run_label}done  P-eval={r['ped']/1e9:.2f}s  gen={r['ed']/1e9:.2f}s  Q={r['facts_score']:.0%}{violation_str}{judge_str}")
         else:
             info(f"done  P-eval={r['ped']/1e9:.2f}s  gen={r['ed']/1e9:.2f}s  total={r['td']/1e9:.2f}s  "
                  f"facts={r['facts_score']:.0%} ({len(r['hits'])}/{len(facts)})")
@@ -202,6 +242,8 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
                 print(f"         misses={r['misses']}")
             if r["violations"]:
                 print(f"         FORBIDDEN VIOLATIONS: {r['violations']}")
+            if r.get("judge_violations"):
+                print(f"         JUDGE VIOLATIONS: {r['judge_violations']}")
 
     if not raw_results:
         return None
@@ -221,6 +263,9 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
     all_violations = list({v for r in raw_results for v in r["violations"]})
     all_misses = list({m for r in raw_results for m in r["misses"]})
     all_hits   = [f for f in facts if f not in all_misses]
+    # Aggregate judge violations: None if judge was never run, list (possibly empty) if it ran
+    judge_ran = any(r.get("judge_violations") is not None for r in raw_results)
+    all_judge_violations = list({v for r in raw_results for v in (r.get("judge_violations") or [])}) if judge_ran else None
 
     prompt_tps = pec / (avg_ped / 1e9) if avg_ped > 0 else 0
     gen_tps    = avg_ec / (avg_ed / 1e9) if avg_ed > 0 else 0
@@ -232,6 +277,8 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
               f"facts={avg_facts:.0%}")
         if all_violations:
             print(f"  FORBIDDEN VIOLATIONS (any run): {all_violations}")
+        if all_judge_violations:
+            print(f"  JUDGE VIOLATIONS (any run): {all_judge_violations}")
 
     return {
         "ts": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -254,6 +301,7 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         "quality_hits": all_hits,
         "quality_misses": all_misses,
         "forbidden_violations": all_violations,
+        "judge_violations": all_judge_violations,
         "response_snippet": raw_results[-1]["content"][:snippet_len] if snippet_len > 0 else "",
     }
 
@@ -261,13 +309,18 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
 def print_summary(results: list[dict]) -> None:
     if not results:
         return
-    print("\n" + "=" * 90)
-    print(f"{'Model':<25} {'Payload':<25} {'P-Eval':>8} {'Gen-Tok':>8} {'Gen':>7} {'Facts':>6} {'Viol':>5}")
-    print("-" * 90)
+    has_judge = any(r.get("judge_violations") is not None for r in results)
+    width = 100 if has_judge else 90
+    print("\n" + "=" * width)
+    header = f"{'Model':<25} {'Payload':<25} {'P-Eval':>8} {'Gen-Tok':>8} {'Gen':>7} {'Facts':>6} {'Viol':>5}"
+    if has_judge:
+        header += f" {'Judge':>6}"
+    print(header)
+    print("-" * width)
     for r in results:
         viol = len(r.get("forbidden_violations", []))
         viol_str = f"{'!'+str(viol):>5}" if viol else f"{'0':>5}"
-        print(
+        line = (
             f"{r['model']:<25} {r['payload']:<25} "
             f"{r['prompt_eval_duration']/1e9:>7.2f}s "
             f"{r['eval_count']:>8} "
@@ -275,7 +328,17 @@ def print_summary(results: list[dict]) -> None:
             f"{r['facts_score']:>5.0%} "
             f"{viol_str}"
         )
-    print("=" * 90)
+        if has_judge:
+            jv = r.get("judge_violations")
+            if jv is None:
+                judge_str = f"{'—':>6}"
+            elif jv:
+                judge_str = f"{'!'+str(len(jv)):>6}"
+            else:
+                judge_str = f"{'0':>6}"
+            line += f" {judge_str}"
+        print(line)
+    print("=" * width)
 
 
 def main():
@@ -287,12 +350,18 @@ def main():
     p.add_argument("--snippet-len", type=int, default=300, help="Response snippet length in results (0=omit)")
     p.add_argument("--dry-run",   action="store_true",    help="Print without executing")
     p.add_argument("--no-warmup", action="store_true",    help="Skip per-model warmup request")
+    p.add_argument("--judge-model", default="qwen3.6:35b",
+                   help="Model used to judge hallucinated fields (default: qwen3.6:35b). Set to '' to disable.")
     args = p.parse_args()
+    judge_model = args.judge_model.strip() or None
 
     models = [args.model] if args.model else load_models(MODELS_FILE)
     specs = load_payloads(args.payload)
 
+    judged_payloads = [s["name"] for s in specs if s.get("use_judge")]
     print(f"Benchmark sweep: models={models}  payloads={[s['name'] for s in specs]}  runs={args.runs}")
+    if judge_model and judged_payloads:
+        info(f"LLM judge enabled: model={judge_model}  payloads={judged_payloads}")
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -313,7 +382,7 @@ def main():
         if not args.dry_run and not args.no_warmup:
             warmup_model(args.ollama, model)
         for spec in specs:
-            result = run_one(spec, args.ollama, model, args.runs, args.snippet_len, args.dry_run)
+            result = run_one(spec, args.ollama, model, args.runs, args.snippet_len, args.dry_run, judge_model=judge_model)
             if result is not None:
                 result.update(meta)  # embed ollama_version, hostname, git_commit into every row
                 results.append(result)

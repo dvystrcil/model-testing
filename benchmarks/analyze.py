@@ -64,18 +64,31 @@ def build_env_block(meta: dict | None, path: Path) -> str:
 
 
 def build_summary_table(results: list[dict]) -> str:
-    lines = [
-        "| Model | Payload | Facts | Violations | Gen Tok | Gen Time | Gen TPS |",
-        "|-------|---------|-------|------------|---------|----------|---------|",
-    ]
+    has_judge = any(r.get("judge_violations") is not None for r in results)
+    header = "| Model | Payload | Facts | Violations | Gen Tok | Gen Time | Gen TPS |"
+    sep    = "|-------|---------|-------|------------|---------|----------|---------|"
+    if has_judge:
+        header += " Judge |"
+        sep    += "-------|"
+    lines = [header, sep]
     for r in results:
         viol = r.get("forbidden_violations", [])
         viol_str = f"**{len(viol)} ❌** `{'`, `'.join(viol)}`" if viol else "✅ 0"
-        lines.append(
+        row = (
             f"| `{r['model']}` | {r['payload']} | {r['facts_score']:.0%} "
             f"| {viol_str} | {r['eval_count']} | {r['eval_duration']/1e9:.2f}s "
             f"| {r['gen_tps']:.1f} |"
         )
+        if has_judge:
+            jv = r.get("judge_violations")
+            if jv is None:
+                judge_str = " — |"
+            elif jv:
+                judge_str = f" **{len(jv)} ❌** `{'`, `'.join(jv)}` |"
+            else:
+                judge_str = " ✅ 0 |"
+            row += judge_str
+        lines.append(row)
     return "\n".join(lines)
 
 
@@ -113,6 +126,7 @@ def build_prompt(table: str, results: list[dict], meta: dict | None) -> str:
 ## Scoring
 - `facts_score`: fraction of required facts present (higher is better, 100% = passed)
 - `forbidden_violations`: terms that must NOT appear — any violation is a hard failure (hallucinated field, scope violation, dangerous config)
+- `judge_violations`: field names flagged by a secondary LLM judge as hallucinated/non-existent in the K8s API — null means payload was not judge-evaluated; empty list means judge found no issues; non-empty means novel hallucinations were detected that the keyword list would have missed
 - `gen_tps`: tokens/sec generation speed
 
 ## Results table
