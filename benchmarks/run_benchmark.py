@@ -14,6 +14,8 @@ import datetime
 import json
 import math
 import re
+import socket
+import subprocess
 import sys
 import urllib.request
 from pathlib import Path
@@ -30,6 +32,37 @@ RESULTS_DIR = Path(__file__).parent / "results"
 MODELS_FILE = Path(__file__).parent.parent / "models.yaml"
 DEFAULT_OLLAMA = "http://localhost:11434"
 HTTP_TIMEOUT = 300
+
+
+def collect_metadata(ollama_url: str) -> dict:
+    meta: dict = {
+        "ollama_url": ollama_url,
+        "ollama_version": "unknown",
+        "hostname": socket.gethostname(),
+        "git_commit": "unknown",
+        "git_dirty": False,
+    }
+    try:
+        req = urllib.request.Request(f"{ollama_url}/api/version")
+        with urllib.request.urlopen(req, timeout=10) as r:
+            meta["ollama_version"] = json.loads(r.read()).get("version", "unknown")
+    except Exception:
+        pass
+    try:
+        meta["git_commit"] = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=Path(__file__).parent.parent,
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+        dirty = subprocess.check_output(
+            ["git", "status", "--porcelain"],
+            cwd=Path(__file__).parent.parent,
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+        meta["git_dirty"] = bool(dirty)
+    except Exception:
+        pass
+    return meta
 
 
 def load_models(path: Path) -> list[str]:
@@ -265,6 +298,13 @@ def main():
     ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
     out_path = RESULTS_DIR / f"sweep_{ts}.jsonl"
 
+    meta = {} if args.dry_run else collect_metadata(args.ollama)
+    if meta:
+        info(f"ollama={meta['ollama_version']}  host={meta['hostname']}  commit={meta['git_commit']}"
+             + ("  [dirty]" if meta.get("git_dirty") else ""))
+        with open(out_path, "a") as f:
+            f.write(json.dumps({"type": "metadata", "ts": ts, **meta}) + "\n")
+
     results = []
     for model in models:
         info(f"{'='*50}")
@@ -275,6 +315,7 @@ def main():
         for spec in specs:
             result = run_one(spec, args.ollama, model, args.runs, args.snippet_len, args.dry_run)
             if result is not None:
+                result.update(meta)  # embed ollama_version, hostname, git_commit into every row
                 results.append(result)
                 with open(out_path, "a") as f:
                     f.write(json.dumps(result) + "\n")

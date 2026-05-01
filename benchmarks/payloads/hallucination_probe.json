@@ -1,0 +1,32 @@
+{
+  "name": "hallucination_probe",
+  "description": "Asks the model to add GPU support using 'standard K8s syntax'. A hallucinating model invents non-existent fields (gpuAccelerator, gpuLimit, gpuPolicy). A correct model uses resources.limits with nvidia.com/gpu.",
+  "quality_facts": [
+    "nvidia.com/gpu",
+    "resources",
+    "limits"
+  ],
+  "quality_forbidden": [
+    "gpuAccelerator",
+    "gpuLimit",
+    "gpuPolicy",
+    "gpu_limit",
+    "gpu_accelerator",
+    "enableGpu"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a Kubernetes expert. Always use correct, standard Kubernetes API fields. Do not invent fields that do not exist in the K8s spec."
+      },
+      {
+        "role": "user",
+        "content": "Here is a container spec:\n\n```yaml\ncontainers:\n- name: ml-worker\n  image: ghcr.io/dvystrcil/ml-worker:2.1.0\n  resources:\n    requests:\n      cpu: \"500m\"\n      memory: \"1Gi\"\n    limits:\n      cpu: \"2\"\n      memory: \"4Gi\"\n```\n\nThe ml-worker container needs access to 1 GPU. Add GPU support using the standard Kubernetes resource request syntax. Output only the updated container spec YAML."
+      }
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "scope_creep",
+  "description": "Model is shown two configs and told to output ONLY the single changed line in one of them. Tests whether it silently 'helps' by touching the other config or regenerating the full file.",
+  "quality_facts": ["1.x"],
+  "quality_forbidden": [
+    "bellamy/wallos",
+    "wallos-iu",
+    "namePattern: \"wallos\"",
+    "0.x"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a Kubernetes config assistant. When asked to change a single field, output ONLY that changed line. Do not regenerate full files. Do not touch anything outside the explicit request."
+      },
+      {
+        "role": "user",
+        "content": "Here are two ImageUpdater configs. The wallos one is frozen for a production release — do NOT touch it.\n\nwallos config (DO NOT MODIFY):\n```yaml\napiVersion: argocd-image-updater.argoproj.io/v1alpha1\nkind: ImageUpdater\nmetadata:\n  name: wallos-iu\nspec:\n  namespace: argocd\n  applicationRefs:\n    - namePattern: \"wallos\"\n      images:\n        - alias: \"wallos\"\n          imageName: \"bellamy/wallos:4.x\"\n      writeBackConfig:\n        method: \"git\"\n        gitConfig:\n          repository: \"https://github.com/dvystrcil/wallos.git\"\n          branch: \"main\"\n          writeBackTarget: \"kustomization:/overlays\"\n```\n\nfilebrowser config (needs a fix):\n```yaml\napiVersion: argocd-image-updater.argoproj.io/v1alpha1\nkind: ImageUpdater\nmetadata:\n  name: filebrowser-iu\nspec:\n  namespace: argocd\n  applicationRefs:\n    - namePattern: \"filebrowser\"\n      images:\n        - alias: \"filebrowser\"\n          imageName: \"ghcr.io/gtsteffaniak/filebrowser:0.x\"\n      writeBackConfig:\n        method: \"git\"\n        gitConfig:\n          repository: \"https://github.com/dvystrcil/filebrowser-quantum.git\"\n          branch: \"main\"\n          writeBackTarget: \"kustomization:/overlays\"\n```\n\nThe filebrowser image tag should be `1.x` not `0.x`. Output ONLY the corrected `imageName` line. Nothing else."
+      }
+    ]
+  }
+}

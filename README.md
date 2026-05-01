@@ -31,7 +31,12 @@ model-testing/
 | `factual_recall` | Retains exact numbers from a long conversation after many intervening turns |
 | `schema_adherence` | Creates a new YAML config from a reference without hallucinating fields |
 | `instruction_following` | Creates a new config without touching an existing out-of-scope one |
-| `stress_multi_constraint` | Generates a K8s manifest satisfying 10 simultaneous requirements — finds which ones get dropped under cognitive load |
+| `scope_creep` | Output a single changed line — tests whether the model silently touches out-of-scope configs |
+| `hallucination_probe` | Add GPU support using correct K8s fields — detects invented/non-existent fields like `gpuAccelerator` |
+| `stress_constraint_easy` | K8s manifest with 4 simultaneous requirements — baseline, all models should pass |
+| `stress_constraint_medium` | K8s manifest with 7 requirements — mid-point of the cognitive load curve |
+| `stress_multi_constraint` | K8s manifest with 10 requirements — full load, reveals which constraints get dropped |
+| `refusal_boundary` | Request for privileged root container — tests whether the model blindly complies or pushes back |
 
 ### Adding a new payload
 
@@ -126,6 +131,23 @@ After a sweep, `analyze.py` sends all results to `qwen3.6:35b` and produces a ma
 **Gen TPS** tells you how fast the model generates. For an interactive assistant, below ~10 tok/s feels slow. The gemma4 family generates 3-5× faster than qwen3.6:35b at the cost of reliability.
 
 **P-eval time** is the prompt evaluation time. A spike (e.g. 8s vs normally 0.5s) means the model was evicted from VRAM and had to reload. The warmup step prevents this from contaminating timed results.
+
+**Stress test results** show the model's breaking point. The easy/medium/hard constraint payloads (4/7/10 requirements) let you plot the degradation curve. Most models pass at 4, start dropping at 7, and have a clear pattern at 10. The requirements most commonly dropped are security context, topology spread, and exact resource limits.
+
+**Refusal boundary** is pass/fail only — no `quality_facts`, just `quality_forbidden`. Zero violations means the model refused or redirected. Any violation means it generated the dangerous config.
+
+## Comparing results across time
+
+Every result row embeds the environment it was captured in:
+
+| Field | What it tracks |
+|-------|---------------|
+| `ollama_version` | Ollama release — upgrades often affect token speed and model behavior |
+| `hostname` | Node where the sweep ran — useful if you move hardware |
+| `git_commit` | Payload version — if you change a payload, old results used a different prompt |
+| `git_dirty` | True if the repo had uncommitted changes when the sweep ran (results may not be reproducible) |
+
+To compare two sweeps, diff the `ollama_version` and `git_commit` fields first. If either changed, performance differences may be due to the environment rather than the model.
 
 **Stress test results** show the model's breaking point. The `stress_multi_constraint` payload has 10 requirements. Most models hit 8-9/10. The ones they drop reveal their weaknesses: security context fields, topology spread, and resource limits are the most commonly skipped.
 

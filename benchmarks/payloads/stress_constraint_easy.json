@@ -1,0 +1,28 @@
+{
+  "name": "stress_constraint_easy",
+  "description": "Same base task as stress_multi_constraint but with only 4 requirements. Establishes the baseline — all models should score 100% here. If a model fails at 4 requirements, all harder tests are meaningless.",
+  "quality_facts": [
+    "app.kubernetes.io/name: ingest-api",
+    "app.kubernetes.io/version",
+    "app.kubernetes.io/managed-by: argocd",
+    "containerPort: 8080"
+  ],
+  "quality_forbidden": [
+    "latest"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a Kubernetes configuration expert. Generate complete, production-ready manifests that satisfy every stated requirement. Do not omit any requirement."
+      },
+      {
+        "role": "user",
+        "content": "Generate a Kubernetes Deployment manifest for a service called `ingest-api` that satisfies ALL of the following requirements:\n\n1. Name and namespace: name=`ingest-api`, namespace=`data-plane`\n2. Labels on the deployment AND pod template must include all three: `app.kubernetes.io/name: ingest-api`, `app.kubernetes.io/version: \"1.0.0\"`, `app.kubernetes.io/managed-by: argocd`\n3. Container image: `ghcr.io/dvystrcil/ingest-api:1.0.0` (no `latest` tag)\n4. Container port: 8080\n\nOutput only the YAML. No explanation."
+      }
+    ]
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "stress_constraint_medium",
+  "description": "Same base task as stress_multi_constraint with 7 requirements — the mid-point in the cognitive load curve. Models that pass easy (4) but fail here are dropping resource or probe requirements.",
+  "quality_facts": [
+    "app.kubernetes.io/name: ingest-api",
+    "app.kubernetes.io/version",
+    "app.kubernetes.io/managed-by: argocd",
+    "containerPort: 8080",
+    "memory: \"512Mi\"",
+    "readinessProbe",
+    "livenessProbe"
+  ],
+  "quality_forbidden": [
+    "latest"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a Kubernetes configuration expert. Generate complete, production-ready manifests that satisfy every stated requirement. Do not omit any requirement."
+      },
+      {
+        "role": "user",
+        "content": "Generate a Kubernetes Deployment manifest for a service called `ingest-api` that satisfies ALL of the following requirements:\n\n1. Name and namespace: name=`ingest-api`, namespace=`data-plane`\n2. Labels on the deployment AND pod template must include all three: `app.kubernetes.io/name: ingest-api`, `app.kubernetes.io/version: \"1.0.0\"`, `app.kubernetes.io/managed-by: argocd`\n3. Container image: `ghcr.io/dvystrcil/ingest-api:1.0.0` (no `latest` tag)\n4. Container port: 8080\n5. Resource requests: cpu=`100m`, memory=`256Mi`. Limits: cpu=`500m`, memory=`512Mi`\n6. Liveness probe: httpGet on path `/healthz` port 8080, initialDelaySeconds=10, periodSeconds=15\n7. Readiness probe: httpGet on path `/ready` port 8080, initialDelaySeconds=5, periodSeconds=10\n\nOutput only the YAML. No explanation."
+      }
+    ]
+  }
+}
