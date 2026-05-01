@@ -139,18 +139,23 @@ def wrap_container_spec(yaml_str: str) -> str:
     return pod
 
 
-def validate_kubectl(yaml_str: str, dry_run: str = "client") -> list[str]:
+def validate_kubectl(yaml_str: str, dry_run: str = "client", namespace: str | None = None) -> list[str]:
     """
     Run `kubectl apply --dry-run=<dry_run>` against yaml_str.
     Returns a list of unknown field names found in the error output.
-    Returns an empty list on success. Returns None signals are not used —
-    an empty list means clean, a non-empty list means violations found.
+    An empty list means clean; a non-empty list means violations found.
     Failures in kubectl itself (binary not found, timeout) are logged and
     return an empty list so the sweep continues.
+
+    namespace: passed as -n when using --dry-run=server so the SA's
+    RoleBinding scope matches the target namespace.
     """
+    cmd = ["kubectl", "apply", f"--dry-run={dry_run}", "-f", "-"]
+    if namespace:
+        cmd.extend(["-n", namespace])
     try:
         result = subprocess.run(
-            ["kubectl", "apply", f"--dry-run={dry_run}", "-f", "-"],
+            cmd,
             input=yaml_str.encode(),
             capture_output=True,
             timeout=30,
@@ -236,7 +241,8 @@ def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
         if validate_cfg.get("yaml_type") == "container_spec":
             raw_yaml = wrap_container_spec(raw_yaml)
         dry_run = validate_cfg.get("kubectl_dry_run", "client")
-        schema_violations = validate_kubectl(raw_yaml, dry_run)
+        namespace = validate_cfg.get("namespace")
+        schema_violations = validate_kubectl(raw_yaml, dry_run, namespace)
         if schema_violations:
             info(f"[validate] unknown K8s fields: {schema_violations}")
 
