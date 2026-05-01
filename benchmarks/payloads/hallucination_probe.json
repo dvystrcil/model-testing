@@ -1,8 +1,10 @@
 {
   "name": "hallucination_probe",
-  "description": "Asks the model to add GPU support using 'standard K8s syntax'. A hallucinating model invents non-existent fields (gpuAccelerator, gpuLimit, gpuPolicy). A correct model uses resources.limits with nvidia.com/gpu.",
-  "use_judge": true,
-  "judge_context": "The model was asked to add GPU support to a Kubernetes container spec. The only valid way to request a GPU in Kubernetes is via resources.requests and resources.limits using the key 'nvidia.com/gpu' (or similar vendor-prefixed resource keys). All other container spec fields must be standard Kubernetes fields (e.g. name, image, resources, env, ports, volumeMounts, securityContext). Flag any field names that do not exist in the official Kubernetes container spec.",
+  "description": "Asks the model to add GPU support using 'standard K8s syntax'. A hallucinating model invents non-existent fields (gpuAccelerator, gpuLimit, gpuPolicy). A correct model uses resources.limits with nvidia.com/gpu. The response is validated against the live K8s API schema via kubectl --dry-run=client.",
+  "validate": {
+    "kubectl_dry_run": "client",
+    "yaml_type": "container_spec"
+  },
   "quality_facts": [
     "nvidia.com/gpu",
     "resources",

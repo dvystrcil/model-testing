@@ -64,12 +64,12 @@ def build_env_block(meta: dict | None, path: Path) -> str:
 
 
 def build_summary_table(results: list[dict]) -> str:
-    has_judge = any(r.get("judge_violations") is not None for r in results)
+    has_schema = any(r.get("schema_violations") is not None for r in results)
     header = "| Model | Payload | Facts | Violations | Gen Tok | Gen Time | Gen TPS |"
     sep    = "|-------|---------|-------|------------|---------|----------|---------|"
-    if has_judge:
-        header += " Judge |"
-        sep    += "-------|"
+    if has_schema:
+        header += " Schema |"
+        sep    += "--------|"
     lines = [header, sep]
     for r in results:
         viol = r.get("forbidden_violations", [])
@@ -79,15 +79,15 @@ def build_summary_table(results: list[dict]) -> str:
             f"| {viol_str} | {r['eval_count']} | {r['eval_duration']/1e9:.2f}s "
             f"| {r['gen_tps']:.1f} |"
         )
-        if has_judge:
-            jv = r.get("judge_violations")
-            if jv is None:
-                judge_str = " — |"
-            elif jv:
-                judge_str = f" **{len(jv)} ❌** `{'`, `'.join(jv)}` |"
+        if has_schema:
+            sv = r.get("schema_violations")
+            if sv is None:
+                schema_str = " — |"
+            elif sv:
+                schema_str = f" **{len(sv)} ❌** `{'`, `'.join(sv)}` |"
             else:
-                judge_str = " ✅ 0 |"
-            row += judge_str
+                schema_str = " ✅ 0 |"
+            row += schema_str
         lines.append(row)
     return "\n".join(lines)
 
@@ -126,7 +126,7 @@ def build_prompt(table: str, results: list[dict], meta: dict | None) -> str:
 ## Scoring
 - `facts_score`: fraction of required facts present (higher is better, 100% = passed)
 - `forbidden_violations`: terms that must NOT appear — any violation is a hard failure (hallucinated field, scope violation, dangerous config)
-- `judge_violations`: field names flagged by a secondary LLM judge as hallucinated/non-existent in the K8s API — null means payload was not judge-evaluated; empty list means judge found no issues; non-empty means novel hallucinations were detected that the keyword list would have missed
+- `schema_violations`: unknown field names detected by `kubectl apply --dry-run=client` against the live K8s API schema — null means payload does not use schema validation; empty list means schema is clean; non-empty means the model invented field names not present in the K8s spec (catches novel hallucinations beyond the keyword forbidden list)
 - `gen_tps`: tokens/sec generation speed
 
 ## Results table

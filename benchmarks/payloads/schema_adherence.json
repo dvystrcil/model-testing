@@ -1,8 +1,6 @@
 {
   "name": "schema_adherence",
-  "description": "Given an existing config file as reference, create a new one for a different app. Tests whether the model follows the established schema or hallucinates new fields.",
-  "use_judge": true,
-  "judge_context": "The model was asked to create an ArgoCD ImageUpdater custom resource (apiVersion: argocd-image-updater.argoproj.io/v1alpha1, kind: ImageUpdater). The valid schema is: metadata (name, namespace, labels, annotations), spec.namespace, spec.applicationRefs[].namePattern, spec.applicationRefs[].images[].alias, spec.applicationRefs[].images[].imageName, spec.applicationRefs[].writeBackConfig.method, spec.applicationRefs[].writeBackConfig.gitConfig.repository, spec.applicationRefs[].writeBackConfig.gitConfig.branch, spec.applicationRefs[].writeBackConfig.gitConfig.writeBackTarget. Flag any field names under spec that do not appear in this schema.",
+  "description": "Given an existing config file as reference, create a new one for a different app. Tests whether the model follows the established schema or hallucinates new fields. Uses keyword checks for CRD-specific field hallucinations (kubectl --dry-run=client does not validate CRD spec fields).",
   "quality_facts": [
     "argocd-image-updater.argoproj.io/v1alpha1",
     "filebrowser-iu",
