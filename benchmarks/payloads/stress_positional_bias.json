@@ -1,0 +1,31 @@
+{
+  "name": "stress_positional_bias",
+  "description": "Identical 7 constraints to stress_constraint_medium but with resource requirements listed FIRST instead of fifth. Tests whether models drop memory because it appears late in the prompt (positional forgetting) or because resource fields are semantically deprioritized. If memory stops being dropped, the failure in medium was positional. If it still drops, the failure is semantic — models treat resource constraints as lower priority regardless of position.",
+  "quality_facts": [
+    "app.kubernetes.io/name: ingest-api",
+    "app.kubernetes.io/version",
+    "app.kubernetes.io/managed-by: argocd",
+    "containerPort: 8080",
+    "memory: \"512Mi\"",
+    "readinessProbe",
+    "livenessProbe"
+  ],
+  "quality_forbidden": [
+    "latest"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a Kubernetes configuration expert. Generate complete, production-ready manifests that satisfy every stated requirement. Do not omit any requirement."
+      },
+      {
+        "role": "user",
+        "content": "Generate a Kubernetes Deployment manifest for a service called `ingest-api` that satisfies ALL of the following requirements:\n\n1. Resource requests: cpu=`100m`, memory=`256Mi`. Limits: cpu=`500m`, memory=`512Mi`\n2. Liveness probe: httpGet on path `/healthz` port 8080, initialDelaySeconds=10, periodSeconds=15\n3. Readiness probe: httpGet on path `/ready` port 8080, initialDelaySeconds=5, periodSeconds=10\n4. Name and namespace: name=`ingest-api`, namespace=`data-plane`\n5. Labels on the deployment AND pod template must include all three: `app.kubernetes.io/name: ingest-api`, `app.kubernetes.io/version: \"1.0.0\"`, `app.kubernetes.io/managed-by: argocd`\n6. Container image: `ghcr.io/dvystrcil/ingest-api:1.0.0` (no `latest` tag)\n7. Container port: 8080\n\nOutput only the YAML. No explanation."
+      }
+    ]
+  }
+}
