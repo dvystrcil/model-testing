@@ -140,6 +140,36 @@ We test this by running the identical 7 constraints with resources listed **firs
 
 ---
 
+## Run Time Expectations
+
+Sweep duration is dominated by token generation volume, not request count. A single dense payload can take longer than ten simple ones.
+
+### What drives time
+
+| Factor | Impact |
+|--------|--------|
+| Model TPS | Primary driver. qwen3.6:27B at 11 TPS generates the same token count 4× slower than gemma4:26b at 50 TPS |
+| Token count | `schema_adherence` caused qwen3.6:35b to generate 9,130 tokens — over 3 minutes for one request. The same model at 45 TPS on a 400-token payload takes 9 seconds |
+| `--runs N` | Multiplies every request. N=3 triples total time |
+| Model warmup | One warmup request per model per sweep adds ~30s per model (4 models = ~2 min overhead) |
+| Payload count | 9 payloads × 4 models × N=1 ≈ 55 min. 1 payload × 4 models × N=3 ≈ 15 min |
+
+### Reference timings (Ollama 0.22.1, observed)
+
+| Sweep scope | N | Approx duration |
+|-------------|---|-----------------|
+| 1 agentic payload, all models | 3 | ~15 min |
+| All payloads (9), all models | 1 | ~55 min |
+| All payloads (12+), all models | 3 | ~2–3 hours |
+
+### Why single-payload runs look deceptively fast
+
+When scoping a run to `--field payload=agentic_imageupdater` to test new harness code, the run completes in ~15 minutes. This does not mean the full sweep will be proportionally faster — other payloads (especially `schema_adherence` and the new 18-constraint extreme) generate far more tokens per request.
+
+### Rule of thumb
+
+Before triggering a full sweep, estimate: `sum(expected_tokens_per_payload) × models × runs / avg_tps`. The slowest model (qwen3.6:27B at ~11 TPS) sets the floor.
+
 ## Proposed Next Steps
 
 - Run the full stress curve (easy → medium → multi → hard → extreme) in a single sweep with N=3 to get a complete degradation profile per model
