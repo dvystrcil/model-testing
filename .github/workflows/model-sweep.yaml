@@ -28,9 +28,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  sweep:
+  setup:
     runs-on: model-testing-runner
-    timeout-minutes: 360
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: set-matrix
+        run: |
+          INPUT="${{ github.event.inputs.payload || 'all' }}"
+          if [ "$INPUT" = "all" ]; then
+            PAYLOADS=$(ls benchmarks/payloads/*.json \
+              | xargs -I{} basename {} .json \
+              | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          else
+            PAYLOADS=$(printf '%s' "$INPUT" | jq -R -c '[.]')
+          fi
+          echo "matrix={\"payload\":$PAYLOADS}" >> "$GITHUB_OUTPUT"
+
+  sweep:
+    needs: setup
+    strategy:
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
+      max-parallel: 1   # one payload at a time — Ollama is single-GPU
+      fail-fast: false  # a timeout on one payload does not cancel the rest
+    runs-on: model-testing-runner
+    timeout-minutes: 120
 
     steps:
       - uses: actions/checkout@v4
@@ -50,8 +73,7 @@ jobs:
           sudo mv kubectl /usr/local/bin/kubectl
           kubectl version --client
 
-      - name: Run benchmark sweep
-        id: sweep
+      - name: Run sweep — ${{ matrix.payload }}
         env:
           OLLAMA_URL: http://ollama.ollama.svc.cluster.local
         run: |
@@ -59,34 +81,62 @@ jobs:
           if [ -n "${{ github.event.inputs.model }}" ]; then
             MODEL_ARG="--model ${{ github.event.inputs.model }}"
           fi
-          PAYLOAD="${{ github.event.inputs.payload || 'all' }}"
-          RUNS="${{ github.event.inputs.runs || '1' }}"
-
           python benchmarks/run_benchmark.py \
             --ollama "$OLLAMA_URL" \
-            --payload "$PAYLOAD" \
-            --runs "$RUNS" \
+            --payload "${{ matrix.payload }}" \
+            --runs "${{ github.event.inputs.runs || '1' }}" \
             $MODEL_ARG
 
-          RESULT_FILE=$(cat benchmarks/results/.last_result)
-          echo "result_file=$RESULT_FILE" >> "$GITHUB_OUTPUT"
-          echo "### Sweep complete: \`$RESULT_FILE\`" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload results — ${{ matrix.payload }}
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.payload }}
+          path: benchmarks/results/
+          retention-days: 30
+
+  analyze:
+    needs: sweep
+    if: always()
+    runs-on: model-testing-runner
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download all sweep artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: results-*
+          path: downloaded-results/
+          merge-multiple: false
 
       - name: Analyze results
         env:
           OLLAMA_URL: http://ollama.ollama.svc.cluster.local
         run: |
-          python benchmarks/analyze.py \
-            "${{ steps.sweep.outputs.result_file }}" \
+          FILES=$(find downloaded-results/ -name "sweep_*.jsonl" | sort | tr '\n' ' ')
+          if [ -z "$FILES" ]; then
+            echo "No result files found — all sweep jobs may have failed."
+            exit 1
+          fi
+          echo "Merging files: $FILES"
+          python benchmarks/analyze.py $FILES \
             --ollama "$OLLAMA_URL" \
             --out report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload results
+      - name: Upload report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results-${{ github.run_id }}
-          path: |
-            benchmarks/results/
-            report.md
+          name: benchmark-report-${{ github.run_id }}
+          path: report.md
           retention-days: 30

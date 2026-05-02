@@ -5,6 +5,7 @@ AI-powered analysis of benchmark results using qwen3.6:35b.
 Usage:
     python benchmarks/analyze.py results/sweep_20260430T120000Z.jsonl
     python benchmarks/analyze.py results/sweep_20260430T120000Z.jsonl --out report.md
+    python benchmarks/analyze.py results/sweep_a.jsonl results/sweep_b.jsonl --out report.md
 """
 
 import argparse
@@ -19,8 +20,10 @@ ANALYSIS_MODEL = "qwen3.6:35b"
 HTTP_TIMEOUT = 300
 
 
-def load_results(path: Path) -> tuple[dict | None, list[dict], list[dict]]:
-    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+def load_results(*paths: Path) -> tuple[dict | None, list[dict], list[dict]]:
+    rows = []
+    for path in paths:
+        rows.extend(json.loads(line) for line in path.read_text().splitlines() if line.strip())
     meta = next((r for r in rows if r.get("type") == "metadata"), None)
     agentic = [r for r in rows if r.get("type") == "agentic"]
     standard = [r for r in rows if r.get("type") not in ("metadata", "agentic")]
@@ -177,24 +180,27 @@ Please provide:
 
 def main():
     p = argparse.ArgumentParser(description="Analyze benchmark results with AI")
-    p.add_argument("results_file",          help="Path to sweep JSONL file")
+    p.add_argument("results_files", nargs="+",  help="One or more sweep JSONL files to merge and analyze")
     p.add_argument("--ollama", default=DEFAULT_OLLAMA, help="Ollama base URL")
     p.add_argument("--out",    default=None,           help="Output markdown file (default: stdout)")
     args = p.parse_args()
 
-    path = Path(args.results_file)
-    if not path.exists():
-        print(f"ERROR: {path} not found", file=sys.stderr)
+    paths = [Path(f) for f in args.results_files]
+    missing = [p for p in paths if not p.exists()]
+    if missing:
+        for m in missing:
+            print(f"ERROR: {m} not found", file=sys.stderr)
         sys.exit(1)
 
-    meta, results, agentic = load_results(path)
+    meta, results, agentic = load_results(*paths)
     if not results and not agentic:
-        print("ERROR: no results found in file", file=sys.stderr)
+        print("ERROR: no results found in file(s)", file=sys.stderr)
         sys.exit(1)
 
     models_seen  = sorted({r["model"] for r in results + agentic})
     payloads_seen = sorted({r["payload"] for r in results + agentic})
-    print(f"[INFO] Analyzing {len(results)} standard + {len(agentic)} agentic results — models: {models_seen}", file=sys.stderr)
+    print(f"[INFO] Loaded {len(paths)} file(s) — {len(results)} standard + {len(agentic)} agentic results", file=sys.stderr)
+    print(f"[INFO] Models: {models_seen}", file=sys.stderr)
     print(f"[INFO] Payloads: {payloads_seen}", file=sys.stderr)
     if meta:
         print(f"[INFO] Environment: ollama={meta.get('ollama_version')}  "
@@ -202,7 +208,7 @@ def main():
     print(f"[INFO] Sending to {ANALYSIS_MODEL} for summary...", file=sys.stderr)
 
     table     = build_summary_table(results) if results else "_No standard results._"
-    env_block = build_env_block(meta, path)
+    env_block = build_env_block(meta, paths[0])
     prompt    = build_prompt(table, results, meta, agentic)
 
     analysis = ollama_chat(args.ollama, [
