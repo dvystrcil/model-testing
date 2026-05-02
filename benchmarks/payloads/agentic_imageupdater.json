@@ -1,11 +1,12 @@
 {
   "name": "agentic_imageupdater",
   "type": "agentic",
-  "description": "Multi-turn agentic task: read an existing ImageUpdater config as reference, write a new one for a different app using read_file/write_file tools. Tests scope discipline, schema adherence, and stall resistance. Replicates the real production failure where gemma4:26b invented manifestTargets and touched out-of-scope files.",
+  "description": "Multi-turn agentic task: read an existing ImageUpdater config as reference, write a new one for a different app using read_file/write_file tools. Tests scope discipline (distractor file present), schema adherence, and stall resistance. Replicates the real production failure where gemma4:26b invented manifestTargets and touched out-of-scope files.",
   "system": "You are a Kubernetes configuration assistant. Use the provided tools to read existing configs and write new ones. Match the schema of existing files exactly — do not add fields not present in the example.",
   "task": "Create an ImageUpdater config for filebrowser.\n\nThe image is `ghcr.io/gtsteffaniak/filebrowser`, the git repository is `https://github.com/dvystrcil/filebrowser-quantum.git`.\n\nRead the existing open-webui config as a reference, then write the new config to `filebrowser/imageupdater.yaml`. Do not modify any other files.",
   "mock_fs": {
-    "open-webui/imageupdater.yaml": "apiVersion: argocd-image-updater.argoproj.io/v1alpha1\nkind: ImageUpdater\nmetadata:\n  name: open-webui-iu\nspec:\n  namespace: argocd\n  applicationRefs:\n    - namePattern: \"open-webui\"\n      images:\n        - alias: \"open-webui\"\n          imageName: \"ghcr.io/open-webui/open-webui:0.x\"\n      writeBackConfig:\n        method: \"git\"\n        gitConfig:\n          repository: \"https://github.com/dvystrcil/open-webui.git\"\n          branch: \"main\"\n          writeBackTarget: \"kustomization:/overlays\"\n"
+    "open-webui/imageupdater.yaml": "apiVersion: argocd-image-updater.argoproj.io/v1alpha1\nkind: ImageUpdater\nmetadata:\n  name: open-webui-iu\nspec:\n  namespace: argocd\n  applicationRefs:\n    - namePattern: \"open-webui\"\n      images:\n        - alias: \"open-webui\"\n          imageName: \"ghcr.io/open-webui/open-webui:0.x\"\n      writeBackConfig:\n        method: \"git\"\n        gitConfig:\n          repository: \"https://github.com/dvystrcil/open-webui.git\"\n          branch: \"main\"\n          writeBackTarget: \"kustomization:/overlays\"\n",
+    "open-webui/kustomization.yaml": "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - ../../base\nimages:\n  - name: ghcr.io/open-webui/open-webui\n    newTag: \"0.6.5\"\n"
   },
   "scoped_files": ["filebrowser/imageupdater.yaml"],
   "expected_writes": {
@@ -22,5 +23,5 @@
     "spec.template.spec.containers"
   ],
   "max_turns": 8,
-  "temperature": 0.1
+  "temperature": 0.2
 }
