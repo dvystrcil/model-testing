@@ -58,14 +58,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Generate cache key
+        id: cache-key
+        run: |
+          PAYLOAD_HASH=$(sha256sum benchmarks/payloads/${{ matrix.payload }}.json | cut -c1-16)
+          MODELS_HASH=$(sha256sum models.yaml | cut -c1-16)
+          RUNS="${{ github.event.inputs.runs || '1' }}"
+          MODEL="${{ github.event.inputs.model || 'all' }}"
+          KEY="sweep-${{ matrix.payload }}-p${PAYLOAD_HASH}-m${MODELS_HASH}-r${RUNS}-m${MODEL}"
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          echo "Cache key: $KEY"
+
+      - name: Restore cached results
+        id: cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: benchmarks/results/
+          key: ${{ steps.cache-key.outputs.key }}
+
+      - name: Report cache hit
+        if: steps.cache-restore.outputs.cache-hit == 'true'
+        run: echo "Cache hit — skipping Ollama for ${{ matrix.payload }}"
+
       - uses: actions/setup-python@v5
+        if: steps.cache-restore.outputs.cache-hit != 'true'
         with:
           python-version: '3.12'
 
       - name: Install dependencies
+        if: steps.cache-restore.outputs.cache-hit != 'true'
         run: pip install -r requirements.txt
 
       - name: Install kubectl
+        if: steps.cache-restore.outputs.cache-hit != 'true'
         run: |
           KUBECTL_VERSION=$(curl -sL https://dl.k8s.io/release/stable.txt)
           curl -sLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
@@ -74,6 +99,7 @@ jobs:
           kubectl version --client
 
       - name: Run sweep — ${{ matrix.payload }}
+        if: steps.cache-restore.outputs.cache-hit != 'true'
         env:
           OLLAMA_URL: http://ollama.ollama.svc.cluster.local
         run: |
@@ -86,6 +112,13 @@ jobs:
             --payload "${{ matrix.payload }}" \
             --runs "${{ github.event.inputs.runs || '1' }}" \
             $MODEL_ARG
+
+      - name: Save results to cache
+        if: steps.cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: benchmarks/results/
+          key: ${{ steps.cache-key.outputs.key }}
 
       - name: Upload results — ${{ matrix.payload }}
         if: always()

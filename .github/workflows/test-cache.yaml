@@ -1,0 +1,81 @@
+name: test-cache
+
+# Validates the cache key logic used by model-sweep without hitting Ollama.
+# populate: writes a fake JSONL result and saves it to the cache.
+# verify:   restores from cache and asserts the file is present.
+# If verify passes, the same key logic can be trusted in model-sweep.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  populate:
+    runs-on: model-testing-runner
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.key }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate cache key
+        id: cache-key
+        run: |
+          PAYLOAD_HASH=$(sha256sum benchmarks/payloads/factual_recall.json | cut -c1-16)
+          MODELS_HASH=$(sha256sum models.yaml | cut -c1-16)
+          KEY="sweep-factual_recall-p${PAYLOAD_HASH}-m${MODELS_HASH}-r1-mall"
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          echo "Cache key: $KEY"
+
+      - name: Write mock result
+        run: |
+          mkdir -p benchmarks/results
+          TS=$(date -u +%Y%m%dT%H%M%SZ)
+          OUTFILE="benchmarks/results/sweep_${TS}.jsonl"
+          echo '{"type":"metadata","ts":"'"$TS"'","source":"mock"}' > "$OUTFILE"
+          echo '{"type":"standard","payload":"factual_recall","model":"gemma4:31b","facts_score":1.0,"eval_count":42,"eval_duration":1000000000,"gen_tps":42.0}' >> "$OUTFILE"
+          echo "$OUTFILE" > benchmarks/results/.last_result
+          echo "Wrote mock result: $OUTFILE"
+          cat "$OUTFILE"
+
+      - name: Save to cache
+        uses: actions/cache/save@v4
+        with:
+          path: benchmarks/results/
+          key: ${{ steps.cache-key.outputs.key }}
+
+  verify:
+    needs: populate
+    runs-on: model-testing-runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate cache key (same logic as populate)
+        id: cache-key
+        run: |
+          PAYLOAD_HASH=$(sha256sum benchmarks/payloads/factual_recall.json | cut -c1-16)
+          MODELS_HASH=$(sha256sum models.yaml | cut -c1-16)
+          KEY="sweep-factual_recall-p${PAYLOAD_HASH}-m${MODELS_HASH}-r1-mall"
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          echo "Cache key: $KEY"
+
+      - name: Restore from cache
+        id: cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: benchmarks/results/
+          key: ${{ steps.cache-key.outputs.key }}
+
+      - name: Assert cache hit and file present
+        run: |
+          echo "cache-hit=${{ steps.cache-restore.outputs.cache-hit }}"
+          if [ "${{ steps.cache-restore.outputs.cache-hit }}" != "true" ]; then
+            echo "FAIL: expected cache hit but got miss — key mismatch or cache not written"
+            exit 1
+          fi
+          RESULT=$(cat benchmarks/results/.last_result 2>/dev/null)
+          if [ -z "$RESULT" ] || [ ! -f "$RESULT" ]; then
+            echo "FAIL: .last_result missing or points to non-existent file"
+            exit 1
+          fi
+          echo "PASS: cache hit confirmed"
+          echo "Result file: $RESULT"
+          cat "$RESULT"
