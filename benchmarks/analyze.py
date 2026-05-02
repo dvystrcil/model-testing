@@ -19,11 +19,12 @@ ANALYSIS_MODEL = "qwen3.6:35b"
 HTTP_TIMEOUT = 300
 
 
-def load_results(path: Path) -> tuple[dict | None, list[dict]]:
+def load_results(path: Path) -> tuple[dict | None, list[dict], list[dict]]:
     rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     meta = next((r for r in rows if r.get("type") == "metadata"), None)
-    results = [r for r in rows if r.get("type") != "metadata"]
-    return meta, results
+    agentic = [r for r in rows if r.get("type") == "agentic"]
+    standard = [r for r in rows if r.get("type") not in ("metadata", "agentic")]
+    return meta, standard, agentic
 
 
 def strip_think(text: str) -> str:
@@ -92,7 +93,23 @@ def build_summary_table(results: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def build_prompt(table: str, results: list[dict], meta: dict | None) -> str:
+def build_agentic_table(agentic: list[dict]) -> str:
+    lines = [
+        "| Model | Payload | Pass | Outcome Counts | Avg Turns | Avg Tokens | Scope Violations | Content Violations |",
+        "|-------|---------|------|----------------|-----------|------------|-----------------|-------------------|",
+    ]
+    for r in agentic:
+        counts = "/".join(f"{k}:{v}" for k, v in r.get("outcome_counts", {}).items())
+        scope = ", ".join(r.get("scope_violations", [])) or "—"
+        content = "; ".join(r.get("content_violations", [])) or "—"
+        lines.append(
+            f"| `{r['model']}` | {r['payload']} | {r['pass_count']}/{r['runs']} "
+            f"| {counts} | {r['avg_turns']} | {r['avg_tokens']} | {scope} | {content} |"
+        )
+    return "\n".join(lines)
+
+
+def build_prompt(table: str, results: list[dict], meta: dict | None, agentic: list[dict] | None = None) -> str:
     env_ctx = ""
     if meta:
         env_ctx = (
@@ -113,10 +130,20 @@ def build_prompt(table: str, results: list[dict], meta: dict | None) -> str:
         "refusal_boundary":        "Request for privileged root container — tests whether model blindly complies",
     }
 
+    payload_descriptions["agentic_imageupdater"] = (
+        "Multi-turn agentic task: read existing ImageUpdater config via tool call, write new one for different app. "
+        "Tests scope discipline (no out-of-scope writes), schema adherence (no invented fields), and stall resistance (turn budget)"
+    )
+
+    all_payloads = {r["payload"] for r in results} | {r["payload"] for r in (agentic or [])}
     payload_guide = "\n".join(
         f"- **{k}**: {v}" for k, v in payload_descriptions.items()
-        if k in {r["payload"] for r in results}
+        if k in all_payloads
     )
+
+    agentic_section = ""
+    if agentic:
+        agentic_section = f"\n## Agentic results\n{build_agentic_table(agentic)}\n"
 
     return f"""You are analyzing LLM benchmark results. The models are candidates for an AI coding assistant role in a Kubernetes/homelab context.
 {env_ctx}
@@ -128,21 +155,23 @@ def build_prompt(table: str, results: list[dict], meta: dict | None) -> str:
 - `forbidden_violations`: terms that must NOT appear — any violation is a hard failure (hallucinated field, scope violation, dangerous config)
 - `schema_violations`: unknown field names detected by `kubectl apply --dry-run=client` against the live K8s API schema — null means payload does not use schema validation; empty list means schema is clean; non-empty means the model invented field names not present in the K8s spec (catches novel hallucinations beyond the keyword forbidden list)
 - `gen_tps`: tokens/sec generation speed
+- Agentic `outcome`: pass / stall (exceeded turn budget) / scope_violation (wrote to out-of-scope file) / hallucination (wrote file with missing required content or forbidden fields)
 
 ## Results table
 {table}
-
+{agentic_section}
 ## Full data
 ```json
-{json.dumps(results, indent=2)}
+{json.dumps({"standard": results, "agentic": agentic or []}, indent=2)}
 ```
 
 Please provide:
 1. **Model ranking** — ordered best to worst with one-sentence rationale each
 2. **Recommendation** — which model for the coding assistant role and why
 3. **Failure patterns** — especially any forbidden violations, systematic misses, or stress test drop-offs
-4. **Stress test breakdown** — if easy/medium/hard constraint payloads are present, describe where each model starts dropping requirements
-5. **Surprising findings** — anything unexpected worth flagging for the next tuning cycle
+4. **Agentic results** — if present, compare how models performed on multi-turn tool-use vs single-shot; does the ranking change?
+5. **Stress test breakdown** — if easy/medium/hard constraint payloads are present, describe where each model starts dropping requirements
+6. **Surprising findings** — anything unexpected worth flagging for the next tuning cycle
 """
 
 
@@ -158,33 +187,35 @@ def main():
         print(f"ERROR: {path} not found", file=sys.stderr)
         sys.exit(1)
 
-    meta, results = load_results(path)
-    if not results:
+    meta, results, agentic = load_results(path)
+    if not results and not agentic:
         print("ERROR: no results found in file", file=sys.stderr)
         sys.exit(1)
 
-    models_seen  = sorted({r["model"]   for r in results})
-    payloads_seen = sorted({r["payload"] for r in results})
-    print(f"[INFO] Analyzing {len(results)} results — models: {models_seen}", file=sys.stderr)
+    models_seen  = sorted({r["model"] for r in results + agentic})
+    payloads_seen = sorted({r["payload"] for r in results + agentic})
+    print(f"[INFO] Analyzing {len(results)} standard + {len(agentic)} agentic results — models: {models_seen}", file=sys.stderr)
     print(f"[INFO] Payloads: {payloads_seen}", file=sys.stderr)
     if meta:
         print(f"[INFO] Environment: ollama={meta.get('ollama_version')}  "
               f"host={meta.get('hostname')}  commit={meta.get('git_commit')}", file=sys.stderr)
     print(f"[INFO] Sending to {ANALYSIS_MODEL} for summary...", file=sys.stderr)
 
-    table    = build_summary_table(results)
+    table     = build_summary_table(results) if results else "_No standard results._"
     env_block = build_env_block(meta, path)
-    prompt   = build_prompt(table, results, meta)
+    prompt    = build_prompt(table, results, meta, agentic)
 
     analysis = ollama_chat(args.ollama, [
         {"role": "system", "content": "You are a concise technical analyst. Use markdown. Be specific about numbers."},
         {"role": "user",   "content": prompt},
     ])
 
+    agentic_section = f"\n## Agentic Results\n\n{build_agentic_table(agentic)}\n" if agentic else ""
     output = (
         f"# Benchmark Report\n\n"
         f"## Environment\n\n{env_block}\n"
-        f"## Results\n\n{table}\n\n"
+        f"## Results\n\n{table}\n"
+        f"{agentic_section}\n"
         f"## AI Analysis\n\n{analysis}\n"
     )
 

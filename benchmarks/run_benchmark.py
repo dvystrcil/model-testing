@@ -180,6 +180,185 @@ def validate_kubectl(yaml_str: str, dry_run: str = "client", namespace: str | No
         return []
 
 
+AGENTIC_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "read_file",
+            "description": "Read the contents of a file from the working directory.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative file path to read"},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_file",
+            "description": "Write content to a file in the working directory.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative file path to write"},
+                    "content": {"type": "string", "description": "Full file content to write"},
+                },
+                "required": ["path", "content"],
+            },
+        },
+    },
+]
+
+
+def execute_tool(name: str, args: dict, mock_fs: dict, writes: dict) -> str:
+    if name == "read_file":
+        path = args.get("path", "")
+        return mock_fs[path] if path in mock_fs else f"ERROR: file not found: {path}"
+    if name == "write_file":
+        path = args.get("path", "")
+        content = args.get("content", "")
+        writes[path] = content
+        mock_fs[path] = content
+        return f"OK: wrote {len(content)} bytes to {path}"
+    return f"ERROR: unknown tool: {name}"
+
+
+def run_agentic_once(spec: dict, ollama_url: str, model: str) -> dict:
+    mock_fs = dict(spec.get("mock_fs", {}))
+    scoped = set(spec.get("scoped_files", []))
+    expected = spec.get("expected_writes", {})
+    forbidden = spec.get("quality_forbidden", [])
+    max_turns = spec.get("max_turns", 8)
+
+    messages = [
+        {"role": "system", "content": spec.get("system", "You are a Kubernetes configuration assistant.")},
+        {"role": "user", "content": spec["task"]},
+    ]
+
+    writes: dict[str, str] = {}
+    turns_used = 0
+    stalled = False
+    total_ec = 0
+
+    for turn in range(max_turns):
+        payload = {
+            "model": model,
+            "stream": False,
+            "temperature": spec.get("temperature", 0.1),
+            "options": {"num_gpu": -1},
+            "messages": messages,
+            "tools": AGENTIC_TOOLS,
+        }
+        try:
+            resp = ollama_chat(ollama_url, payload)
+        except Exception as e:
+            info(f"[agentic] turn={turn+1} ollama error: {e}")
+            stalled = True
+            break
+
+        msg = resp.get("message", {})
+        total_ec += resp.get("eval_count", 0)
+        tool_calls = msg.get("tool_calls") or []
+
+        # Preserve assistant turn in history
+        assistant_entry: dict = {"role": "assistant", "content": msg.get("content") or ""}
+        if tool_calls:
+            assistant_entry["tool_calls"] = tool_calls
+        messages.append(assistant_entry)
+
+        if not tool_calls:
+            turns_used = turn
+            break
+
+        turns_used = turn + 1
+
+        for tc in tool_calls:
+            fn = tc.get("function", {})
+            name = fn.get("name", "")
+            raw_args = fn.get("arguments", {})
+            args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+            result = execute_tool(name, args, mock_fs, writes)
+            info(f"[agentic] turn={turns_used}  tool={name}  path={args.get('path', '?')}  → {result[:60]}")
+            messages.append({"role": "tool", "name": name, "content": result})
+    else:
+        stalled = True
+
+    scope_violations = [p for p in writes if p not in scoped]
+
+    all_written = "\n".join(writes.values())
+    forbidden_found = [f for f in forbidden if f.lower() in all_written.lower()]
+
+    content_violations: list[str] = []
+    for path, frags in expected.items():
+        if path not in writes:
+            content_violations.append(f"missing_file:{path}")
+        else:
+            for frag in frags:
+                if frag.lower() not in writes[path].lower():
+                    content_violations.append(f"missing_fragment:{frag}")
+
+    if stalled:
+        outcome = "stall"
+    elif scope_violations:
+        outcome = "scope_violation"
+    elif content_violations or forbidden_found:
+        outcome = "hallucination"
+    else:
+        outcome = "pass"
+
+    return {
+        "outcome": outcome,
+        "turns_used": turns_used,
+        "stalled": stalled,
+        "writes": list(writes.keys()),
+        "scope_violations": scope_violations,
+        "content_violations": content_violations,
+        "forbidden_found": forbidden_found,
+        "total_ec": total_ec,
+    }
+
+
+def run_agentic_one(spec: dict, ollama_url: str, model: str, runs: int, dry_run: bool) -> dict | None:
+    name = spec["name"]
+    info(f"payload={name}  model={model}  type=agentic  max_turns={spec.get('max_turns', 8)}  runs={runs}")
+
+    if dry_run:
+        print(f"  [dry-run] agentic harness: tools=read_file,write_file  scoped={spec.get('scoped_files')}")
+        return None
+
+    raw: list[dict] = []
+    for i in range(runs):
+        run_label = f"run {i+1}/{runs}  " if runs > 1 else ""
+        info(f"{run_label}starting agentic turn loop")
+        r = run_agentic_once(spec, ollama_url, model)
+        raw.append(r)
+        info(f"{run_label}done  outcome={r['outcome']}  turns={r['turns_used']}  tokens={r['total_ec']}"
+             + (f"  scope={r['scope_violations']}" if r["scope_violations"] else "")
+             + (f"  content={r['content_violations']}" if r["content_violations"] else ""))
+
+    outcomes = [r["outcome"] for r in raw]
+    pass_count = outcomes.count("pass")
+
+    return {
+        "type": "agentic",
+        "ts": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "payload": name,
+        "model": model,
+        "runs": runs,
+        "pass_count": pass_count,
+        "outcome_counts": {o: outcomes.count(o) for o in set(outcomes)},
+        "avg_turns": round(sum(r["turns_used"] for r in raw) / len(raw), 1),
+        "avg_tokens": round(sum(r["total_ec"] for r in raw) / len(raw)),
+        "scope_violations": list({v for r in raw for v in r["scope_violations"]}),
+        "content_violations": list({v for r in raw for v in r["content_violations"]}),
+        "forbidden_found": list({v for r in raw for v in r["forbidden_found"]}),
+        "writes": list({w for r in raw for w in r["writes"]}),
+    }
+
+
 def grade(response_text: str, facts: list[str], forbidden: list[str]) -> dict:
     low = response_text.lower()
     hits = [f for f in facts if f.lower() in low]
@@ -260,6 +439,9 @@ def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
 
 def run_one(spec: dict, ollama_url: str, model: str, runs: int,
             snippet_len: int, dry_run: bool) -> dict | None:
+    if spec.get("type") == "agentic":
+        return run_agentic_one(spec, ollama_url, model, runs, dry_run)
+
     name = spec["name"]
     facts = spec.get("quality_facts", [])
     forbidden = spec.get("quality_forbidden", [])
@@ -370,7 +552,24 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
 def print_summary(results: list[dict]) -> None:
     if not results:
         return
-    has_schema = any(r.get("schema_violations") is not None for r in results)
+
+    agentic = [r for r in results if r.get("type") == "agentic"]
+    standard = [r for r in results if r.get("type") != "agentic"]
+
+    if agentic:
+        print("\n" + "=" * 90)
+        print(f"{'Model':<25} {'Payload':<28} {'Outcome':<18} {'Turns':>6} {'Tokens':>8}")
+        print("-" * 90)
+        for r in agentic:
+            counts = r.get("outcome_counts", {})
+            outcome_str = "/".join(f"{k}:{v}" for k, v in counts.items())
+            pass_frac = f"{r['pass_count']}/{r['runs']}"
+            print(f"{r['model']:<25} {r['payload']:<28} {pass_frac+' '+outcome_str:<18} {r['avg_turns']:>6.1f} {r['avg_tokens']:>8}")
+        print("=" * 90)
+
+    if not standard:
+        return
+    has_schema = any(r.get("schema_violations") is not None for r in standard)
     width = 100 if has_schema else 90
     print("\n" + "=" * width)
     header = f"{'Model':<25} {'Payload':<25} {'P-Eval':>8} {'Gen-Tok':>8} {'Gen':>7} {'Facts':>6} {'Viol':>5}"
@@ -378,7 +577,7 @@ def print_summary(results: list[dict]) -> None:
         header += f" {'Schema':>7}"
     print(header)
     print("-" * width)
-    for r in results:
+    for r in standard:
         viol = len(r.get("forbidden_violations", []))
         viol_str = f"{'!'+str(viol):>5}" if viol else f"{'0':>5}"
         line = (
