@@ -98,33 +98,39 @@ In single-shot benchmarks, `gemma4:26b` ranked #1 (50 TPS). In the agentic harne
 
 | Model | TPS | Agentic pass | Avg turns | Avg tokens | Contender? |
 |-------|-----|-------------|-----------|------------|------------|
-| `qwen3.6:35b` | 44 | **3/3** | **2.0** | **898** | **Yes** — fewest turns, most token-efficient |
-| `gemma4:31b` | 10 | **3/3** | **2.0** | 1,179 | **Yes** |
+| `qwen3-coder-next:latest` | 37 | **1/1†** | **2.0 / 4.0‡** | **259 / 610‡** | **Strong** — best token efficiency, best stress retention; N=1 only |
+| `qwen3.6:35b` | 44 | **3/3** | **2.0** | **898** | **Yes** — confirmed primary; N=3 validated |
+| `gemma4:31b` | 10 | **3/3** | **2.0** | 1,179 | Yes |
 | `qwen3.6:27B` | 11 | 3/3 | 2.7 | 1,005 | Yes — slower TPS limits interactive use |
 | `gemma4:26b` | 50 | 3/3 | 3.7 | 1,491 | Marginal — fastest TPS but most turns |
 | `laguna-xs.2:q4_K_M` | 34 | 2/3 | 2.3 | 415 | No — scope violation + `latest` tag inertia |
 
-*Data from run 25274198108: N=3 head-to-head, all 5 models, all 13 payloads, Ollama 0.23.0.*
+*N=3 head-to-head (original 5 models): run 25274198108, Ollama 0.23.0.*
+*† qwen3-coder-next: N=1 singleton run 25285504660 — promote to N=3 before deployment decision.*
+*‡ qwen3-coder-next agentic_imageupdater: 2T/259 tok; agentic_multi_app_rollout: 4T/610 tok (minimum possible turns).*
 
 `gemma4:26b` improved from 4.7 → 3.7 avg turns compared to earlier isolated runs — it now passes 3/3, but still requires the most turns of any contender. `qwen3.6:35b` and `gemma4:31b` are jointly optimal: both complete in exactly 2.0 turns with zero violations. `laguna-xs.2` dropped to 2/3 — its one failure was a scope violation (wrote distractor file with missing schema fragments) in addition to the `latest` tag inertia found in stress payloads (see Finding 6).
 
-**Important:** The AI analysis tool that generates the sweep report weights TPS heavily and recommends `gemma4:26b`. This recommendation is wrong for multi-step agentic use. On `agentic_multi_app_rollout` (1 read + 3 writes), gemma4:26b scored 1/3 pass (hallucination: dropped git repo URLs on 2/3 runs); qwen3.6:35b scored 3/3 in 2.0 turns with zero violations. The agentic harness is the authoritative signal. **`qwen3.6:35b` is the confirmed primary recommendation.** `gemma4:31b` is a valid alternative at the same turn count if throughput is less critical.
+**Important:** The AI analysis tool that generates the sweep report weights TPS heavily and recommends `gemma4:26b`. This recommendation is wrong for multi-step agentic use. On `agentic_multi_app_rollout` (1 read + 3 writes), gemma4:26b scored 1/3 pass (hallucination: dropped git repo URLs on 2/3 runs); qwen3.6:35b scored 3/3 in 2.0 turns with zero violations. The agentic harness is the authoritative signal. **`qwen3.6:35b` is the confirmed primary recommendation pending `qwen3-coder-next` N=3 validation.** `qwen3-coder-next` shows better stress retention and lower token use at N=1 — if it holds at N=3, it displaces `qwen3.6:35b`.
 
 ### Finding 2: The stress curve is a U-shape, not linear decay
 
 We extended the stress tests from 10 to 13 and 18 constraints. The expected linear decay did not materialise. Instead, scores recover at higher constraint counts:
 
-| Payload | Constraints | qwen3.6:35b | qwen3.6:27B | gemma4:26b | gemma4:31b | laguna-xs.2 |
-|---------|-------------|-------------|-------------|------------|------------|-------------|
-| easy | 4 | 100% | 100% | 100% | 100% | 100%† |
-| medium | 7 | 86% | 86% | 86% | 86% | 81%† |
-| multi | 10 | 80% | 87% | 80% | 80% | **97%†\*** |
-| hard | 13 | 85% | 85% | 85% | 85% | **54%†** |
-| extreme | 18 | 89% | — | 89% | 89% | 87%† |
+| Payload | Constraints | qwen3-coder-next | qwen3.6:35b | qwen3.6:27B | gemma4:26b | gemma4:31b | laguna-xs.2 |
+|---------|-------------|-----------------|-------------|-------------|------------|------------|-------------|
+| easy | 4 | **100%†** | 100% | 100% | 100% | 100% | 100%‡ |
+| medium | 7 | **100%†** | 86% | 86% | 86% | 86% | 81%‡ |
+| multi | 10 | **100%†** | 80% | 87% | 80% | 80% | **97%‡\*** |
+| hard | 13 | **85%†** | 85% | 85% | 85% | 85% | **54%‡** |
+| extreme | 18 | **100%†** | 89% | — | 89% | 89% | 87%‡ |
 
-*N=3 head-to-head, run 25274198108.*
-† laguna-xs.2 carries a `latest` tag forbidden violation in medium/multi/hard/extreme — raw constraint retention scores are inflated relative to actual compliance. See Finding 6.
+*Original 5 models: N=3, run 25274198108. qwen3-coder-next: N=1, run 25285504660.*
+† qwen3-coder-next N=1 — directional only; N=3 required to confirm.
+‡ laguna-xs.2 carries a `latest` tag forbidden violation in medium/multi/hard/extreme — raw constraint retention scores are inflated relative to actual compliance. See Finding 6.
 \* laguna's 97% at 10 constraints but 54% at 13 is an anomaly — see Finding 8.
+
+**qwen3-coder-next shows markedly better stress retention than qwen3.6:35b at N=1** — 100% at medium (vs 86%), 100% at multi (vs 80%), and 100% at extreme (vs 89%). The hard plateau at 85% is identical across both models, both dropping `memory: "256Mi"` and `memory: "512Mi"`. If the N=3 run confirms this pattern, the agentic RL training has materially improved constraint discipline, not just task execution.
 
 The U-shape is not a sign of improvement. It is an artifact of how quality_facts are scored: the new constraints added at 13 and 18 (startup probes, service accounts, volumes, env vars, annotations, init containers) are fields models reliably produce. Adding them raises the denominator in ways that help the percentage — even though models are *still* dropping the same memory fields at every level.
 
@@ -375,19 +381,110 @@ These approaches are complementary, not competing:
 
 Key difference from `qwen3.6:35b`: qwen3-coder-next was trained specifically on agentic execution traces with environment feedback. qwen3.6:35b is a general model fine-tuned for instruction following. If agentic training produces qualitatively better turn efficiency or scope discipline, it should show clearly in the harness.
 
-**The capability tradeoff curve we want to measure:**
+**The capability tradeoff curve (updated 2026-05-03):**
 
-| Model | Params | Active | Est. TPS | Status | Hypothesis |
-|-------|--------|--------|----------|--------|------------|
-| `qwen2.5-coder:14b` | 14B dense | 14B | >50? | Pending download | Fastest; possible accuracy loss |
-| `qwen2.5-coder:32b` | 32B dense | 32B | ~44? | **Available — in models.yaml** | Direct size comparison to qwen3.6:35b |
-| `qwen3.6:35b` *(current baseline)* | 35B dense | 35B | 44 | Tested | Current leader |
-| `qwen3-coder-next` | 80B MoE | 3B | ~35–44? | Downloading | Agentic training advantage? |
+| Model | Params | Active | TPS | VRAM | Status | Early agentic result |
+|-------|--------|--------|-----|------|--------|----------------------|
+| `qwen2.5-coder:14b` | 14B dense | 14B | TBD | 9 GB | Available | Not yet run |
+| `qwen2.5-coder:32b` | 32B dense | 32B | TBD | 19 GB | Available | Not yet run |
+| `qwen3.6:35b` *(baseline)* | 35B dense | 35B | 44 | 23 GB | Tested | 3/3 pass, 2.0 turns, 898 tokens |
+| `qwen3-coder-next` | 80B MoE | 3B | TBD | 51 GB | N=1 in progress | `agentic_imageupdater`: pass 2T 259 tok; `agentic_multi_app_rollout`: pass 4T 610 tok |
 
-`qwen2.5-coder:32b` is the most direct comparison to `qwen3.6:35b` — similar parameter count, same Qwen family, but the coder specialisation trades general reasoning for deeper coding-task alignment. If it matches `qwen3.6:35b` on agentic turn count and beats it on stress constraint retention, it becomes the preferred choice. `qwen2.5-coder:14b` answers whether a smaller, faster model sacrifices enough quality to matter for this use case.
+`qwen3-coder-next` preliminary result is striking: same pass rate as `qwen3.6:35b` with ~31% fewer tokens on the simple task and a clean minimum-turn execution (1 read + 3 writes, no distractor reads) on the multi-write task. Stress payloads still running.
 
-A suitable "smaller" comparator needs to be identified — `qwen2.5-coder:14b` or a `qwen3-coder` variant if one exists. The goal is to answer: at what size does capability plateau, and what does each additional GB of model weight actually buy on agentic K8s tasks?
+`qwen2.5-coder:32b` is the most direct comparison to `qwen3.6:35b` — similar parameter count, same Qwen family, coding specialisation trades general reasoning for deeper coding-task alignment. `qwen2.5-coder:14b` at 9 GB answers whether a smaller, faster model is viable at all for this task class.
 
 **Test protocol:**
 
-Run `qwen3-coder-next` against the full payload suite (N=3) once downloaded. Priority payloads: `agentic_imageupdater`, `agentic_multi_app_rollout`, all stress payloads. Compare turn counts, token efficiency, and constraint retention against the established baselines. If the agentic training advantage is real, expect 2.0 turns (same as qwen3.6:35b), better token efficiency, and possibly better stress retention. If there's no advantage, the extra model size and download cost are not justified for this use case.
+Run all coder models against the full payload suite (N=1 for initial validation, N=3 for candidates that pass). Priority payloads: `agentic_imageupdater`, `agentic_multi_app_rollout`, all stress payloads. Compare turn counts, token efficiency, and constraint retention against the established baselines.
+
+---
+
+### Multi-model deployment: memory capacity vs. memory bandwidth
+
+**Prompted by:** The decision to deploy multiple models simultaneously (e.g., one for architectural planning, one for code execution, possibly a third), and the observation that previous testing found dense models approaching the GPU's bandwidth ceiling at single-model load.
+
+**The hardware baseline**
+
+The Ollama pod runs on `k8s-node-max-01`: AMD GC_11_5_0 family GPU, **96 GB VRAM**, 40 CUs. The measured single-model TPS for `qwen3.6:35b` (35B dense, 23 GB model) is 44 TPS. The implied memory bandwidth consumed at peak is:
+
+```
+23 GB (model size) × 44 tokens/sec ≈ 1 TB/s per token cycle
+```
+
+This is a significant fraction of the available GPU memory bandwidth budget. The single-model baseline is already near saturation at full speed.
+
+**Planned deployment topology**
+
+```
+User request
+    → qwen3:0.6b (522 MB — classifies prompt as simple or complex)
+        → simple path  → qwen3-coder-next (51 GB, code execution)
+        → complex path → qwen3-coder-next (execution) + optional planning pass
+```
+
+`qwen3:0.6b` is already in Ollama (522 MB, confirmed). At that size it is VRAM- and bandwidth-negligible — effectively free to keep loaded. The two large slots are the router target and an optional planning model. If `qwen3-coder-next` proves capable of both planning and execution in one model, the third slot is freed entirely.
+
+**Capacity vs. bandwidth — two separate constraints**
+
+*Capacity* is the total VRAM budget. Three models can reside simultaneously if their sizes sum below 96 GB:
+
+| Combination | Total VRAM | Fits? |
+|-------------|-----------|-------|
+| qwen3:0.6b (0.5) + qwen3-coder-next (51) + qwen3.6:35b (23) | 75 GB | Yes |
+| qwen3:0.6b (0.5) + qwen3-coder-next (51) + gemma4:31b (19) | 71 GB | Yes |
+| Two × qwen3-coder-next + qwen3:0.6b | 103 GB | No |
+
+Capacity is manageable for most reasonable three-model combinations. `OLLAMA_MAX_LOADED_MODELS=3` and `OLLAMA_KEEP_ALIVE=-1` are required; without them Ollama evicts models between requests and the "three models loaded" assumption collapses to sequential single-model inference with load latency on every switch.
+
+*Bandwidth* is the harder constraint. Each token generated requires reading the model's active weights from VRAM into compute. For concurrent generation across three models simultaneously:
+
+| Model type | Active params/token | Approx. BW/token at 15 TPS |
+|------------|--------------------|-----------------------------|
+| Dense 35B (`qwen3.6:35b`) | 35B | ~345 GB/s |
+| Dense 31B (`gemma4:31b`) | 31B | ~310 GB/s |
+| Dense 14B (`qwen2.5-coder:14b`) | 14B | ~105 GB/s |
+| MoE 80B/3B (`qwen3-coder-next`) | ~3B | **~22 GB/s** |
+
+Three dense 30B+ models running concurrently at 15 TPS each would demand ~960 GB/s — roughly the full bandwidth budget with nothing left. In practice, TPS would drop well below 15 to stay within the budget. With MoE models in two of the three slots, the same concurrent load consumes a fraction of the bandwidth, leaving headroom for sustained throughput.
+
+**Dense vs. MoE — the key architectural trade for multi-model deployments**
+
+MoE models route each token through only a small fraction of their total experts. Despite a larger total weight footprint, the per-token bandwidth cost is determined by *active* parameters, not total parameters. A 3B-active MoE uses ~1/12 the per-token bandwidth of a 35B dense model while potentially matching it on reasoning quality.
+
+This inverts the naive intuition that "bigger model = more resource pressure." In a multi-model deployment, `qwen3-coder-next` (51 GB, 3B active) is a *better* bandwidth citizen than `qwen3.6:35b` (23 GB, 35B active) despite being twice as large on disk.
+
+**The single-model-for-everything possibility**
+
+If one model can handle both planning and execution roles, the three-model constraint disappears. `qwen3-coder-next` is the strongest candidate: trained on 800K agentic RL traces with 256K context, it is specifically designed for multi-step, multi-role tasks. The preliminary benchmark results (clean 4-turn multi-write completion, 259 tokens for simple task) support the hypothesis that it self-directs well without a separate planning model. This should be evaluated explicitly before committing to a multi-model deployment topology.
+
+**What we are not yet testing**
+
+Current benchmarks measure single-model, sequential throughput — the best-case TPS with no contention. Concurrent degradation is unmeasured. A `concurrent_load` benchmark would:
+
+1. Set `OLLAMA_MAX_LOADED_MODELS=3`, `OLLAMA_KEEP_ALIVE=-1`
+2. Fire simultaneous inference requests at all three loaded models
+3. Measure per-model TPS under contention vs. the single-model baseline
+4. Report a degradation ratio — the difference between that ratio and 1.0 is the real-world cost of the multi-model deployment
+
+**Tunable parameters**
+
+Ollama pod environment variables (highest priority):
+
+| Variable | Value | Effect |
+|----------|-------|--------|
+| `OLLAMA_MAX_LOADED_MODELS` | `3` | Prevents model eviction; required for true multi-model deployment |
+| `OLLAMA_KEEP_ALIVE` | `-1` | Keeps all loaded models in VRAM indefinitely |
+| `OLLAMA_FLASH_ATTENTION` | `1` | Reduces KV cache VRAM during long-context generation |
+| `OLLAMA_NUM_PARALLEL` | `1` | One concurrent request per model; breadth over depth |
+
+AMD/ROCm host-level (lower priority, diminishing returns):
+
+| Variable | Effect |
+|----------|--------|
+| `HSA_ENABLE_SDMA=0` | Disables DMA engine for small copies; helps on some RDNA generations |
+| `GPU_MAX_HEAP_SIZE=100` | Allows full VRAM allocation without artificial ceiling |
+
+KV cache quantization (`OLLAMA_KV_CACHE_TYPE=q8_0`) reduces memory pressure for long contexts but was found to hurt benchmark performance (Finding 7) — do not enable without re-running the benchmark harness to measure the quality regression.
+
+**Current conclusion:** Capacity is not the bottleneck for any reasonable three-model combination on 96 GB VRAM. Bandwidth is. The deployment decision should prioritise MoE models for high-throughput slots and reserve dense models (if used at all) for lower-frequency planning roles where per-token latency matters less than quality. The strongest outcome would be `qwen3-coder-next` serving both roles from a single model slot — pending N=3 stress validation.
