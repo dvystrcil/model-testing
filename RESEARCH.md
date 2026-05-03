@@ -108,7 +108,7 @@ In single-shot benchmarks, `gemma4:26b` ranked #1 (50 TPS). In the agentic harne
 
 `gemma4:26b` improved from 4.7 → 3.7 avg turns compared to earlier isolated runs — it now passes 3/3, but still requires the most turns of any contender. `qwen3.6:35b` and `gemma4:31b` are jointly optimal: both complete in exactly 2.0 turns with zero violations. `laguna-xs.2` dropped to 2/3 — its one failure was a scope violation (wrote distractor file with missing schema fragments) in addition to the `latest` tag inertia found in stress payloads (see Finding 6).
 
-**Important:** The AI analysis tool that generates the sweep report weights TPS heavily and produces incorrect rankings. The agentic harness is the authoritative signal for coding assistant selection. **`qwen3.6:35b` or `gemma4:31b` are the correct choices** — both complete in 2 turns with clean single-shot scores.
+**Important:** The AI analysis tool that generates the sweep report weights TPS heavily and recommends `gemma4:26b`. This recommendation is wrong for multi-step agentic use. On `agentic_multi_app_rollout` (1 read + 3 writes), gemma4:26b scored 1/3 pass (hallucination: dropped git repo URLs on 2/3 runs); qwen3.6:35b scored 3/3 in 2.0 turns with zero violations. The agentic harness is the authoritative signal. **`qwen3.6:35b` is the confirmed primary recommendation.** `gemma4:31b` is a valid alternative at the same turn count if throughput is less critical.
 
 ### Finding 2: The stress curve is a U-shape, not linear decay
 
@@ -219,11 +219,16 @@ This has a practical design implication: guardrails implemented as tool-level co
 
    **The honest case against it:** Turn count is a concrete measurement, not an artifact. gemma4:26b uses ~1.7 more turns per task than qwen3.6:35b. Wall-clock task completion time is also worse (1,491 tokens ÷ 50 TPS ≈ 30s vs 898 ÷ 44 ≈ 20s) because token volume more than offsets the TPS advantage. More importantly, the production failure that motivated this entire investigation was *exactly this pattern* — gemma4:26b lining up 8+ tool calls in sequence, then stalling without completing the task. The single-app agentic payload's 8-turn budget was too loose to expose this.
 
-   **Result (run 25284630633, gemma4:26b singleton N=3):** gemma4:26b scored **1/3 pass** on `agentic_multi_app_rollout`. Failure mode: `hallucination` (not stall) — it wrote all three files every time but dropped required git repo URL fragments in 2 of 3 runs. Specifically, `dvystrcil/n8n` and `dvystrcil/harbor` were omitted; `stable-diffusion` (the third app) was always complete. avg_turns was 4.7 (only 0.7 overhead above the 4-turn optimum), zero scope violations, zero forbidden field violations.
+   **Answer: the AI report's recommendation is wrong for multi-step agentic use.** Two singleton N=3 runs on `agentic_multi_app_rollout` (1 read + 3 writes, 8-turn budget, 5 distractor files):
 
-   The failure is **multi-output content dropout**: as gemma4:26b writes successive outputs in a single agentic session, it loses specific identifier detail from earlier outputs. This mirrors the stress_constraint finding — the same pattern of selective omission under cognitive load, now appearing across outputs rather than across constraints within one output. The turn budget was not the limiting factor; attention was.
+   | Model | Pass | Avg turns | Failure mode |
+   |-------|------|-----------|--------------|
+   | `qwen3.6:35b` | **3/3** | **2.0** | none |
+   | `gemma4:26b` | 1/3 | 4.7 | hallucination — git repo URLs dropped for harbor + n8n in 2/3 runs |
 
-   **Comparison pending:** qwen3.6:35b running on the same payload (run 25284936070). If it passes 3/3 at 4–5 turns, the bias question is answered: gemma4:26b's per-output dropout rate makes it unreliable for multi-step agentic tasks regardless of its TPS advantage.
+   qwen3.6:35b completed in 2 turns by batching all three `write_file` calls into a single assistant turn after one `read_file`. gemma4:26b wrote files sequentially across 4.7 turns and lost specific identifier content (`dvystrcil/harbor`, `dvystrcil/n8n`) on earlier outputs as it progressed through the list — the same selective dropout under cognitive load seen in stress_constraint tests, now appearing across outputs in an agentic session.
+
+   **Conclusion:** gemma4:26b's 50 TPS advantage is irrelevant when it fails 67% of multi-output agentic tasks. The AI report correctly measures individual metrics but draws the wrong inference: pass rate on a single-write task does not predict reliability on multi-write tasks. `qwen3.6:35b` is the correct choice for production agentic use. This is now a confirmed finding, not a judgment call.
 
 ---
 
