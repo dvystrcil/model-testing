@@ -27,6 +27,9 @@ concurrency:
   group: model-sweep
   cancel-in-progress: true
 
+env:
+  RESULTS_BASE: /mnt/benchmark-results
+
 jobs:
   setup:
     runs-on: model-testing-runner
@@ -120,13 +123,14 @@ jobs:
           path: benchmarks/results/
           key: ${{ steps.cache-key.outputs.key }}
 
-      - name: Upload results — ${{ matrix.payload }}
+      - name: Copy results to PVC — ${{ matrix.payload }}
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: results-${{ matrix.payload }}
-          path: benchmarks/results/
-          retention-days: 30
+        run: |
+          DEST="${RESULTS_BASE}/run-${{ github.run_id }}"
+          mkdir -p "$DEST"
+          cp benchmarks/results/sweep_*.jsonl "$DEST/${{ matrix.payload }}.jsonl" 2>/dev/null \
+            && echo "Copied results to $DEST/${{ matrix.payload }}.jsonl" \
+            || echo "No result file found for ${{ matrix.payload }} — job may have failed"
 
   analyze:
     needs: sweep
@@ -144,32 +148,25 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Download all sweep artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: results-*
-          path: downloaded-results/
-          merge-multiple: false
-
       - name: Analyze results
         env:
           OLLAMA_URL: http://ollama.ollama.svc.cluster.local
         run: |
-          FILES=$(find downloaded-results/ -name "sweep_*.jsonl" | sort | tr '\n' ' ')
+          RUN_DIR="${RESULTS_BASE}/run-${{ github.run_id }}"
+          FILES=$(find "$RUN_DIR" -name "*.jsonl" 2>/dev/null | sort | tr '\n' ' ')
           if [ -z "$FILES" ]; then
-            echo "No result files found — all sweep jobs may have failed."
+            echo "No result files found in $RUN_DIR — all sweep jobs may have failed."
             exit 1
           fi
-          echo "Merging files: $FILES"
+          echo "Analyzing: $FILES"
           python benchmarks/analyze.py $FILES \
             --ollama "$OLLAMA_URL" \
             --out report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
+          cp report.md "${RESULTS_BASE}/run-${{ github.run_id }}/report.md"
 
-      - name: Upload report
+      - name: Prune runs older than 30 days
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-report-${{ github.run_id }}
-          path: report.md
-          retention-days: 30
+        run: |
+          find "${RESULTS_BASE}" -maxdepth 1 -mindepth 1 -type d -mtime +30 \
+            -exec echo "Pruning: {}" \; -exec rm -rf {} +
