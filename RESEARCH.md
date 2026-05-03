@@ -119,17 +119,18 @@ In single-shot benchmarks, `gemma4:26b` ranked #1 (50 TPS). In the agentic harne
 
 We extended the stress tests from 10 to 13 and 18 constraints. The expected linear decay did not materialise. Instead, scores recover at higher constraint counts:
 
-| Payload | Constraints | qwen3-coder-next | qwen3.6:35b | qwen3.6:27B | gemma4:26b | gemma4:31b | laguna-xs.2 |
-|---------|-------------|-----------------|-------------|-------------|------------|------------|-------------|
-| easy | 4 | **100%** | 100% | 100% | 100% | 100% | 100%‡ |
-| medium | 7 | **100%** | 86% | 86% | 86% | 86% | 81%‡ |
-| multi | 10 | **100%** | 80% | 87% | 80% | 80% | **97%‡\*** |
-| hard | 13 | **95%** | 85% | 85% | 85% | 85% | **54%‡** |
-| extreme | 18 | **100%** | 89% | — | 89% | 89% | 87%‡ |
+| Payload | Constraints | qwen3-coder-next | qwen2.5-coder:32b | qwen3.6:35b | qwen3.6:27B | gemma4:26b | gemma4:31b | laguna-xs.2 |
+|---------|-------------|-----------------|-------------------|-------------|-------------|------------|------------|-------------|
+| easy | 4 | **100%** | **100%§** | 100% | 100% | 100% | 100% | 100%‡ |
+| medium | 7 | **100%** | **100%§** | 86% | 86% | 86% | 86% | 81%‡ |
+| multi | 10 | **100%** | **100%§** | 80% | 87% | 80% | 80% | **97%‡\*** |
+| hard | 13 | **95%** | **100%§** | 85% | 85% | 85% | 85% | **54%‡** |
+| extreme | 18 | **100%** | **100%§** | 89% | — | 89% | 89% | 87%‡ |
 
-*Original 5 models: N=3, run 25274198108. qwen3-coder-next: N=3, run 25286166480.*
-‡ laguna-xs.2 carries a `latest` tag forbidden violation in medium/multi/hard/extreme — raw constraint retention scores are inflated relative to actual compliance. See Finding 6.
+*Original 5 models: N=3, run 25274198108. qwen3-coder-next: N=3, run 25286166480. qwen2.5-coder:32b: N=1, run 25287758257.*
+‡ laguna-xs.2 carries a `latest` tag forbidden violation in medium/multi/hard/extreme — scores inflated. See Finding 6.
 \* laguna's 97% at 10 constraints but 54% at 13 is an anomaly — see Finding 8.
+§ qwen2.5-coder:32b N=1 only — not promoted to N=3 (disqualified: complete agentic tool-call failure). Stress scores are directional.
 
 **qwen3-coder-next N=3 confirmed: materially better stress retention than every other tested model.** 100% at medium (vs 86%), 100% at multi (vs 80%), 95% at hard (vs 85%), 100% at extreme (vs 89%). The hard plateau drops only `memory: "256Mi"` and `memory: "512Mi"` — same two fields, same semantic dropout signature as all other models, but at a higher threshold. The N=1 hard result (85%) was slightly pessimistic; N=3 corrected to 95%, demonstrating exactly why N=3 is required before drawing conclusions from a single run.
 
@@ -384,20 +385,22 @@ Key difference from `qwen3.6:35b`: qwen3-coder-next was trained specifically on 
 
 **The capability tradeoff curve (updated 2026-05-03):**
 
-| Model | Params | Active | TPS | VRAM | Status | Agentic result |
-|-------|--------|--------|-----|------|--------|----------------|
-| `qwen2.5-coder:14b` | 14B dense | 14B | TBD | 9 GB | N=1 running | TBD |
-| `qwen2.5-coder:32b` | 32B dense | 32B | TBD | 19 GB | N=1 running | TBD |
-| `qwen3.6:35b` *(prior baseline)* | 35B dense | 35B | 44 | 23 GB | N=3 confirmed | 3/3 pass, 2.0T, 898 tok |
-| `qwen3-coder-next` *(new primary)* | 80B MoE | 3B | 38 | 51 GB | **N=3 confirmed** | 3/3 pass, 2.0T/223 tok (simple); 4.0T/638 tok (multi-write) |
+| Model | Params | Active | TPS | VRAM | Status | Agentic | Stress (easy/med/multi/hard/extreme) |
+|-------|--------|--------|-----|------|--------|---------|--------------------------------------|
+| `qwen2.5-coder:14b` | 14B dense | 14B | TBD | 9 GB | N=1 running | TBD | TBD |
+| `qwen2.5-coder:32b` | 32B dense | 32B | 11 | 19 GB | **N=1 done — disqualified** | 0/1 both tasks (tool-call failure) | **100%/100%/100%/100%/100%†** |
+| `qwen3.6:35b` *(prior baseline)* | 35B dense | 35B | 44 | 23 GB | N=3 confirmed | 3/3 pass, 2.0T, 898 tok | 100%/86%/80%/85%/89% |
+| `qwen3-coder-next` *(new primary)* | 80B MoE | 3B | 38 | 51 GB | **N=3 confirmed** | 3/3 pass, 2.0T/223 tok; 4.0T/638 tok | 100%/100%/100%/95%/100% |
 
-`qwen3-coder-next` N=3 confirmed (run 25286166480): 75% token reduction vs qwen3.6:35b on the simple task, better stress retention at every level, identical agentic pass rate. It is the new primary recommendation.
+† qwen2.5-coder:32b stress scores at N=1 — treat as directional. Not promoted to N=3 due to agentic disqualification.
 
-`qwen2.5-coder:32b` is the most direct comparison to `qwen3.6:35b` — similar parameter count, same Qwen family, coding specialisation trades general reasoning for deeper coding-task alignment. `qwen2.5-coder:14b` at 9 GB answers whether a smaller, faster model is viable at all for this task class.
+`qwen3-coder-next` is the confirmed primary. `qwen2.5-coder:32b` is disqualified for the agentic role: both tasks scored `hallucination` at 0 turns, 23 tokens — the model never invoked a single tool call, outputting a short prose response instead. Its stress retention is paradoxically the best seen (100% across all levels at N=1, including the hard level where every other model drops), which suggests coding specialisation improves constraint discipline but does not confer tool-use capability. The tool-calling failure is likely a prompt format mismatch between the harness's tool schema and what the model was trained on — potentially fixable, but not a deployment candidate without that fix.
+
+`qwen2.5-coder:14b` N=1 in progress (run 25288152141).
 
 **Test protocol:**
 
-Run all coder models against the full payload suite (N=1 for initial validation, N=3 for candidates that pass). Priority payloads: `agentic_imageupdater`, `agentic_multi_app_rollout`, all stress payloads. Compare turn counts, token efficiency, and constraint retention against the established baselines.
+Run all coder models against the full payload suite (N=1 for initial validation, N=3 for candidates that pass agentic tasks). Priority payloads: `agentic_imageupdater`, `agentic_multi_app_rollout`, all stress payloads.
 
 ---
 
