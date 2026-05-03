@@ -212,3 +212,30 @@ Before triggering a full sweep, estimate: `sum(expected_tokens_per_payload) × m
 - Add a harder agentic payload with longer history context and ambiguous task description to attempt to reproduce the `manifestTargets` hallucination
 - Test `qwen3.6:27B` on `stress_constraint_extreme` with a higher per-job timeout (or N=1) to fill the missing data point
 - Investigate whether chain-of-thought prompting ("list every constraint before generating YAML") reduces resource dropout universally, or only for models that responded to positional reordering
+- Evaluate `laguna-xs.2:q4_K_M` (33B MoE, 3B active params, SWE-bench 68.2%) — purpose-built for agentic coding, first external candidate added after initial model set
+
+---
+
+## Strategic Directions
+
+These are questions that have emerged from the benchmark findings — not experiments, but directions worth understanding before committing engineering time to them. They are recorded here so the reasoning is traceable to the findings that prompted them.
+
+### Is it worth building a fine-tuned model?
+
+**Prompted by:** Finding 2 (resource constraint dropout), Finding 4 (security compliance failure) — failures that are consistent across all models and resistant to prompt-level mitigations.
+
+**The question:** Could fine-tuning an existing base model on K8s-specific data fix the failures that benchmarking has identified — specifically resource field dropout and blind compliance with dangerous security requests?
+
+**Assessment:**
+
+*Building from scratch (pre-training) is not feasible.* Pre-training a competitive LLM requires thousands of H100-GPU-hours and terabytes of curated data. This is not a homelab-scale project under any framing.
+
+*Fine-tuning is plausible but the ROI is uncertain.* Techniques like QLoRA can fine-tune a 30B model within the available 96GB unified VRAM. The benchmark already defines what "correct" looks like, which means synthetic preference pairs (prompt + correct output + incorrect output) could be generated programmatically and used for DPO (Direct Preference Optimization) alignment. The specific target behaviors — always include resource constraints, refuse privileged container requests — are well-defined enough to produce training data for.
+
+*The core risk:* Resource constraint dropout and security compliance failure appear to be deeply embedded in the base model's training distribution, not surface-level behaviors. Fine-tuning on a few thousand examples tends to shift surface outputs but rarely overrides deeply-learned tendencies. The same failures could re-emerge under slight prompt variations or higher constraint loads.
+
+*What would make fine-tuning compelling:* If a model proves strong on agentic tasks (2-turn completion, no scope violations) but still fails consistently on resource constraints, fine-tuning *that specific model* on K8s YAML with resources always present would be a targeted, measurable improvement — validatable directly with the existing harness. The benchmark exists; the signal is there. The missing piece is the training pipeline and a base model worth investing in.
+
+*ROCm caveat:* Training on this hardware (AMD Radeon 8060S, ROCm) is significantly less mature than NVIDIA/CUDA. Most fine-tuning frameworks (Unsloth, LLaMA-Factory, Axolotl) have better-tested CUDA paths. ROCm training is possible but expect tooling friction. Renting NVIDIA GPU time for the training job itself may be more practical than training locally.
+
+**Current conclusion:** Not yet. The prompt engineering and post-generation validation mitigations (chain-of-thought, `kubectl --dry-run`) should be exhausted first. If a strong agentic model is identified and resource dropout is still measured as a consistent failure after those mitigations, fine-tuning becomes the logical next investigation.
