@@ -13,6 +13,49 @@ None of these failures were detectable with keyword-based single-shot benchmarks
 
 ---
 
+## Test Environment
+
+All benchmark results in this document were produced on the following hardware. Absolute TPS numbers are specific to this stack — findings about *relative* model behavior (ranking, failure signatures, turn counts) are expected to generalise, but TPS will differ on other hardware.
+
+### Inference node — `k8s-node-max-01`
+
+| Component | Detail |
+|-----------|--------|
+| CPU | AMD Ryzen AI MAX+ 395 (Strix Halo APU) — 16 Zen 5 cores, 32 threads, up to 5.19 GHz |
+| GPU | AMD Radeon 8060S (iGPU, RDNA 3.5, 40 CUs) |
+| VRAM | 96 GB unified — carved from total installed memory by BIOS |
+| Total unified memory | ~128 GB LPDDR5X (CPU and GPU share the same physical pool) |
+| Inference stack | Ollama 0.22.1 via ROCm/HSA (AMD compute, not CUDA) |
+| OS | Linux (Ubuntu) |
+
+**Important:** This is a unified memory APU, not a discrete GPU system. The 96 GB "VRAM" is the same physical RAM the CPU uses — there is no PCIe bus between CPU and GPU memory. This means:
+- Model sizes are not constrained by a separate VRAM pool — any model up to ~120 GB can be loaded
+- Memory bandwidth is shared between CPU and GPU workloads
+- ROCm inference performance on RDNA 3.5 iGPU differs from NVIDIA CUDA — raw TPS figures are not directly comparable to published NVIDIA benchmarks
+
+### Runner node — `k8s-node-hpm-01`
+
+| Component | Detail |
+|-----------|--------|
+| CPU | AMD Ryzen 5 PRO 2400GE — 4 cores, 8 threads |
+| RAM | 32 GB |
+| Role | Runs the `model-testing-runner` ARC pod — executes Python benchmark scripts, sends requests to Ollama over the cluster network |
+
+The runner has no GPU. All inference happens on `k8s-node-max-01`; the runner is only responsible for orchestrating requests and recording results.
+
+### Observed TPS by model (Ollama 0.22.1, ROCm, AMD Radeon 8060S)
+
+| Model | Architecture | Size | Avg TPS |
+|-------|-------------|------|---------|
+| `gemma4:26b` | Dense | 17 GB | ~50 |
+| `qwen3.6:35b` | MoE (3B active) | 23 GB | ~44 |
+| `qwen3.6:27B` | MoE (3B active) | 17 GB | ~11 |
+| `gemma4:31b` | Dense | 19 GB | ~10 |
+
+`qwen3.6:27B` and `gemma4:31b` are unexpectedly slow relative to their size. This is likely a ROCm kernel path difference for those specific architectures — the same models on NVIDIA hardware may perform significantly differently. The MoE speed advantage of `qwen3.6:35b` over `qwen3.6:27B` (44 vs 11 TPS despite similar active parameters) is the most significant unexplained outlier in our environment.
+
+---
+
 ## Methodology Evolution
 
 ### Phase 1 — Deterministic Schema Validation
