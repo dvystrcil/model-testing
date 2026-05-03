@@ -619,12 +619,16 @@ def main():
     if args.system_prompt:
         info(f"System prompt injection: {args.system_prompt!r}")
         for spec in specs:
-            msgs = spec["payload"].setdefault("messages", [])
-            sys_msgs = [m for m in msgs if m.get("role") == "system"]
-            if sys_msgs:
-                sys_msgs[0]["content"] += f"\n\n{args.system_prompt}"
+            if spec.get("type") == "agentic":
+                base = spec.get("system", "You are a Kubernetes configuration assistant.")
+                spec["system"] = f"{base}\n\n{args.system_prompt}"
             else:
-                msgs.insert(0, {"role": "system", "content": args.system_prompt})
+                msgs = spec["payload"].setdefault("messages", [])
+                sys_msgs = [m for m in msgs if m.get("role") == "system"]
+                if sys_msgs:
+                    sys_msgs[0]["content"] += f"\n\n{args.system_prompt}"
+                else:
+                    msgs.insert(0, {"role": "system", "content": args.system_prompt})
 
     validated_payloads = [s["name"] for s in specs if s.get("validate")]
     print(f"Benchmark sweep: models={models}  payloads={[s['name'] for s in specs]}  runs={args.runs}")
