@@ -5,4 +5,5 @@ models:
   - name: gemma4:31b
   - name: laguna-xs.2:q4_K_M
   - name: qwen2.5-coder:32b
-  # pending download: qwen3-coder-next, qwen2.5-coder:14b
+  - name: qwen3-coder-next:latest
+  # pending download: qwen2.5-coder:14b
