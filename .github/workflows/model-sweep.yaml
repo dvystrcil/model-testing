@@ -111,20 +111,14 @@ jobs:
         env:
           OLLAMA_URL: http://ollama.ollama.svc.cluster.local
         run: |
-          MODEL_ARG=""
-          if [ -n "${{ github.event.inputs.model }}" ]; then
-            MODEL_ARG="--model ${{ github.event.inputs.model }}"
-          fi
-          SYSPROMPT_ARG=""
-          if [ -n "${{ github.event.inputs.system_prompt }}" ]; then
-            SYSPROMPT_ARG="--system-prompt ${{ github.event.inputs.system_prompt }}"
-          fi
-          python benchmarks/run_benchmark.py \
-            --ollama "$OLLAMA_URL" \
-            --payload "${{ matrix.payload }}" \
-            --runs "${{ github.event.inputs.runs || '1' }}" \
-            $MODEL_ARG \
-            $SYSPROMPT_ARG
+          ARGS=(--ollama "$OLLAMA_URL"
+                --payload "${{ matrix.payload }}"
+                --runs "${{ github.event.inputs.runs || '1' }}")
+          [ -n "${{ github.event.inputs.model }}" ] && \
+            ARGS+=(--model "${{ github.event.inputs.model }}")
+          [ -n "${{ github.event.inputs.system_prompt }}" ] && \
+            ARGS+=(--system-prompt "${{ github.event.inputs.system_prompt }}")
+          python benchmarks/run_benchmark.py "${ARGS[@]}"
 
       - name: Save results to cache
         if: steps.cache-restore.outputs.cache-hit != 'true'
