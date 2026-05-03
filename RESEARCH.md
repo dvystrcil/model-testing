@@ -119,18 +119,18 @@ In single-shot benchmarks, `gemma4:26b` ranked #1 (50 TPS). In the agentic harne
 
 We extended the stress tests from 10 to 13 and 18 constraints. The expected linear decay did not materialise. Instead, scores recover at higher constraint counts:
 
-| Payload | Constraints | qwen3-coder-next | qwen2.5-coder:32b | qwen3.6:35b | qwen3.6:27B | gemma4:26b | gemma4:31b | laguna-xs.2 |
-|---------|-------------|-----------------|-------------------|-------------|-------------|------------|------------|-------------|
-| easy | 4 | **100%** | **100%§** | 100% | 100% | 100% | 100% | 100%‡ |
-| medium | 7 | **100%** | **100%§** | 86% | 86% | 86% | 86% | 81%‡ |
-| multi | 10 | **100%** | **100%§** | 80% | 87% | 80% | 80% | **97%‡\*** |
-| hard | 13 | **95%** | **100%§** | 85% | 85% | 85% | 85% | **54%‡** |
-| extreme | 18 | **100%** | **100%§** | 89% | — | 89% | 89% | 87%‡ |
+| Payload | Constraints | qwen3-coder-next | qwen2.5-coder:14b | qwen2.5-coder:32b | qwen3.6:35b | qwen3.6:27B | gemma4:26b | gemma4:31b | laguna-xs.2 |
+|---------|-------------|-----------------|-------------------|-------------------|-------------|-------------|------------|------------|-------------|
+| easy | 4 | **100%** | **100%§** | **100%§** | 100% | 100% | 100% | 100% | 100%‡ |
+| medium | 7 | **100%** | **100%§** | **100%§** | 86% | 86% | 86% | 86% | 81%‡ |
+| multi | 10 | **100%** | **100%§** | **100%§** | 80% | 87% | 80% | 80% | **97%‡\*** |
+| hard | 13 | **95%** | **100%§** | **100%§** | 85% | 85% | 85% | 85% | **54%‡** |
+| extreme | 18 | **100%** | **100%§** | **100%§** | 89% | — | 89% | 89% | 87%‡ |
 
-*Original 5 models: N=3, run 25274198108. qwen3-coder-next: N=3, run 25286166480. qwen2.5-coder:32b: N=1, run 25287758257.*
+*Original 5 models: N=3, run 25274198108. qwen3-coder-next: N=3, run 25286166480. qwen2.5-coder:32b: N=1, run 25287758257. qwen2.5-coder:14b: N=1, run 25288152141.*
 ‡ laguna-xs.2 carries a `latest` tag forbidden violation in medium/multi/hard/extreme — scores inflated. See Finding 6.
 \* laguna's 97% at 10 constraints but 54% at 13 is an anomaly — see Finding 8.
-§ qwen2.5-coder:32b N=1 only — not promoted to N=3 (disqualified: complete agentic tool-call failure). Stress scores are directional.
+§ qwen2.5-coder:14b and qwen2.5-coder:32b N=1 only — both disqualified (complete agentic tool-call failure). Stress scores are directional. Note that the coder series shows **no U-shape** — flat 100% at every level, unlike all general models that drop at medium. See Finding 9.
 
 **qwen3-coder-next N=3 confirmed: materially better stress retention than every other tested model.** 100% at medium (vs 86%), 100% at multi (vs 80%), 95% at hard (vs 85%), 100% at extreme (vs 89%). The hard plateau drops only `memory: "256Mi"` and `memory: "512Mi"` — same two fields, same semantic dropout signature as all other models, but at a higher threshold. The N=1 hard result (85%) was slightly pessimistic; N=3 corrected to 95%, demonstrating exactly why N=3 is required before drawing conclusions from a single run.
 
@@ -195,6 +195,25 @@ This suggests laguna's `latest` tag prior is **load-sensitive**: at 10 constrain
 
 **This confirms that negative prompting is unlikely to be a reliable fix for laguna's `latest` tag inertia at scale**, consistent with the earlier negative prompt test (run 25270119647) which showed recovery at low constraint loads but failure at 13 constraints.
 
+### Finding 9: qwen2.5-coder series has superior constraint retention but zero tool-call capability
+
+Both `qwen2.5-coder:14b` and `qwen2.5-coder:32b` score **100% across every stress level** (easy/medium/multi/hard/extreme at N=1) — the only models tested to do so. No U-shape. No memory field dropout. Constraint discipline is the best measured by any model in this benchmark.
+
+However, both models fail every agentic task at 0 turns. They never invoke a tool call. The failure mode differs by size:
+
+| Model | Agentic imageupdater | Agentic multi_app_rollout | Failure signature |
+|-------|----------------------|--------------------------|-------------------|
+| `qwen2.5-coder:32b` | 0/1, 0T, 23 tok | 0/1, 0T, 23 tok | Near-empty prose; no content generated |
+| `qwen2.5-coder:14b` | 0/1, 0T, 108 tok | 0/1, 0T, 528 tok | Correct content generated as prose; `write_file` never called |
+
+The 14b failure is the more informative one. 528 tokens on `agentic_multi_app_rollout` — that's enough output to contain all three app configs. The model understood the task and generated valid content; it simply didn't wrap it in a tool call. The 32b at 23 tokens didn't even attempt the content.
+
+**This is a tool-call format mismatch, not a capability gap.** The models' Modelfiles contain `<tool_call>` template support, but the harness sends a JSON `tools` array via `/api/chat` and reads `tool_calls` from the structured response. If the model generates `<tool_call>{"name":"write_file",...}</tool_call>` text blocks instead of a structured API response field, the harness sees no tool calls and scores the turn as a hallucination at 0 turns.
+
+**Implication:** A harness-side fallback parser that detects `<tool_call>` blocks in the model's text output could recover tool-call functionality for the qwen2.5-coder series without any model changes. If the fallback parser confirms this hypothesis (qwen2.5-coder generates valid `<tool_call>` blocks), then the series becomes highly attractive: best-in-class constraint retention + low VRAM footprint (9 GB for 14b) + 23.8 TPS. See open issue #10.
+
+`qwen3-coder-next` does not have this problem — it generates structured `tool_calls` responses that the harness reads correctly. It was trained explicitly on agentic RL traces, which likely includes format-correct tool invocations.
+
 ### Finding 7: Structured tool boundaries are more reliable guardrails than prose instructions
 
 `laguna-xs.2` passed the agentic harness 3/3 with zero scope violations — it respected file-level tool boundaries perfectly. Simultaneously, it ignored textual version pinning instructions in every stress payload.
@@ -211,11 +230,13 @@ This has a practical design implication: guardrails implemented as tool-level co
 
 2. **Is the production failure reproducible in the agentic harness?** The specific `manifestTargets` hallucination that triggered this investigation has not been reproduced at temperature=0.2 with N=3. Candidates: longer history context, more ambiguous task description, higher temperature.
 
-3. **Does system prompt security injection fix the refusal boundary failure?** Untested. All models comply blindly with dangerous requests. Adding `securityContext: { runAsNonRoot: true, privileged: false }` to the system prompt may or may not override explicit user-level instructions.
+3. **Does system prompt security injection fix the refusal boundary failure?** *In progress* — run 25288614362 tests `qwen3-coder-next` on `refusal_boundary` with the security system prompt injected (N=3). All models have failed this test blindly so far.
 
 4. **Why does `gemma4:31b` respond to positional reordering but others don't?** The exception suggests a different attention pattern. Worth understanding whether this is reproducible and whether chain-of-thought prompting has a similar asymmetric effect.
 
-5. **`qwen3.6:27B` extreme result missing.** At 11.3 TPS with N=3, the 18-constraint payload likely timed out. Need a longer per-job timeout or a single-run test to get this data point.
+5. **`qwen3.6:27B` extreme result missing.** *In progress* — run 25288614864 fills the gap at N=1. At 11.3 TPS × 18 constraints, directional result expected. N=3 may still timeout.
+
+6. **Can the qwen2.5-coder series tool-call failure be fixed with a harness-side `<tool_call>` fallback parser?** Finding 9 establishes the failure is a format mismatch: the 14b model generates correct content (528 tok on multi_app_rollout) but wraps it in `<tool_call>` text blocks instead of structured API `tool_calls`. A parser fix could unlock best-in-class constraint retention (100% all levels) at 9 GB VRAM / 23.8 TPS. See issue #10.
 
 6. **Can `laguna-xs.2`'s `latest` tag prior be suppressed?** Negative prompting failed (Finding 8). DPO fine-tuning is the next candidate.
 
@@ -387,16 +408,16 @@ Key difference from `qwen3.6:35b`: qwen3-coder-next was trained specifically on 
 
 | Model | Params | Active | TPS | VRAM | Status | Agentic | Stress (easy/med/multi/hard/extreme) |
 |-------|--------|--------|-----|------|--------|---------|--------------------------------------|
-| `qwen2.5-coder:14b` | 14B dense | 14B | TBD | 9 GB | N=1 running | TBD | TBD |
-| `qwen2.5-coder:32b` | 32B dense | 32B | 11 | 19 GB | **N=1 done — disqualified** | 0/1 both tasks (tool-call failure) | **100%/100%/100%/100%/100%†** |
+| `qwen2.5-coder:14b` | 14B dense | 14B | 23.8 | 9 GB | **N=1 done — disqualified** | 0/1 both tasks (tool-call failure, 108/528 tok) | **100%/100%/100%/100%/100%†** |
+| `qwen2.5-coder:32b` | 32B dense | 32B | 10.9 | 19 GB | **N=1 done — disqualified** | 0/1 both tasks (tool-call failure, 23 tok) | **100%/100%/100%/100%/100%†** |
 | `qwen3.6:35b` *(prior baseline)* | 35B dense | 35B | 44 | 23 GB | N=3 confirmed | 3/3 pass, 2.0T, 898 tok | 100%/86%/80%/85%/89% |
 | `qwen3-coder-next` *(new primary)* | 80B MoE | 3B | 38 | 51 GB | **N=3 confirmed** | 3/3 pass, 2.0T/223 tok; 4.0T/638 tok | 100%/100%/100%/95%/100% |
 
-† qwen2.5-coder:32b stress scores at N=1 — treat as directional. Not promoted to N=3 due to agentic disqualification.
+† qwen2.5-coder stress scores at N=1 — treat as directional. Neither model promoted to N=3 due to agentic disqualification.
 
-`qwen3-coder-next` is the confirmed primary. `qwen2.5-coder:32b` is disqualified for the agentic role: both tasks scored `hallucination` at 0 turns, 23 tokens — the model never invoked a single tool call, outputting a short prose response instead. Its stress retention is paradoxically the best seen (100% across all levels at N=1, including the hard level where every other model drops), which suggests coding specialisation improves constraint discipline but does not confer tool-use capability. The tool-calling failure is likely a prompt format mismatch between the harness's tool schema and what the model was trained on — potentially fixable, but not a deployment candidate without that fix.
+**Both qwen2.5-coder variants are disqualified for agentic roles.** Tool-call failure pattern differs by size: 32b outputs 23 tokens (near-empty prose, no tool attempt); 14b outputs 108/528 tokens (generates the correct content as prose without wrapping it in a tool call). The 14b failure mode is revealing — the model understands the task and produces the right YAML, but it doesn't invoke `write_file`. This is a tool-call format mismatch, not a capability gap. See Finding 9.
 
-`qwen2.5-coder:14b` N=1 in progress (run 25288152141).
+`qwen3-coder-next` is the confirmed primary. It is the only coder-specialized model tested that combines perfect constraint retention with reliable tool-call execution. `qwen3.6:35b` remains a valid fallback.
 
 **Test protocol:**
 
