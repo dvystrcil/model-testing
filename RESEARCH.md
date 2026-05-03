@@ -54,89 +54,79 @@ In single-shot benchmarks, `gemma4:26b` ranked #1 (50 TPS). In the agentic harne
 
 | Model | Single-shot rank | Agentic rank | Avg turns | Avg tokens |
 |-------|-----------------|--------------|-----------|------------|
-| `gemma4:31b` | #4 (10 TPS) | **#1** | 2.0 | 999 |
-| `qwen3.6:27B` | #3 (11 TPS) | #2 | 2.3 | 1431 |
-| `qwen3.6:35b` | #2 (46 TPS) | #3 | 2.7 | 1433 |
-| `gemma4:26b` | #1 (50 TPS) | **#4** | 4.7 | 2553 |
+| `gemma4:31b` | #4 (10 TPS) | **#1** | 2.0 | 1,196 |
+| `qwen3.6:27B` | #3 (11 TPS) | **#1** | 2.0 | 1,693 |
+| `qwen3.6:35b` | #2 (44 TPS) | **#1** | 2.0 | 1,021 |
+| `gemma4:26b` | #1 (50 TPS) | **#4** | 4.7 | 2,385 |
 
-`gemma4:26b` consumed 2.5× more tokens and 2.35× more turns than `gemma4:31b` for the same task. In production an agentic coding assistant, extra turns mean extra latency, growing context windows, and more opportunities to drift out of scope. The speed advantage measured in single-shot is consumed by tool-loop inefficiency.
+Three models solve the task in exactly 2 turns (`read_file` → `write_file`) — the optimal strategy. `gemma4:26b` uses 4.7 turns and 2× the tokens for the same outcome. In an agentic coding assistant, extra turns mean extra latency, growing context windows, and more opportunities to drift out of scope. The TPS advantage is consumed by tool-loop inefficiency.
 
-`gemma4:31b` solved the task in exactly 2 turns in every run: `read_file` → `write_file`. That is the optimal strategy.
+**Confirmed at N=3:** All four models passed 3/3 agentic runs. The turn/token gap is consistent across runs, not a fluke.
 
-### Finding 2: All models share the same stress failure signature
+**Important:** The AI analysis tool that generates the sweep report weighted TPS heavily and ranked `gemma4:26b` #1. This is the wrong call. The agentic harness is the authoritative signal for coding assistant selection. **`gemma4:31b` or `qwen3.6:35b` are the correct choices** — both complete in 2 turns with lower token overhead.
 
-Under constraint load, all four models dropped the same field at the same threshold:
+### Finding 2: The stress curve is a U-shape, not linear decay
 
-| Constraints | Score | Dropped |
-|-------------|-------|---------|
-| 4 | 100% | — |
-| 7 | 86% | `memory: "512Mi"` |
-| 10 | 80% | `memory: "512Mi"` + `memory: "256Mi"` |
+We extended the stress tests from 10 to 13 and 18 constraints. The expected linear decay did not materialise. Instead, scores recover at higher constraint counts:
 
-The identical failure signature across four distinct models suggests this is not a model-specific weakness — it is a universal behavior where resource constraints are semantically deprioritized relative to structural YAML keys (probes, topology, labels). Models appear to treat resource fields as "fill in later" and run out of context before doing so.
+| Payload | Constraints | qwen3.6:35b | qwen3.6:27B | gemma4:26b | gemma4:31b |
+|---------|-------------|-------------|-------------|------------|------------|
+| easy | 4 | 100% | 100% | 100% | 100% |
+| medium | 7 | 86% | 90% | 86% | 86% |
+| multi | 10 | 80% | 80% | 80% | 80% |
+| hard | 13 | 85% | 90% | 85% | 85% |
+| extreme | 18 | 93% | — | 89% | 89% |
 
-**This is a platform-level finding, not a model-selection finding.** It suggests a mitigation strategy: always place resource constraints at the top of the prompt, not the bottom.
+The U-shape is not a sign of improvement. It is an artifact of how quality_facts are scored: the new constraints added at 13 and 18 (startup probes, service accounts, volumes, env vars, annotations, init containers) are fields models reliably produce. Adding them raises the denominator in ways that help the percentage — even though models are *still* dropping the same memory fields at every level.
 
-### Finding 3: All models comply with dangerous security requests
+**The actual failure signature is stable, not improving:** `memory: "512Mi"` and `memory: "256Mi"` are dropped at every stress level from 7 constraints onward, regardless of how many other constraints are added. The score percentage moves because other constraints are satisfied, not because memory retention improves.
 
-The `refusal_boundary` payload asked models to create a privileged root container. All four models generated `privileged: true`, `runAsUser: 0`, and `hostNetwork: true` with the identical violation signature. This is likely a prompt-alignment gap in the Ollama serving layer rather than a model architecture difference. Mitigation: include `securityContext: { runAsNonRoot: true, privileged: false }` in the system prompt baseline for all production deployments.
+`qwen3.6:27B` has no result for `stress_constraint_extreme` (18 constraints). At 11.3 TPS with N=3 runs, that payload likely exceeded the 120-minute per-job timeout. This is a data gap, not a model failure.
 
----
+**Neither cliff nor linear decay** — the failure mode is better described as *selective semantic dropout*: a small set of field types (resource constraints) are consistently deprioritized regardless of how many other constraints are present or how high the total constraint count goes.
 
-## Current Investigation: The Stress Curve
+### Finding 3: Resource constraint dropout is semantic, not positional — with one exception
 
-The 10-constraint plateau tells us *where* models start failing but not *how* they fail. We are now extending the stress tests to trace the full degradation curve.
+The `stress_positional_bias` payload ran the same 7 constraints as `stress_constraint_medium` with resources listed **first** instead of fifth.
 
-### What we are measuring
+| Model | Medium (resources 5th) | Positional bias (resources 1st) | Change |
+|-------|------------------------|----------------------------------|--------|
+| `qwen3.6:35b` | 86% | 86% | none |
+| `qwen3.6:27B` | 90% | 90% | none |
+| `gemma4:26b` | 86% | 86% | none |
+| `gemma4:31b` | 86% | **90%** | +4% |
 
-```
-Constraints →   4    7    10    13    16    18    20
-gemma4:31b    100%  86%   80%    ?     ?     ?     ?
-qwen3.6:35b   100%  86%   80%    ?     ?     ?     ?
-gemma4:26b    100%  86%   80%    ?     ?     ?     ?
-qwen3.6:27B   100%  86%   80%    ?     ?     ?     ?
-```
+For three of the four models, moving resources to position 1 made no difference — confirming the failure is **semantic deprioritization**, not attention window position. These models have learned to treat resource fields as lower priority than structural keys (probes, labels, topology) regardless of where they appear in the prompt.
 
-### Two failure modes we are looking for
+`gemma4:31b` is the exception: it responded to prompt reordering with a 4% improvement. Its failure is partially positional. For `gemma4:31b` specifically, placing resource constraints first in the prompt is a viable mitigation.
 
-**Cliff failure:** Model holds near 80% through constraint 15, then collapses suddenly to 30% at constraint 16. The model has a hard context limit it hits all at once.
+**Practical implication for the other three:** Prompt reordering alone will not fix resource constraint dropout. More effective mitigations are chain-of-thought prompting ("list every constraint, then generate the YAML"), split manifests (resources in a separate values file), or post-generation linting.
 
-**Linear decay:** Model degrades steadily — 75% at 13, 65% at 16, 50% at 18. The model compresses evenly as load increases.
+### Finding 4: All models comply with dangerous security requests
 
-Linear decay is more predictable and therefore more useful in production. A cliff failure means the model is unreliable in ways you cannot anticipate — it passes until it suddenly doesn't.
+The `refusal_boundary` payload asked models to create a privileged root container. All four models generated `privileged: true`, `runAsUser: 0`, and `hostNetwork: true` with identical violation signatures — confirmed again at N=3. No model refused or flagged the request.
 
-### The positional bias experiment
+This is likely a prompt-alignment gap in the Ollama serving layer rather than a model architecture difference. Mitigation: include `securityContext: { runAsNonRoot: true, privileged: false }` in the system prompt baseline for all production deployments.
 
-We noticed that `memory: "512Mi"` (constraint #5 in a 7-constraint prompt) is always the first field dropped. Is this because:
+**Open question:** Does adding this to the system prompt actually override the behavior, or do models follow the explicit user instruction anyway? This has not been tested yet.
 
-**A) Positional forgetting** — the field appears late in the prompt and falls outside the model's effective attention window
+### Finding 5: LLM judges are unreliable for novel hallucinations
 
-**B) Semantic deprioritization** — models have learned that resource constraints are less critical than structural keys (probes, labels, topology) regardless of where they appear
-
-We test this by running the identical 7 constraints with resources listed **first** instead of fifth (`stress_positional_bias`). If memory stops being dropped, the failure is positional and can be mitigated by prompt reordering. If it still drops, the failure is semantic and requires a different mitigation (e.g. chain-of-thought prompting, split manifests).
-
-### New stress payloads
-
-| Payload | Constraints | New requirements added |
-|---------|-------------|----------------------|
-| `stress_constraint_easy` | 4 | Baseline |
-| `stress_constraint_medium` | 7 | Resources, probes |
-| `stress_multi_constraint` | 10 | Security context, topology spread |
-| `stress_constraint_hard` | 13 | Startup probe, terminationGracePeriodSeconds, serviceAccountName |
-| `stress_constraint_extreme` | 18 | Volume + mount, env vars, annotations, init container |
-| `stress_positional_bias` | 7 | Same as medium, resources listed first |
+Replaced entirely with `kubectl apply --dry-run=client` (Phase 1) and `--dry-run=server` (Phase 1b). Confirmed: all models scored zero schema violations across all payloads in the full N=3 sweep. Deterministic validators cannot hallucinate; LLM judges share training blindspots with the models being judged.
 
 ---
 
 ## What We Still Don't Know
 
-1. **Where does the divergence happen?** All four models fail identically at 10 constraints. At some higher count, we expect them to separate. We don't know yet whether that separation comes at 13, 18, or beyond.
+1. **Does model divergence appear beyond 18 constraints?** All four models share the same selective dropout signature up to 18 constraints. We don't know whether a higher count (25+) would separate them or whether the plateau is permanent.
 
-2. **Is the failure mode a cliff or linear decay?** We have two data points (7, 10) that show uniform behavior. We need 13 and 18 to see the shape.
+2. **Is the production failure reproducible in the agentic harness?** The specific `manifestTargets` hallucination that triggered this investigation has not been reproduced at temperature=0.2 with N=3. Candidates: longer history context, more ambiguous task description, higher temperature.
 
-3. **Is the production failure reproducible?** The agentic harness at N=3 with temperature=0.2 has not yet reproduced the specific `manifestTargets` hallucination that triggered this investigation. This may require a longer history context, more ambiguous task description, or higher temperature.
+3. **Does system prompt security injection fix the refusal boundary failure?** Untested. All models comply blindly with dangerous requests. Adding `securityContext: { runAsNonRoot: true, privileged: false }` to the system prompt may or may not override explicit user-level instructions.
 
-4. **Does system prompt injection fix the security compliance failure?** All models comply with dangerous security requests. We have not yet tested whether adding `securityContext: { runAsNonRoot: true, privileged: false }` to the system prompt overrides this behavior.
+4. **Why does `gemma4:31b` respond to positional reordering but others don't?** The exception suggests a different attention pattern. Worth understanding whether this is reproducible and whether chain-of-thought prompting has a similar asymmetric effect.
+
+5. **`qwen3.6:27B` extreme result missing.** At 11.3 TPS with N=3, the 18-constraint payload likely timed out. Need a longer per-job timeout or a single-run test to get this data point.
 
 ---
 
@@ -149,10 +139,9 @@ Sweep duration is dominated by token generation volume, not request count. A sin
 | Factor | Impact |
 |--------|--------|
 | Model TPS | Primary driver. qwen3.6:27B at 11 TPS generates the same token count 4× slower than gemma4:26b at 50 TPS |
-| Token count | `schema_adherence` caused qwen3.6:35b to generate 9,130 tokens — over 3 minutes for one request. The same model at 45 TPS on a 400-token payload takes 9 seconds |
+| Token count | `schema_adherence` and `stress_constraint_extreme` generate 2,700–4,000 tokens per request. A 400-token payload at 44 TPS takes 9 seconds; the extreme payload takes 90 seconds |
 | `--runs N` | Multiplies every request. N=3 triples total time |
-| Model warmup | One warmup request per model per sweep adds ~30s per model (4 models = ~2 min overhead) |
-| Payload count | 9 payloads × 4 models × N=1 ≈ 55 min. 1 payload × 4 models × N=3 ≈ 15 min |
+| Payload count | 13 payloads × 4 models × N=3 ≈ 2–3 hours total, run sequentially (max-parallel=1) |
 
 ### Reference timings (Ollama 0.22.1, observed)
 
@@ -160,19 +149,23 @@ Sweep duration is dominated by token generation volume, not request count. A sin
 |-------------|---|-----------------|
 | 1 agentic payload, all models | 3 | ~15 min |
 | All payloads (9), all models | 1 | ~55 min |
-| All payloads (12+), all models | 3 | ~2–3 hours |
+| All payloads (13), all models | 3 | ~2–3 hours |
 
-### Why single-payload runs look deceptively fast
+### CI architecture (as of 2026-05-02)
 
-When scoping a run to `--field payload=agentic_imageupdater` to test new harness code, the run completes in ~15 minutes. This does not mean the full sweep will be proportionally faster — other payloads (especially `schema_adherence` and the new 18-constraint extreme) generate far more tokens per request.
+The sweep runs as a GitHub Actions matrix: one job per payload, `max-parallel: 1` (Ollama is single-GPU), `fail-fast: false`. Each completed job is cached by fingerprint (hash of payload JSON + models.yaml + run count). Re-running an unchanged payload is instant — only payloads where the file hash changed hit Ollama.
+
+The `analyze` job runs after all sweep jobs (`if: always()`), downloads all artifacts, merges the JSONL files, and generates a single report. Individual failed jobs can be restarted without re-running the full sweep.
 
 ### Rule of thumb
 
 Before triggering a full sweep, estimate: `sum(expected_tokens_per_payload) × models × runs / avg_tps`. The slowest model (qwen3.6:27B at ~11 TPS) sets the floor.
 
+---
+
 ## Proposed Next Steps
 
-- Run the full stress curve (easy → medium → multi → hard → extreme) in a single sweep with N=3 to get a complete degradation profile per model
-- Run `stress_positional_bias` to determine if constraint ordering is a viable mitigation
-- Add a harder agentic payload with a longer context window and ambiguous task description to attempt to reproduce the `manifestTargets` hallucination
-- Test system prompt security injection on `refusal_boundary`
+- Test system prompt security injection on `refusal_boundary` — does adding `securityContext: { runAsNonRoot: true, privileged: false }` override explicit user instructions?
+- Add a harder agentic payload with longer history context and ambiguous task description to attempt to reproduce the `manifestTargets` hallucination
+- Test `qwen3.6:27B` on `stress_constraint_extreme` with a higher per-job timeout (or N=1) to fill the missing data point
+- Investigate whether chain-of-thought prompting ("list every constraint before generating YAML") reduces resource dropout universally, or only for models that responded to positional reordering
