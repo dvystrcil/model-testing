@@ -239,3 +239,48 @@ These are questions that have emerged from the benchmark findings — not experi
 *ROCm caveat:* Training on this hardware (AMD Radeon 8060S, ROCm) is significantly less mature than NVIDIA/CUDA. Most fine-tuning frameworks (Unsloth, LLaMA-Factory, Axolotl) have better-tested CUDA paths. ROCm training is possible but expect tooling friction. Renting NVIDIA GPU time for the training job itself may be more practical than training locally.
 
 **Current conclusion:** Not yet. The prompt engineering and post-generation validation mitigations (chain-of-thought, `kubectl --dry-run`) should be exhausted first. If a strong agentic model is identified and resource dropout is still measured as a consistent failure after those mitigations, fine-tuning becomes the logical next investigation.
+
+---
+
+### How dependent are we on large companies for model capability?
+
+**Prompted by:** The observation that all models tested so far come from large organisations (Google, Alibaba, NVIDIA), and that new language versions or tooling (e.g. a new Kubernetes API version, a new CRD) would require waiting for those organisations to release updated models.
+
+**The question:** Is there a way to extend a model's knowledge of new coding languages, new API versions, or new tooling without waiting for a full re-release from the original publisher?
+
+**Assessment:**
+
+The dependency on large companies is real but narrower than it first appears. What they provide is the base pre-training — the initial broad understanding of language, reasoning, and general coding patterns. That is the expensive part nobody can replicate at homelab scale. Everything built on top of that foundation is within reach.
+
+**RAG (Retrieval-Augmented Generation) — best for knowledge freshness**
+
+A vector store populated with your own documentation (CRD schemas, Helm chart values, ArgoCD API references, internal tooling docs) can inject the relevant content into context at inference time. The model does not need to have been trained on Kubernetes 1.33 if it receives the `kubectl explain` output at query time. This directly addresses the class of failures already measured in this benchmark: hallucinated CRD fields and resource field dropout are exactly the problems RAG targets. The model stops guessing because it stops needing to guess.
+
+For this codebase specifically: a RAG layer over live CRD schemas (retrieved via `kubectl explain --recursive`) would be a high-value, low-effort addition to the agentic harness. The model could look up the exact spec for any resource before generating YAML for it.
+
+**LoRA adapters — best for behavior change**
+
+LoRA (Low-Rank Adaptation) trains small adapter layers on top of frozen base weights — typically a few hundred MB — that shift generation behavior without modifying the base model. A LoRA trained on a thousand examples of K8s YAML with resource constraints always correctly included, or on refusal examples for privileged container requests, teaches new behavior while leaving the base reasoning capability intact. Adapters are composable and swappable.
+
+This is feasible on the available hardware (96GB unified VRAM). The ROCm training caveat from the fine-tuning section applies: CUDA tooling is more mature, and cloud GPU rental for the training job may be more practical than training locally.
+
+**Tool calling — best for dynamic and versioned information**
+
+The agentic harness already proves this works. Instead of the model knowing the ImageUpdater CRD schema, give it a `kubectl_explain` tool and let it look up field definitions at runtime. Dynamic lookup beats static training for anything that versions frequently. New Kubernetes releases, new Helm chart APIs, new operators — none of these require a model update if the model has tools to interrogate the live cluster.
+
+**Continued pre-training (domain adaptation) — for genuinely novel domains**
+
+Taking open weights and continuing training on a narrow corpus teaches the model new concepts rather than just new facts. Less compute than training from scratch, but still expensive. Worth considering if a tool ecosystem emerges that is entirely absent from any public training data — unlikely for Kubernetes, which is heavily represented.
+
+**The practical stack**
+
+These approaches are complementary, not competing:
+
+| Problem | Solution |
+|---------|----------|
+| New API version / new CRD fields | RAG over live `kubectl explain` output |
+| Consistent behavior (resources, security) | LoRA adapter trained on preference pairs |
+| Rapidly-changing or private documentation | Tool calling at inference time |
+| Entirely novel domain with no public data | Continued pre-training (expensive) |
+
+**Current conclusion:** We are dependent on large companies for the base reasoning capability, but not for knowledge or behavior. RAG and tool calling can keep a model current with new tooling versions indefinitely without any model update. LoRA adapters can fix the specific behavioral failures identified in this benchmark — resource dropout, security compliance — without touching the base weights. The benchmark harness we have built is already the scaffolding needed to validate any of these mitigations.
