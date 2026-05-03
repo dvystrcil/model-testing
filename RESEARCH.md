@@ -209,7 +209,17 @@ This has a practical design implication: guardrails implemented as tool-level co
 
 5. **`qwen3.6:27B` extreme result missing.** At 11.3 TPS with N=3, the 18-constraint payload likely timed out. Need a longer per-job timeout or a single-run test to get this data point.
 
-6. **Can `laguna-xs.2`'s `latest` tag prior be suppressed?** Negative prompting ("never use latest, always use the exact version specified"), system prompt injection, or a post-generation filter may be sufficient. If it can be suppressed reliably, laguna's token efficiency (418 avg tokens) makes it the strongest agentic candidate. Untested.
+6. **Can `laguna-xs.2`'s `latest` tag prior be suppressed?** Negative prompting failed (Finding 8). DPO fine-tuning is the next candidate.
+
+7. **Is the AI analysis report biasing toward gemma4:26b, or is its ranking correct?**
+
+   The automated AI analysis in every sweep report (written by `qwen3.6:35b`) recommends `gemma4:26b` as the primary coding assistant, citing its ~50 TPS, 3/3 agentic pass, and zero violations. This is not factually wrong — those measurements are accurate. The question is whether *turn count* (3.7 for gemma4:26b vs 2.0 for qwen3.6:35b) is a meaningful differentiator when pass rate is identical, or just noise.
+
+   **The honest case for gemma4:26b:** It is genuinely the fastest token generator (~50 TPS), it passes 3/3 agentic, and it has zero violations. The AI report is making a defensible recommendation. Our preference for qwen3.6:35b is a judgment call — not a proven finding.
+
+   **The honest case against it:** Turn count is a concrete measurement, not an artifact. gemma4:26b uses ~1.7 more turns per task than qwen3.6:35b. Wall-clock task completion time is also worse (1,491 tokens ÷ 50 TPS ≈ 30s vs 898 ÷ 44 ≈ 20s) because token volume more than offsets the TPS advantage. More importantly, the production failure that motivated this entire investigation was *exactly this pattern* — gemma4:26b lining up 8+ tool calls in sequence, then stalling without completing the task. The single-app agentic payload's 8-turn budget was too loose to expose this.
+
+   **How we make it concrete:** `agentic_multi_app_rollout` (run 25282743173) requires a minimum of 4 turns (1 read + 3 writes) under the same 8-turn budget. If gemma4:26b's ~1.7-turn overhead per operation scales linearly, it would need ~7–9 turns to complete — at or past the budget. If it stalls while qwen3.6:35b completes in 4–5 turns, the turn-count signal is validated as a real production risk, not just a measure of verbosity. If both pass cleanly, the current test difficulty is still insufficient and we need an even harder payload.
 
 ---
 
@@ -358,11 +368,14 @@ Key difference from `qwen3.6:35b`: qwen3-coder-next was trained specifically on 
 
 **The capability tradeoff curve we want to measure:**
 
-| Model | Params | Active | Est. TPS | Hypothesis |
-|-------|--------|--------|----------|------------|
-| (TBD smaller coder) | ~14–32B | — | >44 | Faster; loses some accuracy |
-| `qwen3.6:35b` *(current baseline)* | 35B dense | 35B | 44 | Current leader |
-| `qwen3-coder-next` | 80B MoE | 3B | ~35–44? | Agentic training advantage? |
+| Model | Params | Active | Est. TPS | Status | Hypothesis |
+|-------|--------|--------|----------|--------|------------|
+| `qwen2.5-coder:14b` | 14B dense | 14B | >50? | Pending download | Fastest; possible accuracy loss |
+| `qwen2.5-coder:32b` | 32B dense | 32B | ~44? | **Available — in models.yaml** | Direct size comparison to qwen3.6:35b |
+| `qwen3.6:35b` *(current baseline)* | 35B dense | 35B | 44 | Tested | Current leader |
+| `qwen3-coder-next` | 80B MoE | 3B | ~35–44? | Downloading | Agentic training advantage? |
+
+`qwen2.5-coder:32b` is the most direct comparison to `qwen3.6:35b` — similar parameter count, same Qwen family, but the coder specialisation trades general reasoning for deeper coding-task alignment. If it matches `qwen3.6:35b` on agentic turn count and beats it on stress constraint retention, it becomes the preferred choice. `qwen2.5-coder:14b` answers whether a smaller, faster model sacrifices enough quality to matter for this use case.
 
 A suitable "smaller" comparator needs to be identified — `qwen2.5-coder:14b` or a `qwen3-coder` variant if one exists. The goal is to answer: at what size does capability plateau, and what does each additional GB of model weight actually buy on agentic K8s tasks?
 
