@@ -438,7 +438,7 @@ def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
 
 
 def run_one(spec: dict, ollama_url: str, model: str, runs: int,
-            snippet_len: int, dry_run: bool) -> dict | None:
+            snippet_len: int, dry_run: bool, save_responses: bool = False) -> dict | None:
     if spec.get("type") == "agentic":
         return run_agentic_one(spec, ollama_url, model, runs, dry_run)
 
@@ -546,6 +546,7 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         "forbidden_violations": all_violations,
         "schema_violations": all_schema_violations,
         "response_snippet": raw_results[-1]["content"][:snippet_len] if snippet_len > 0 else "",
+        "response_text": raw_results[-1]["content"] if save_responses else None,
     }
 
 
@@ -608,6 +609,7 @@ def main():
     p.add_argument("--model",   default=None,           help="Single model override (default: all from models.yaml)")
     p.add_argument("--runs",    type=int, default=1,    help="Runs per model/payload pair")
     p.add_argument("--snippet-len", type=int, default=300, help="Response snippet length in results (0=omit)")
+    p.add_argument("--save-responses", action="store_true", help="Save full response text in JSONL (for DPO dataset generation)")
     p.add_argument("--dry-run",   action="store_true",    help="Print without executing")
     p.add_argument("--no-warmup", action="store_true",    help="Skip per-model warmup request")
     p.add_argument("--system-prompt", default=None,     help="Text appended to the system message of every payload")
@@ -654,7 +656,7 @@ def main():
         if not args.dry_run and not args.no_warmup:
             warmup_model(args.ollama, model)
         for spec in specs:
-            result = run_one(spec, args.ollama, model, args.runs, args.snippet_len, args.dry_run)
+            result = run_one(spec, args.ollama, model, args.runs, args.snippet_len, args.dry_run, args.save_responses)
             if result is not None:
                 result.update(meta)
                 results.append(result)

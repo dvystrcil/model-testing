@@ -1,0 +1,28 @@
+FROM rocm/pytorch:rocm6.2_ubuntu22.04_py3.10_pytorch_release_2.3.0
+
+# GPU identification: AMD GC_11_5_0 (k8s-node-max-01, PCI 1002:1586)
+# Not natively recognized by bundled ROCm — override required
+ENV HSA_OVERRIDE_GFX_VERSION=11.5.1
+
+# Suppress ROCm warnings about unrecognized architecture
+ENV ROCM_TARGET_LST=/dev/null
+
+RUN pip install --no-cache-dir \
+    transformers>=4.40.0 \
+    peft>=0.10.0 \
+    trl>=0.8.0 \
+    datasets>=2.19.0 \
+    huggingface_hub>=0.22.0 \
+    accelerate>=0.29.0 \
+    scipy \
+    sentencepiece \
+    protobuf
+
+WORKDIR /training
+COPY train_dpo.py .
+COPY generate_dpo_dataset.py .
+
+# Data mounted at /data, output adapter at /output/adapter
+VOLUME ["/data", "/output", "/root/.cache/huggingface"]
+
+ENTRYPOINT ["python", "train_dpo.py"]
