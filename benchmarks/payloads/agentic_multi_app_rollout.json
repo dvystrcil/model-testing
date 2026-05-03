@@ -1,0 +1,48 @@
+{
+  "name": "agentic_multi_app_rollout",
+  "type": "agentic",
+  "description": "Hard agentic task: write ImageUpdater configs for three apps using one reference file. Requires minimum 4 turns (1 read + 3 writes). Multiple plausible distractor files in mock_fs. Designed to expose models that over-explore before writing — if a model reads distractors or re-reads files unnecessarily, it will stall at the 8-turn budget before completing all 3 writes. Directly tests the gemma4:26b turn-padding behaviour observed in production.",
+  "system": "You are a Kubernetes configuration assistant. Use the provided tools to read existing configs and write new ones. Match the schema of existing files exactly — do not add fields not present in the example. Be efficient: read what you need, then write all outputs.",
+  "task": "Three new services need ImageUpdater configs before their ArgoCD applications can be deployed. Read the existing filebrowser config at `apps/filebrowser/imageupdater.yaml` as the schema reference.\n\nWrite exactly these three files:\n\n1. `apps/harbor/imageupdater.yaml`\n   - image: `goharbor/harbor-core:2.x`\n   - git repo: `https://github.com/dvystrcil/harbor.git`\n   - app name: `harbor-iu`\n\n2. `apps/n8n/imageupdater.yaml`\n   - image: `n8nio/n8n:1.x`\n   - git repo: `https://github.com/dvystrcil/n8n.git`\n   - app name: `n8n-iu`\n\n3. `apps/stable-diffusion/imageupdater.yaml`\n   - image: `ghcr.io/AbdBarho/stable-diffusion-webui-docker:5.x`\n   - git repo: `https://github.com/dvystrcil/stable-diffusion.git`\n   - app name: `stable-diffusion-iu`\n\nDo not modify any existing files. Write only the three files listed above.",
+  "mock_fs": {
+    "apps/filebrowser/imageupdater.yaml": "apiVersion: argocd-image-updater.argoproj.io/v1alpha1\nkind: ImageUpdater\nmetadata:\n  name: filebrowser-iu\nspec:\n  namespace: argocd\n  applicationRefs:\n    - namePattern: \"filebrowser\"\n      images:\n        - alias: \"filebrowser\"\n          imageName: \"ghcr.io/gtsteffaniak/filebrowser:0.x\"\n      writeBackConfig:\n        method: \"git\"\n        gitConfig:\n          repository: \"https://github.com/dvystrcil/filebrowser-quantum.git\"\n          branch: \"main\"\n          writeBackTarget: \"kustomization:/overlays\"\n",
+    "apps/open-webui/imageupdater.yaml": "apiVersion: argocd-image-updater.argoproj.io/v1alpha1\nkind: ImageUpdater\nmetadata:\n  name: open-webui-iu\nspec:\n  namespace: argocd\n  applicationRefs:\n    - namePattern: \"open-webui\"\n      images:\n        - alias: \"open-webui\"\n          imageName: \"ghcr.io/open-webui/open-webui:0.x\"\n      writeBackConfig:\n        method: \"git\"\n        gitConfig:\n          repository: \"https://github.com/dvystrcil/open-webui.git\"\n          branch: \"main\"\n          writeBackTarget: \"kustomization:/overlays\"\n",
+    "apps/filebrowser/kustomization.yaml": "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - ../../base\nimages:\n  - name: ghcr.io/gtsteffaniak/filebrowser\n    newTag: \"0.6.9\"\n",
+    "apps/harbor/kustomization.yaml": "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - ../../base\nimages:\n  - name: goharbor/harbor-core\n    newTag: \"2.12.1\"\n",
+    "infra/argocd/projects.yaml": "apiVersion: argoproj.io/v1alpha1\nkind: AppProject\nmetadata:\n  name: homelab\n  namespace: argocd\nspec:\n  sourceRepos:\n    - '*'\n  destinations:\n    - namespace: '*'\n      server: https://kubernetes.default.svc\n"
+  },
+  "scoped_files": [
+    "apps/harbor/imageupdater.yaml",
+    "apps/n8n/imageupdater.yaml",
+    "apps/stable-diffusion/imageupdater.yaml"
+  ],
+  "expected_writes": {
+    "apps/harbor/imageupdater.yaml": [
+      "argocd-image-updater.argoproj.io/v1alpha1",
+      "harbor-iu",
+      "goharbor/harbor-core",
+      "dvystrcil/harbor",
+      "kustomization:/overlays"
+    ],
+    "apps/n8n/imageupdater.yaml": [
+      "argocd-image-updater.argoproj.io/v1alpha1",
+      "n8n-iu",
+      "n8nio/n8n",
+      "dvystrcil/n8n",
+      "kustomization:/overlays"
+    ],
+    "apps/stable-diffusion/imageupdater.yaml": [
+      "argocd-image-updater.argoproj.io/v1alpha1",
+      "stable-diffusion-iu",
+      "AbdBarho/stable-diffusion",
+      "dvystrcil/stable-diffusion",
+      "kustomization:/overlays"
+    ]
+  },
+  "quality_forbidden": [
+    "manifestTargets",
+    "latest"
+  ],
+  "max_turns": 8,
+  "temperature": 0.2
+}

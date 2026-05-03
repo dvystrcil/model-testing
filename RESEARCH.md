@@ -248,14 +248,21 @@ Before triggering a full sweep, estimate: `sum(expected_tokens_per_payload) × m
 
 ## Proposed Next Steps
 
+### Active
+
+- **`agentic_multi_app_rollout` — gemma4:26b singleton stress test** (run 25282743173, in progress). Payload requires minimum 4 turns (1 read + 3 writes) under an 8-turn budget, with distractor files present. Designed specifically to expose turn-padding behaviour. Expected outcome: gemma4:26b stalls; qwen3.6:35b completes cleanly. If gemma4:26b stalls → confirms our turn-count concern. If it passes → the current task difficulty is still not a real differentiator.
+- **`qwen3-coder-next` model evaluation** — 80B total / 3B active MoE, 256K context, 52GB at q4_K_M. Trained on 800K agentic coding tasks via RL. Downloading. Run full payload suite once available and compare against current leaders (`qwen3.6:35b`, `gemma4:31b`). Also evaluate a smaller comparator (candidate: `qwen2.5-coder:14b` or equivalent) to build the capability/cost tradeoff curve.
+
+### Backlog
+
 - Test system prompt security injection on `refusal_boundary` — does adding `securityContext: { runAsNonRoot: true, privileged: false }` override explicit user instructions?
-- Add a harder agentic payload with longer history context and ambiguous task description to attempt to reproduce the `manifestTargets` hallucination
-- Test `qwen3.6:27B` on `stress_constraint_extreme` with a higher per-job timeout (or N=1) to fill the missing data point
-- Investigate whether chain-of-thought prompting ("list every constraint before generating YAML") reduces resource dropout universally, or only for models that responded to positional reordering
-- ~~Evaluate `laguna-xs.2:q4_K_M`~~ — **done** (Finding 6, Finding 7, Finding 8). Disqualified by `latest` tag inertia + agentic scope violation. Negative prompting failed (run 25270119647). First DPO fine-tuning candidate if the token-efficiency (415 avg tokens) justifies the investment.
-- ~~Test negative prompting on `laguna-xs.2`~~ — **done** (run 25270119647). Partially suppressed `latest` at low constraint loads (easy/medium passed) but failed under pressure (multi/hard/extreme still violated, hard regressed from 85%→51%). Unreliable fix.
-- Add a `kubectl_explain` tool to the agentic harness (Finding 7 — structured tool constraints beat prose guardrails; dynamic schema lookup could eliminate hallucination class entirely)
-- **Decision required:** Deploy `qwen3.6:35b` or `gemma4:31b` as primary coding assistant? Both are 2.0-turn agentic, zero violations. qwen3.6:35b is faster (44 vs 10 TPS) and more token-efficient (898 vs 1,179 tokens). gemma4:31b is slower but may generalise better across hardware.
+- ~~Add a harder agentic payload~~ — **done** (`agentic_multi_app_rollout`). Requires 1 read + 3 writes + 5 distractor files under an 8-turn budget.
+- Test `qwen3.6:27B` on `stress_constraint_extreme` with a higher per-job timeout (or N=1) to fill the missing data point.
+- Investigate whether chain-of-thought prompting ("list every constraint before generating YAML") reduces resource dropout universally, or only for models that responded to positional reordering.
+- ~~Evaluate `laguna-xs.2:q4_K_M`~~ — **done** (Finding 6, 7, 8). Disqualified. First DPO fine-tuning candidate.
+- ~~Test negative prompting on `laguna-xs.2`~~ — **done** (run 25270119647). Failed under load.
+- Add a `kubectl_explain` tool to the agentic harness (Finding 7 — structured constraints beat prose guardrails).
+- **Decision required (deferred pending multi_app_rollout results):** Deploy `qwen3.6:35b` or `gemma4:31b`? If `qwen3-coder-next` outperforms both, the decision may change.
 
 ---
 
@@ -329,3 +336,36 @@ These approaches are complementary, not competing:
 | Entirely novel domain with no public data | Continued pre-training (expensive) |
 
 **Current conclusion:** We are dependent on large companies for the base reasoning capability, but not for knowledge or behavior. RAG and tool calling can keep a model current with new tooling versions indefinitely without any model update. LoRA adapters can fix the specific behavioral failures identified in this benchmark — resource dropout, security compliance — without touching the base weights. The benchmark harness we have built is already the scaffolding needed to validate any of these mitigations.
+
+---
+
+### Does model size buy meaningfully better agentic performance? (qwen3-coder-next investigation)
+
+**Prompted by:** All models currently tested plateau at the same pass rate (3/3) and stress curve (80–89%) once above ~30B parameters. The question is whether a larger, task-specialized model breaks through that ceiling or just adds cost with no quality gain.
+
+**The candidate: `qwen3-coder-next` (80B total / 3B active, MoE)**
+
+| Property | Value |
+|----------|-------|
+| Architecture | MoE, 80B total, 3B active per token |
+| Context window | 256K tokens |
+| Disk size | 52GB (q4_K_M) |
+| Training | 800K agentic coding tasks via reinforcement learning |
+| Design intent | Direct integration with coding agents (tool-calling, multi-step tasks) |
+| TPS estimate | Unknown — same 3B active as qwen3.6:35b suggests comparable throughput, but larger routing overhead may reduce it |
+
+Key difference from `qwen3.6:35b`: qwen3-coder-next was trained specifically on agentic execution traces with environment feedback. qwen3.6:35b is a general model fine-tuned for instruction following. If agentic training produces qualitatively better turn efficiency or scope discipline, it should show clearly in the harness.
+
+**The capability tradeoff curve we want to measure:**
+
+| Model | Params | Active | Est. TPS | Hypothesis |
+|-------|--------|--------|----------|------------|
+| (TBD smaller coder) | ~14–32B | — | >44 | Faster; loses some accuracy |
+| `qwen3.6:35b` *(current baseline)* | 35B dense | 35B | 44 | Current leader |
+| `qwen3-coder-next` | 80B MoE | 3B | ~35–44? | Agentic training advantage? |
+
+A suitable "smaller" comparator needs to be identified — `qwen2.5-coder:14b` or a `qwen3-coder` variant if one exists. The goal is to answer: at what size does capability plateau, and what does each additional GB of model weight actually buy on agentic K8s tasks?
+
+**Test protocol:**
+
+Run `qwen3-coder-next` against the full payload suite (N=3) once downloaded. Priority payloads: `agentic_imageupdater`, `agentic_multi_app_rollout`, all stress payloads. Compare turn counts, token efficiency, and constraint retention against the established baselines. If the agentic training advantage is real, expect 2.0 turns (same as qwen3.6:35b), better token efficiency, and possibly better stress retention. If there's no advantage, the extra model size and download cost are not justified for this use case.
