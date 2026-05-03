@@ -5,9 +5,10 @@ on:
     branches: [main]
     paths:
       - 'benchmarks/payloads/**'
-      - 'models.yaml'
       - 'benchmarks/run_benchmark.py'
       - 'benchmarks/analyze.py'
+      # models.yaml intentionally omitted: adding a model should be followed by
+      # a targeted workflow_dispatch (--model <name>), not a full all-model sweep.
   workflow_dispatch:
     inputs:
       model:
