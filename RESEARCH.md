@@ -125,12 +125,13 @@ We extended the stress tests from 10 to 13 and 18 constraints. The expected line
 | medium | 7 | **100%** | **100%§** | **100%§** | 86% | 86% | 86% | 86% | 81%‡ |
 | multi | 10 | **100%** | **100%§** | **100%§** | 80% | 87% | 80% | 80% | **97%‡\*** |
 | hard | 13 | **95%** | **100%§** | **100%§** | 85% | 85% | 85% | 85% | **54%‡** |
-| extreme | 18 | **100%** | **100%§** | **100%§** | 89% | — | 89% | 89% | 87%‡ |
+| extreme | 18 | **100%** | **100%§** | **100%§** | 89% | ⏱ timeout | 89% | 89% | 87%‡ |
 
-*Original 5 models: N=3, run 25274198108. qwen3-coder-next: N=3, run 25286166480. qwen2.5-coder:32b: N=1, run 25287758257. qwen2.5-coder:14b: N=1, run 25288152141.*
+*Original 5 models: N=3, run 25274198108. qwen3-coder-next: N=3, run 25286166480. qwen2.5-coder:32b: N=1, run 25287758257. qwen2.5-coder:14b: N=1, run 25288152141. qwen3.6:27B extreme: N=1, run 25288614864 — timed out.*
 ‡ laguna-xs.2 carries a `latest` tag forbidden violation in medium/multi/hard/extreme — scores inflated. See Finding 6.
 \* laguna's 97% at 10 constraints but 54% at 13 is an anomaly — see Finding 8.
 § qwen2.5-coder:14b and qwen2.5-coder:32b N=1 only — both disqualified (complete agentic tool-call failure). Stress scores are directional. Note that the coder series shows **no U-shape** — flat 100% at every level, unlike all general models that drop at medium. See Finding 9.
+⏱ qwen3.6:27B extreme timeout is a hard limit, not an N=3 artifact — N=1 also times out (300s harness timeout, run 25288614864). ROCm generation for this model+payload combination exceeds the budget. Extreme is not testable for this model without harness changes.
 
 **qwen3-coder-next N=3 confirmed: materially better stress retention than every other tested model.** 100% at medium (vs 86%), 100% at multi (vs 80%), 95% at hard (vs 85%), 100% at extreme (vs 89%). The hard plateau drops only `memory: "256Mi"` and `memory: "512Mi"` — same two fields, same semantic dropout signature as all other models, but at a higher threshold. The N=1 hard result (85%) was slightly pessimistic; N=3 corrected to 95%, demonstrating exactly why N=3 is required before drawing conclusions from a single run.
 
@@ -234,7 +235,7 @@ This has a practical design implication: guardrails implemented as tool-level co
 
 4. **Why does `gemma4:31b` respond to positional reordering but others don't?** The exception suggests a different attention pattern. Worth understanding whether this is reproducible and whether chain-of-thought prompting has a similar asymmetric effect.
 
-5. **`qwen3.6:27B` extreme result missing.** *In progress* — run 25288614864 fills the gap at N=1. At 11.3 TPS × 18 constraints, directional result expected. N=3 may still timeout.
+5. ~~**`qwen3.6:27B` extreme result missing.**~~ **Answered (run 25288614864).** N=1 also times out — the 300s harness timeout is the hard constraint, not N. qwen3.6:27B cannot complete `stress_constraint_extreme` without raising the per-request timeout. Not worth chasing further unless the harness timeout is specifically raised for this model.
 
 6. **Can the qwen2.5-coder series tool-call failure be fixed with a harness-side `<tool_call>` fallback parser?** Finding 9 establishes the failure is a format mismatch: the 14b model generates correct content (528 tok on multi_app_rollout) but wraps it in `<tool_call>` text blocks instead of structured API `tool_calls`. A parser fix could unlock best-in-class constraint retention (100% all levels) at 9 GB VRAM / 23.8 TPS. See issue #10.
 
