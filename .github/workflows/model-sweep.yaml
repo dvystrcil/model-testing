@@ -61,7 +61,7 @@ jobs:
       max-parallel: 1   # one payload at a time — Ollama is single-GPU
       fail-fast: false  # a timeout on one payload does not cancel the rest
     runs-on: model-testing-runner
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     steps:
       - uses: actions/checkout@v4
