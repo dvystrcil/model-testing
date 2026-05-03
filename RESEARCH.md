@@ -25,7 +25,7 @@ All benchmark results in this document were produced on the following hardware. 
 | GPU | AMD Radeon 8060S (iGPU, RDNA 3.5, 40 CUs) |
 | VRAM | 96 GB unified — carved from total installed memory by BIOS |
 | Total unified memory | ~128 GB LPDDR5X (CPU and GPU share the same physical pool) |
-| Inference stack | Ollama 0.22.1 via ROCm/HSA (AMD compute, not CUDA) |
+| Inference stack | Ollama 0.23.0 via ROCm/HSA (AMD compute, not CUDA) |
 | OS | Linux (Ubuntu) |
 
 **Important:** This is a unified memory APU, not a discrete GPU system. The 96 GB "VRAM" is the same physical RAM the CPU uses — there is no PCIe bus between CPU and GPU memory. This means:
@@ -98,13 +98,15 @@ In single-shot benchmarks, `gemma4:26b` ranked #1 (50 TPS). In the agentic harne
 
 | Model | TPS | Agentic pass | Avg turns | Avg tokens | Contender? |
 |-------|-----|-------------|-----------|------------|------------|
-| `laguna-xs.2:q4_K_M` | 34 | 3/3 | 2.0 | **418** | No — `latest` tag inertia, schema gaps |
-| `qwen3.6:35b` | 44 | 3/3 | 2.0 | 1,021 | **Yes** |
-| `gemma4:31b` | 10 | 3/3 | 2.0 | 1,196 | **Yes** |
-| `qwen3.6:27B` | 11 | 3/3 | 2.0 | 1,693 | Yes |
-| `gemma4:26b` | 50 | 3/3 | 4.7 | 2,385 | No — tool-loop inefficiency |
+| `qwen3.6:35b` | 44 | **3/3** | **2.0** | **898** | **Yes** — fewest turns, most token-efficient |
+| `gemma4:31b` | 10 | **3/3** | **2.0** | 1,179 | **Yes** |
+| `qwen3.6:27B` | 11 | 3/3 | 2.7 | 1,005 | Yes — slower TPS limits interactive use |
+| `gemma4:26b` | 50 | 3/3 | 3.7 | 1,491 | Marginal — fastest TPS but most turns |
+| `laguna-xs.2:q4_K_M` | 34 | 2/3 | 2.3 | 415 | No — scope violation + `latest` tag inertia |
 
-All five models solve the task in 2 turns except `gemma4:26b` (4.7 turns). `laguna-xs.2` is the most token-efficient by a large margin (418 tokens — less than half of any other model) but is disqualified by systematic forbidden field violations in single-shot payloads (see Finding 6).
+*Data from run 25274198108: N=3 head-to-head, all 5 models, all 13 payloads, Ollama 0.23.0.*
+
+`gemma4:26b` improved from 4.7 → 3.7 avg turns compared to earlier isolated runs — it now passes 3/3, but still requires the most turns of any contender. `qwen3.6:35b` and `gemma4:31b` are jointly optimal: both complete in exactly 2.0 turns with zero violations. `laguna-xs.2` dropped to 2/3 — its one failure was a scope violation (wrote distractor file with missing schema fragments) in addition to the `latest` tag inertia found in stress payloads (see Finding 6).
 
 **Important:** The AI analysis tool that generates the sweep report weights TPS heavily and produces incorrect rankings. The agentic harness is the authoritative signal for coding assistant selection. **`qwen3.6:35b` or `gemma4:31b` are the correct choices** — both complete in 2 turns with clean single-shot scores.
 
@@ -114,13 +116,15 @@ We extended the stress tests from 10 to 13 and 18 constraints. The expected line
 
 | Payload | Constraints | qwen3.6:35b | qwen3.6:27B | gemma4:26b | gemma4:31b | laguna-xs.2 |
 |---------|-------------|-------------|-------------|------------|------------|-------------|
-| easy | 4 | 100% | 100% | 100% | 100% | 92%† |
-| medium | 7 | 86% | 90% | 86% | 86% | 90%† |
-| multi | 10 | 80% | 80% | 80% | 80% | 77%† |
-| hard | 13 | 85% | 90% | 85% | 85% | 85%† |
-| extreme | 18 | 93% | — | 89% | 89% | 76%† |
+| easy | 4 | 100% | 100% | 100% | 100% | 100%† |
+| medium | 7 | 86% | 86% | 86% | 86% | 81%† |
+| multi | 10 | 80% | 87% | 80% | 80% | **97%†\*** |
+| hard | 13 | 85% | 85% | 85% | 85% | **54%†** |
+| extreme | 18 | 89% | — | 89% | 89% | 87%† |
 
-† laguna-xs.2 scores carry a `latest` tag forbidden violation across all stress payloads — see Finding 6.
+*N=3 head-to-head, run 25274198108.*
+† laguna-xs.2 carries a `latest` tag forbidden violation in medium/multi/hard/extreme — raw constraint retention scores are inflated relative to actual compliance. See Finding 6.
+\* laguna's 97% at 10 constraints but 54% at 13 is an anomaly — see Finding 8.
 
 The U-shape is not a sign of improvement. It is an artifact of how quality_facts are scored: the new constraints added at 13 and 18 (startup probes, service accounts, volumes, env vars, annotations, init containers) are fields models reliably produce. Adding them raises the denominator in ways that help the percentage — even though models are *still* dropping the same memory fields at every level.
 
@@ -137,12 +141,13 @@ The `stress_positional_bias` payload ran the same 7 constraints as `stress_const
 | Model | Medium (resources 5th) | Positional bias (resources 1st) | Change |
 |-------|------------------------|----------------------------------|--------|
 | `qwen3.6:35b` | 86% | 86% | none |
-| `qwen3.6:27B` | 90% | 90% | none |
+| `qwen3.6:27B` | 86% | 86% | none |
 | `gemma4:26b` | 86% | 86% | none |
 | `gemma4:31b` | 86% | **90%** | +4% |
-| `laguna-xs.2` | 90%† | 81% | −9% |
+| `laguna-xs.2` | 81%† | 90%† | +9% |
 
-† laguna-xs.2 carries a `latest` tag violation in medium but not in positional_bias. The score drop in positional_bias reflects fact misses on other fields, not the resource position. Not interpretable as a positional sensitivity result — see Finding 6 for the `latest` tag confound.
+*N=3 head-to-head, run 25274198108.*
+† laguna-xs.2 carries a `latest` tag violation in both payloads. Its apparent +9% improvement when resources are listed first is not interpretable as positional sensitivity — the `latest` tag confound makes cross-payload comparison unreliable for this model. See Finding 6.
 
 For three of the four models, moving resources to position 1 made no difference — confirming the failure is **semantic deprioritization**, not attention window position. These models have learned to treat resource fields as lower priority than structural keys (probes, labels, topology) regardless of where they appear in the prompt.
 
@@ -171,6 +176,16 @@ This is not a context window failure. The model produces structurally valid YAML
 **This disqualifies `laguna-xs.2` as a production coding assistant in its current form.** The `latest` prior would need to be corrected via negative prompting, a post-generation regex filter, or a LoRA adapter trained specifically to suppress it — all of which add operational overhead that removes the token-efficiency advantage the model otherwise offers.
 
 Note: `laguna-xs.2` is the most token-efficient agentic model tested (418 avg tokens vs 1,021 for the next best). If the `latest` tag failure can be suppressed reliably, it becomes a strong candidate.
+
+### Finding 8: laguna-xs.2 shows inverse difficulty scaling — 97% at 10 constraints, 54% at 13
+
+In run 25274198108 (N=3), `laguna-xs.2` scored 97% on `stress_multi_constraint` (10 constraints) but collapsed to 54% on `stress_constraint_hard` (13 constraints). This is the steepest inter-level drop of any model tested, and it runs in the *wrong direction* relative to difficulty.
+
+All other models score in the range 80–87% across both payloads — the additional constraints in `hard` (startup probe, terminationGracePeriodSeconds, serviceAccountName) are reliably produced by the other four models, but they displace content that laguna was previously including. The specific field dropped in hard is the image version — instead of the pinned version, laguna reverts to `latest`.
+
+This suggests laguna's `latest` tag prior is **load-sensitive**: at 10 constraints the model can maintain version pinning under cognitive load; at 13 it can't. The `latest` suppression fails precisely when the context is longest and the model is most stressed. This is the opposite of what a negative prompting fix would need to do — the system prompt injection must work hardest exactly when the model is most likely to ignore it.
+
+**This confirms that negative prompting is unlikely to be a reliable fix for laguna's `latest` tag inertia at scale**, consistent with the earlier negative prompt test (run 25270119647) which showed recovery at low constraint loads but failure at 13 constraints.
 
 ### Finding 7: Structured tool boundaries are more reliable guardrails than prose instructions
 
@@ -237,9 +252,10 @@ Before triggering a full sweep, estimate: `sum(expected_tokens_per_payload) × m
 - Add a harder agentic payload with longer history context and ambiguous task description to attempt to reproduce the `manifestTargets` hallucination
 - Test `qwen3.6:27B` on `stress_constraint_extreme` with a higher per-job timeout (or N=1) to fill the missing data point
 - Investigate whether chain-of-thought prompting ("list every constraint before generating YAML") reduces resource dropout universally, or only for models that responded to positional reordering
-- ~~Evaluate `laguna-xs.2:q4_K_M`~~ — **done** (Finding 6, Finding 7). Disqualified by `latest` tag inertia; token efficiency (418 avg) makes it worth retesting if the prior can be suppressed via system prompt
-- Test negative prompting on `laguna-xs.2` to determine if the `latest` tag prior can be suppressed without fine-tuning
+- ~~Evaluate `laguna-xs.2:q4_K_M`~~ — **done** (Finding 6, Finding 7, Finding 8). Disqualified by `latest` tag inertia + agentic scope violation. Negative prompting failed (run 25270119647). First DPO fine-tuning candidate if the token-efficiency (415 avg tokens) justifies the investment.
+- ~~Test negative prompting on `laguna-xs.2`~~ — **done** (run 25270119647). Partially suppressed `latest` at low constraint loads (easy/medium passed) but failed under pressure (multi/hard/extreme still violated, hard regressed from 85%→51%). Unreliable fix.
 - Add a `kubectl_explain` tool to the agentic harness (Finding 7 — structured tool constraints beat prose guardrails; dynamic schema lookup could eliminate hallucination class entirely)
+- **Decision required:** Deploy `qwen3.6:35b` or `gemma4:31b` as primary coding assistant? Both are 2.0-turn agentic, zero violations. qwen3.6:35b is faster (44 vs 10 TPS) and more token-efficient (898 vs 1,179 tokens). gemma4:31b is slower but may generalise better across hardware.
 
 ---
 
