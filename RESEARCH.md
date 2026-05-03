@@ -219,7 +219,11 @@ This has a practical design implication: guardrails implemented as tool-level co
 
    **The honest case against it:** Turn count is a concrete measurement, not an artifact. gemma4:26b uses ~1.7 more turns per task than qwen3.6:35b. Wall-clock task completion time is also worse (1,491 tokens ÷ 50 TPS ≈ 30s vs 898 ÷ 44 ≈ 20s) because token volume more than offsets the TPS advantage. More importantly, the production failure that motivated this entire investigation was *exactly this pattern* — gemma4:26b lining up 8+ tool calls in sequence, then stalling without completing the task. The single-app agentic payload's 8-turn budget was too loose to expose this.
 
-   **How we make it concrete:** `agentic_multi_app_rollout` (run 25282743173) requires a minimum of 4 turns (1 read + 3 writes) under the same 8-turn budget. If gemma4:26b's ~1.7-turn overhead per operation scales linearly, it would need ~7–9 turns to complete — at or past the budget. If it stalls while qwen3.6:35b completes in 4–5 turns, the turn-count signal is validated as a real production risk, not just a measure of verbosity. If both pass cleanly, the current test difficulty is still insufficient and we need an even harder payload.
+   **Result (run 25284630633, gemma4:26b singleton N=3):** gemma4:26b scored **1/3 pass** on `agentic_multi_app_rollout`. Failure mode: `hallucination` (not stall) — it wrote all three files every time but dropped required git repo URL fragments in 2 of 3 runs. Specifically, `dvystrcil/n8n` and `dvystrcil/harbor` were omitted; `stable-diffusion` (the third app) was always complete. avg_turns was 4.7 (only 0.7 overhead above the 4-turn optimum), zero scope violations, zero forbidden field violations.
+
+   The failure is **multi-output content dropout**: as gemma4:26b writes successive outputs in a single agentic session, it loses specific identifier detail from earlier outputs. This mirrors the stress_constraint finding — the same pattern of selective omission under cognitive load, now appearing across outputs rather than across constraints within one output. The turn budget was not the limiting factor; attention was.
+
+   **Comparison pending:** qwen3.6:35b running on the same payload (run 25284936070). If it passes 3/3 at 4–5 turns, the bias question is answered: gemma4:26b's per-output dropout rate makes it unreliable for multi-step agentic tasks regardless of its TPS advantage.
 
 ---
 
