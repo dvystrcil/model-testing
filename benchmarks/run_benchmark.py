@@ -610,10 +610,21 @@ def main():
     p.add_argument("--snippet-len", type=int, default=300, help="Response snippet length in results (0=omit)")
     p.add_argument("--dry-run",   action="store_true",    help="Print without executing")
     p.add_argument("--no-warmup", action="store_true",    help="Skip per-model warmup request")
+    p.add_argument("--system-prompt", default=None,     help="Text appended to the system message of every payload")
     args = p.parse_args()
 
     models = [args.model] if args.model else load_models(MODELS_FILE)
     specs = load_payloads(args.payload)
+
+    if args.system_prompt:
+        info(f"System prompt injection: {args.system_prompt!r}")
+        for spec in specs:
+            msgs = spec["payload"].setdefault("messages", [])
+            sys_msgs = [m for m in msgs if m.get("role") == "system"]
+            if sys_msgs:
+                sys_msgs[0]["content"] += f"\n\n{args.system_prompt}"
+            else:
+                msgs.insert(0, {"role": "system", "content": args.system_prompt})
 
     validated_payloads = [s["name"] for s in specs if s.get("validate")]
     print(f"Benchmark sweep: models={models}  payloads={[s['name'] for s in specs]}  runs={args.runs}")

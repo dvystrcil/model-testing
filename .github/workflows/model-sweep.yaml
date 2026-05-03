@@ -22,6 +22,10 @@ on:
         description: 'Runs per model/payload pair'
         required: false
         default: '1'
+      system_prompt:
+        description: 'Extra text appended to the system message of every payload (leave blank for none)'
+        required: false
+        default: ''
 
 concurrency:
   group: model-sweep
@@ -68,7 +72,8 @@ jobs:
           MODELS_HASH=$(sha256sum models.yaml | cut -c1-16)
           RUNS="${{ github.event.inputs.runs || '1' }}"
           MODEL="${{ github.event.inputs.model || 'all' }}"
-          KEY="sweep-${{ matrix.payload }}-p${PAYLOAD_HASH}-m${MODELS_HASH}-r${RUNS}-m${MODEL}"
+          SYSPROMPT_HASH=$(echo -n "${{ github.event.inputs.system_prompt }}" | sha256sum | cut -c1-8)
+          KEY="sweep-${{ matrix.payload }}-p${PAYLOAD_HASH}-m${MODELS_HASH}-r${RUNS}-m${MODEL}-s${SYSPROMPT_HASH}"
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
           echo "Cache key: $KEY"
 
@@ -110,11 +115,16 @@ jobs:
           if [ -n "${{ github.event.inputs.model }}" ]; then
             MODEL_ARG="--model ${{ github.event.inputs.model }}"
           fi
+          SYSPROMPT_ARG=""
+          if [ -n "${{ github.event.inputs.system_prompt }}" ]; then
+            SYSPROMPT_ARG="--system-prompt ${{ github.event.inputs.system_prompt }}"
+          fi
           python benchmarks/run_benchmark.py \
             --ollama "$OLLAMA_URL" \
             --payload "${{ matrix.payload }}" \
             --runs "${{ github.event.inputs.runs || '1' }}" \
-            $MODEL_ARG
+            $MODEL_ARG \
+            $SYSPROMPT_ARG
 
       - name: Save results to cache
         if: steps.cache-restore.outputs.cache-hit != 'true'
