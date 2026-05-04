@@ -47,10 +47,13 @@ The runner has no GPU. All inference happens on `k8s-node-max-01`; the runner is
 
 | Model | Architecture | Size | Avg TPS |
 |-------|-------------|------|---------|
-| `gemma4:26b` | Dense | 17 GB | ~50 |
-| `qwen3.6:35b` | MoE (3B active) | 23 GB | ~44 |
-| `laguna-xs.2:q4_K_M` | MoE (3B active, 256 experts) | 23 GB | ~34 |
-| `qwen3.6:27B` | MoE (3B active) | 17 GB | ~11 |
+| `gemma4:26b` | Dense | 17 GB | ~52 |
+| `qwen3.6:35b` | MoE (active params large) | 23 GB | ~46 |
+| `qwen3-coder-next:latest` | MoE (3B active) | 51 GB | ~38 |
+| `laguna-xs.2:q4_K_M` | MoE (3B active, 256 experts) | 23 GB | ~35 |
+| `qwen2.5-coder:14b` | Dense | 9 GB | ~24 |
+| `qwen3.6:27B` | MoE (active params large) | 17 GB | ~11 |
+| `qwen2.5-coder:32b` | Dense | 19 GB | ~11 |
 | `gemma4:31b` | Dense | 19 GB | ~10 |
 
 `qwen3.6:27B` and `gemma4:31b` are unexpectedly slow relative to their size. This is likely a ROCm kernel path difference for those specific architectures — the same models on NVIDIA hardware may perform significantly differently. The MoE speed advantage of `qwen3.6:35b` over `qwen3.6:27B` (44 vs 11 TPS despite similar active parameters) is the most significant unexplained outlier in our environment. `laguna-xs.2` at 34 TPS shows that a larger MoE model (256 experts vs qwen's fewer) can run efficiently on this stack.
@@ -96,24 +99,25 @@ A distractor file (`open-webui/kustomization.yaml`) is included in the mock file
 
 In single-shot benchmarks, `gemma4:26b` ranked #1 (50 TPS). In the agentic harness at N=3, it ranked last:
 
-| Model | TPS | Agentic pass | Avg turns | Avg tokens | Contender? |
-|-------|-----|-------------|-----------|------------|------------|
-| `qwen3-coder-next:latest` | 38 | **3/3** | **2.0 / 4.0†** | **223 / 638†** | **New primary candidate** — best token efficiency, best stress retention; N=3 confirmed |
-| `qwen3.6:35b` | 44 | **3/3** | **2.0** | **898** | Yes — prior primary; now second to qwen3-coder-next on stress and tokens |
-| `gemma4:31b` | 10 | **3/3** | **2.0** | 1,179 | Yes |
-| `qwen3.6:27B` | 11 | 3/3 | 2.7 | 1,005 | Yes — slower TPS limits interactive use |
-| `gemma4:26b` | 50 | 3/3 | 3.7 | 1,491 | Marginal — fastest TPS but most turns |
-| `laguna-xs.2:q4_K_M` | 34 | 2/3 | 2.3 | 415 | No — scope violation + `latest` tag inertia |
+| Model | TPS | Agentic IU | Agentic MAR | Avg turns (IU/MAR) | Avg tokens (IU/MAR) | Contender? |
+|-------|-----|------------|-------------|---------------------|----------------------|------------|
+| `qwen3-coder-next:latest` | 38 | **3/3** | **3/3** | **2.0 / 4.0** | **244 / 599** | **Primary** — best stress retention; efficient multi-output batching |
+| `qwen3.6:35b` | 46 | **3/3** | **3/3** | 2.3 / 2.7 | 1,075 / 1,865 | Yes — solid fallback |
+| `qwen3.6:27B` | 11 | **3/3** | **3/3** | 2.7 / 2.0 | 2,039 / 938 | Yes — slower TPS limits interactive use |
+| `gemma4:31b` | 10 | **3/3** | **3/3** | 2.0 / 2.0 | 1,475 / 1,420 | Yes |
+| `gemma4:26b` | 52 | 3/3 | **0/3** | 2.0 / 4.0 | 1,480 / 1,735 | **No** — N=3 confirms complete multi-output agentic failure; see Finding 7 |
+| `laguna-xs.2:q4_K_M` | 35 | 2/3 | 2/3 | 2.0 / 3.3 | 436 / 732 | No — hallucination + `latest` tag inertia |
+| `qwen2.5-coder:32b` | 11 | 0/3 | 0/3 | 0.0 / 0.0 | 23 / 15 | No — tool-call format failure; see Finding 9 |
+| `qwen2.5-coder:14b` | 24 | 0/3 | 0/3 | 0.0 / 0.0 | 0 / 0 | No — stall; see Finding 9 |
 
-*N=3 head-to-head (original 5 models): run 25274198108, Ollama 0.23.0.*
-*N=3 qwen3-coder-next: run 25286166480, Ollama 0.23.0.*
-*† qwen3-coder-next agentic_imageupdater: 2T/223 tok avg; agentic_multi_app_rollout: 4T/638 tok avg (minimum possible turns, zero variance across all 3 runs).*
+*N=3 full sweep (8 models, 14 payloads): run 25290681464, Ollama 0.23.0.*
+*IU = agentic_imageupdater (single file); MAR = agentic_multi_app_rollout (3 files, 5 distractors).*
 
-`gemma4:26b` improved from 4.7 → 3.7 avg turns compared to earlier isolated runs — it now passes 3/3, but still requires the most turns of any contender. `laguna-xs.2` dropped to 2/3 — its one failure was a scope violation in addition to the `latest` tag inertia found in stress payloads (see Finding 6).
+`gemma4:26b` passes `agentic_imageupdater` 3/3 in 2.0 turns, but fails `agentic_multi_app_rollout` 0/3 — all three runs drop `dvystrcil/harbor`, `dvystrcil/stable-diffusion`, and `dvystrcil/n8n`. N=3 confirmed disqualification for multi-output tasks. See Finding 7 for full analysis. `laguna-xs.2` scores 2/3 on both tasks — missing kustomization fragments on imageupdater, missing files on multi_app_rollout.
 
-**Important:** The AI analysis tool weights TPS heavily and recommends `gemma4:26b`. This is wrong — on `agentic_multi_app_rollout`, gemma4:26b scored 1/3 (dropped git repo URLs on 2/3 runs); qwen3.6:35b scored 3/3 in 2.0 turns. The agentic harness is the authoritative signal.
+**Note:** Earlier AI analysis reports recommended `gemma4:26b` based on its ~50 TPS and single-file agentic pass rate. The full N=3 sweep (run 25290681464) confirms this recommendation is wrong for multi-output tasks — gemma4:26b scored 0/3 on `agentic_multi_app_rollout` while qwen3.6:35b and qwen3-coder-next scored 3/3. The run 25290681464 AI analysis correctly ranks qwen3-coder-next #1. The agentic harness is the authoritative signal.
 
-**`qwen3-coder-next:latest` is the new primary recommendation** (N=3 confirmed, run 25286166480). It matches qwen3.6:35b on agentic pass rate and turn count, uses 75% fewer tokens on the simple task (223 vs 898), and has markedly better stress retention across all levels (see Finding 2). The 38 vs 44 TPS difference is immaterial for single-user homelab use and is outweighed by the bandwidth advantage in multi-model deployment (3B active params vs 35B). `qwen3.6:35b` remains a valid fallback if qwen3-coder-next is unavailable.
+**`qwen3-coder-next:latest` is the confirmed primary recommendation** (N=3 full sweep, run 25290681464). It passes both agentic tasks and leads on stress retention across all levels (see Finding 2). The 38 vs 46 TPS difference vs qwen3.6:35b is immaterial for single-user homelab use and is outweighed by the bandwidth advantage in multi-model deployment (3B active params vs 35B). `qwen3.6:35b` remains a valid fallback if qwen3-coder-next is unavailable.
 
 ### Finding 2: The stress curve is a U-shape, not linear decay
 
@@ -121,25 +125,24 @@ We extended the stress tests from 10 to 13 and 18 constraints. The expected line
 
 | Payload | Constraints | qwen3-coder-next | qwen2.5-coder:14b | qwen2.5-coder:32b | qwen3.6:35b | qwen3.6:27B | gemma4:26b | gemma4:31b | laguna-xs.2 |
 |---------|-------------|-----------------|-------------------|-------------------|-------------|-------------|------------|------------|-------------|
-| easy | 4 | **100%** | **100%§** | **100%§** | 100% | 100% | 100% | 100% | 100%‡ |
-| medium | 7 | **100%** | **100%§** | **100%§** | 86% | 86% | 86% | 86% | 81%‡ |
-| multi | 10 | **100%** | **100%§** | **100%§** | 80% | 87% | 80% | 80% | **97%‡\*** |
-| hard | 13 | **95%** | **100%§** | **100%§** | 85% | 85% | 85% | 85% | **54%‡** |
-| extreme | 18 | **100%** | **100%§** | **100%§** | 89% | ⏱ timeout | 89% | 89% | 87%‡ |
+| easy | 4 | **100%** | —§ | **100%** | 100% | 100% | 100% | 100% | 92%‡ |
+| medium | 7 | **100%** | —§ | **100%** | 86% | 90% | 86% | 86% | 86%‡ |
+| multi | 10 | **87%** | —§ | **100%** | 80% | 90% | 80% | 80% | 80%‡ |
+| hard | 13 | **90%** | **100%** | —§ | 85% | 85% | 85% | 85% | 79%‡ |
+| extreme | 18 | **96%** | —§ | **100%** | 89% | **89%**† | 89% | 89% | 83%‡ |
 
-*Original 5 models: N=3, run 25274198108. qwen3-coder-next: N=3, run 25286166480. qwen2.5-coder:32b: N=1, run 25287758257. qwen2.5-coder:14b: N=1, run 25288152141. qwen3.6:27B extreme: N=1, run 25288614864 — timed out.*
-‡ laguna-xs.2 carries a `latest` tag forbidden violation in medium/multi/hard/extreme — scores inflated. See Finding 6.
-\* laguna's 97% at 10 constraints but 54% at 13 is an anomaly — see Finding 8.
-§ qwen2.5-coder:14b and qwen2.5-coder:32b N=1 only — both disqualified (complete agentic tool-call failure). Stress scores are directional. Note that the coder series shows **no U-shape** — flat 100% at every level, unlike all general models that drop at medium. See Finding 9.
-⏱ qwen3.6:27B extreme timeout is a hard limit, not an N=3 artifact — N=1 also times out (300s harness timeout, run 25288614864). ROCm generation for this model+payload combination exceeds the budget. Extreme is not testable for this model without harness changes.
+*N=3 full sweep (8 models, 14 payloads): run 25290681464, Ollama 0.23.0.*
+‡ laguna-xs.2 `latest` tag violation present across multiple payloads — violation affects fact scores. High run-to-run variance due to probabilistic failure mode (see Finding 6 and 8).
+§ qwen2.5-coder models were split across payloads in run 25290681464: :32b ran easy/medium/multi/extreme; :14b ran hard/positional. Both disqualified on agentic. Stress scores directional — note the coder series shows **no U-shape** (flat 100% at every level where tested). See Finding 9.
+† qwen3.6:27B completed extreme in 258s at 10.9 TPS — right at the 300s budget edge. Treat as marginally reliable; a slightly longer response would cause a timeout.
 
-**qwen3-coder-next N=3 confirmed: materially better stress retention than every other tested model.** 100% at medium (vs 86%), 100% at multi (vs 80%), 95% at hard (vs 85%), 100% at extreme (vs 89%). The hard plateau drops only `memory: "256Mi"` and `memory: "512Mi"` — same two fields, same semantic dropout signature as all other models, but at a higher threshold. The N=1 hard result (85%) was slightly pessimistic; N=3 corrected to 95%, demonstrating exactly why N=3 is required before drawing conclusions from a single run.
+**qwen3-coder-next N=3 confirmed: materially better stress retention than every general model tested.** 100% at medium (vs 86%), 87% at multi (vs 80%), 90% at hard (vs 85%), 96% at extreme (vs 89%). qwen2.5-coder:32b matches or exceeds on static stress (100% all levels) but is disqualified on agentic. The full-sweep N=3 data (run 25290681464) shows qwen3-coder-next's hard score at 90% — between the earlier N=1 estimate of 85% and the prior N=3 estimate of 95%; N=3 variance on hard is approximately ±5%. The multi score dropped from the prior N=3 estimate (100%→87%), suggesting that earlier single-run estimate was optimistic; the true expected value is in the high 80s.
 
 The U-shape is not a sign of improvement. It is an artifact of how quality_facts are scored: the new constraints added at 13 and 18 (startup probes, service accounts, volumes, env vars, annotations, init containers) are fields models reliably produce. Adding them raises the denominator in ways that help the percentage — even though models are *still* dropping the same memory fields at every level.
 
 **The actual failure signature is stable, not improving:** `memory: "512Mi"` and `memory: "256Mi"` are dropped at every stress level from 7 constraints onward, regardless of how many other constraints are added. The score percentage moves because other constraints are satisfied, not because memory retention improves.
 
-`qwen3.6:27B` has no result for `stress_constraint_extreme` (18 constraints). At 11.3 TPS with N=3 runs, that payload likely exceeded the 120-minute per-job timeout. This is a data gap, not a model failure.
+`qwen3.6:27B` completed `stress_constraint_extreme` in run 25290681464 (258s, 10.9 TPS, 89%) — right at the 300s request budget edge. The earlier timeout (run 25288614864) was an outlier. The score is consistent with other general models; treat this data point as marginally reliable rather than solid N=3 evidence.
 
 **Neither cliff nor linear decay** — the failure mode is better described as *selective semantic dropout*: a small set of field types (resource constraints) are consistently deprioritized regardless of how many other constraints are present or how high the total constraint count goes.
 
@@ -149,18 +152,24 @@ The `stress_positional_bias` payload ran the same 7 constraints as `stress_const
 
 | Model | Medium (resources 5th) | Positional bias (resources 1st) | Change |
 |-------|------------------------|----------------------------------|--------|
-| `qwen3.6:35b` | 86% | 86% | none |
-| `qwen3.6:27B` | 86% | 86% | none |
-| `gemma4:26b` | 86% | 86% | none |
-| `gemma4:31b` | 86% | **90%** | +4% |
-| `laguna-xs.2` | 81%† | 90%† | +9% |
+| `qwen3-coder-next` | 100% | 100% | 0% — at ceiling |
+| `qwen2.5-coder:14b` | —§ | 100% | — |
+| `qwen3.6:35b` | 86% | **95%** | **+9%**† |
+| `qwen3.6:27B` | 90% | 90% | 0% |
+| `gemma4:26b` | 86% | 86% | 0% |
+| `gemma4:31b` | 86% | **90%** | +4% (confirmed across runs) |
+| `laguna-xs.2` | 86%‡ | 81%‡ | −5%‡ |
 
-*N=3 head-to-head, run 25274198108.*
-† laguna-xs.2 carries a `latest` tag violation in both payloads. Its apparent +9% improvement when resources are listed first is not interpretable as positional sensitivity — the `latest` tag confound makes cross-payload comparison unreliable for this model. See Finding 6.
+*N=3 full sweep: run 25290681464. Prior N=3 head-to-head: run 25274198108.*
+† qwen3.6:35b showed 86%→86% (no change) in run 25274198108 and 86%→95% (+9%) in run 25290681464. The discrepancy across two N=3 runs means positional sensitivity for qwen3.6:35b is uncertain — not a confirmed finding. N=6+ required to distinguish real effect from run-to-run variance.
+‡ laguna-xs.2 `latest` tag violation present in both payloads — cross-payload comparison unreliable. Prior run showed +9% improvement with positional reordering; new run shows −5% reversal, confirming laguna positional data is noise, not signal. See Finding 6.
+§ qwen2.5-coder:14b ran positional only; no medium data for comparison.
 
-For three of the four models, moving resources to position 1 made no difference — confirming the failure is **semantic deprioritization**, not attention window position. These models have learned to treat resource fields as lower priority than structural keys (probes, labels, topology) regardless of where they appear in the prompt.
+For most models, moving resources to position 1 made no difference — consistent with **semantic deprioritization**, not attention window position. These models treat resource fields as lower priority than structural keys regardless of prompt order.
 
-`gemma4:31b` is the exception: it responded to prompt reordering with a 4% improvement. Its failure is partially positional. For `gemma4:31b` specifically, placing resource constraints first in the prompt is a viable mitigation.
+`gemma4:31b` consistently responds to positional reordering with a +4% improvement across both N=3 runs — its failure is partially positional. For `gemma4:31b` specifically, placing resource constraints first in the prompt is a viable mitigation.
+
+`qwen3.6:35b` showed +9% improvement in run 25290681464 but no change in run 25274198108. Both are N=3; the discrepancy is unresolved. Do not treat qwen3.6:35b as confirmed positionally-sensitive without further data.
 
 **Practical implication for the other three:** Prompt reordering alone will not fix resource constraint dropout. More effective mitigations are chain-of-thought prompting ("list every constraint, then generate the YAML"), split manifests (resources in a separate values file), or post-generation linting.
 
@@ -241,30 +250,32 @@ This has a practical design implication: guardrails implemented as tool-level co
 
 4. **Why does `gemma4:31b` respond to positional reordering but others don't?** The exception suggests a different attention pattern. Worth understanding whether this is reproducible and whether chain-of-thought prompting has a similar asymmetric effect.
 
-5. ~~**`qwen3.6:27B` extreme result missing.**~~ **Answered (run 25288614864).** N=1 also times out — the 300s harness timeout is the hard constraint, not N. qwen3.6:27B cannot complete `stress_constraint_extreme` without raising the per-request timeout. Not worth chasing further unless the harness timeout is specifically raised for this model.
+5. ~~**`qwen3.6:27B` extreme result missing.**~~ **Answered — marginal (run 25290681464, N=3).** qwen3.6:27B completed `stress_constraint_extreme` in 258s at 10.9 TPS, scoring 89% — right at the 300s budget edge. The previous timeout (run 25288614864) was an outlier, not a hard ceiling. Treat as unreliable: a slightly longer response or slower inference session would cause a timeout. The score (89%) is consistent with other general models at this payload level.
 
-6. **Can the qwen2.5-coder series tool-call failure be fixed with a harness-side `<tool_call>` fallback parser?** Finding 9 establishes the failure is a format mismatch: the 14b model generates correct content (528 tok on multi_app_rollout) but wraps it in `<tool_call>` text blocks instead of structured API `tool_calls`. A parser fix could unlock best-in-class constraint retention (100% all levels) at 9 GB VRAM / 23.8 TPS. See issue #10.
+6. **Can the qwen2.5-coder series tool-call failure be fixed with a harness-side `<tool_call>` fallback parser?** Finding 9 establishes the failure is a format mismatch: the 14b model generates correct content (528 tok on multi_app_rollout at N=1; 0 tok at N=3 where it stalls entirely) but wraps it in `<tool_call>` text blocks instead of structured API `tool_calls`. A parser fix could unlock best-in-class constraint retention (100% all levels) at 9 GB VRAM / 23.8 TPS. See issue #10.
 
-6. **Can `laguna-xs.2`'s `latest` tag prior be suppressed?** Negative prompting failed (Finding 8). DPO fine-tuning is the next candidate.
+7. **Can `laguna-xs.2`'s `latest` tag prior be suppressed?** Negative prompting failed (Finding 8). DPO fine-tuning is the next candidate.
 
-7. **Is the AI analysis report biasing toward gemma4:26b, or is its ranking correct?**
+8. ~~**Is the AI analysis report biasing toward gemma4:26b, or is its ranking correct?**~~ **Answered (run 25290681464, N=3).** The full sweep confirms the AI report's prior recommendation was wrong for multi-output tasks. gemma4:26b scores 0/3 on `agentic_multi_app_rollout` while qwen3-coder-next and qwen3.6:35b score 3/3. The run 25290681464 AI analysis correctly ranks qwen3-coder-next #1. See Finding 7 for full data.
 
-   The automated AI analysis in every sweep report (written by `qwen3.6:35b`) recommends `gemma4:26b` as the primary coding assistant, citing its ~50 TPS, 3/3 agentic pass, and zero violations. This is not factually wrong — those measurements are accurate. The question is whether *turn count* (3.7 for gemma4:26b vs 2.0 for qwen3.6:35b) is a meaningful differentiator when pass rate is identical, or just noise.
+   *(Historical context: earlier reports written by `qwen3.6:35b` recommended `gemma4:26b` based on single-file agentic pass rate and TPS. gemma4:26b passes single-file tasks 3/3, passes 3/3 on `agentic_imageupdater`, but drops to 0/3 on `agentic_multi_app_rollout`. Pass rate on single-write tasks does not predict reliability on multi-write tasks.)*
 
-   **The honest case for gemma4:26b:** It is genuinely the fastest token generator (~50 TPS), it passes 3/3 agentic, and it has zero violations. The AI report is making a defensible recommendation. Our preference for qwen3.6:35b is a judgment call — not a proven finding.
-
-   **The honest case against it:** Turn count is a concrete measurement, not an artifact. gemma4:26b uses ~1.7 more turns per task than qwen3.6:35b. Wall-clock task completion time is also worse (1,491 tokens ÷ 50 TPS ≈ 30s vs 898 ÷ 44 ≈ 20s) because token volume more than offsets the TPS advantage. More importantly, the production failure that motivated this entire investigation was *exactly this pattern* — gemma4:26b lining up 8+ tool calls in sequence, then stalling without completing the task. The single-app agentic payload's 8-turn budget was too loose to expose this.
-
-   **Answer: the AI report's recommendation is wrong for multi-step agentic use.** Two singleton N=3 runs on `agentic_multi_app_rollout` (1 read + 3 writes, 8-turn budget, 5 distractor files):
+   **Answer: confirmed across the full N=3 sweep (run 25290681464, all 8 models).** `agentic_multi_app_rollout` results (1 read + 3 writes, 8-turn budget, 5 distractor files):
 
    | Model | Pass | Avg turns | Failure mode |
    |-------|------|-----------|--------------|
-   | `qwen3.6:35b` | **3/3** | **2.0** | none |
-   | `gemma4:26b` | 1/3 | 4.7 | hallucination — git repo URLs dropped for harbor + n8n in 2/3 runs |
+   | `qwen3-coder-next` | **3/3** | 4.0 | none |
+   | `qwen3.6:35b` | **3/3** | 2.7 | none |
+   | `qwen3.6:27B` | **3/3** | 2.0 | none |
+   | `gemma4:31b` | **3/3** | 2.0 | none |
+   | `laguna-xs.2` | 2/3 | 3.3 | hallucination:1 — missing apps/ files |
+   | `gemma4:26b` | **0/3** | 4.0 | hallucination:3 — drops dvystrcil/harbor, dvystrcil/stable-diffusion, dvystrcil/n8n in all 3 runs |
+   | `qwen2.5-coder:32b` | 0/3 | 0.0 | stall/hallucination — 0 effective turns |
+   | `qwen2.5-coder:14b` | 0/3 | 0.0 | stall:3 |
 
-   qwen3.6:35b completed in 2 turns by batching all three `write_file` calls into a single assistant turn after one `read_file`. gemma4:26b wrote files sequentially across 4.7 turns and lost specific identifier content (`dvystrcil/harbor`, `dvystrcil/n8n`) on earlier outputs as it progressed through the list — the same selective dropout under cognitive load seen in stress_constraint tests, now appearing across outputs in an agentic session.
+   qwen3-coder-next completed in 4.0 turns (minimum for the task); qwen3.6:35b batched writes across 2.7 turns. gemma4:26b completed 4 turns but dropped specific identifiers (`dvystrcil/harbor`, `dvystrcil/stable-diffusion`, `dvystrcil/n8n`) in all 3 runs — consistent content-selective hallucination under multi-output cognitive load. This worsened from 1/3 (earlier singleton run) to 0/3 with full N=3.
 
-   **Conclusion:** gemma4:26b's 50 TPS advantage is irrelevant when it fails 67% of multi-output agentic tasks. The AI report correctly measures individual metrics but draws the wrong inference: pass rate on a single-write task does not predict reliability on multi-write tasks. `qwen3.6:35b` is the correct choice for production agentic use. This is now a confirmed finding, not a judgment call.
+   **Conclusion:** gemma4:26b's 52 TPS advantage is irrelevant when it fails 100% of multi-output agentic tasks at N=3. `qwen3-coder-next:latest` is the confirmed primary for production agentic use; `qwen3.6:35b` is the fallback. This is a confirmed finding, not a judgment call.
 
 ---
 
@@ -418,7 +429,7 @@ Key difference from `qwen3.6:35b`: qwen3-coder-next was trained specifically on 
 | `qwen2.5-coder:14b` | 14B dense | 14B | 23.8 | 9 GB | **N=1 done — disqualified** | 0/1 both tasks (tool-call failure, 108/528 tok) | **100%/100%/100%/100%/100%†** |
 | `qwen2.5-coder:32b` | 32B dense | 32B | 10.9 | 19 GB | **N=1 done — disqualified** | 0/1 both tasks (tool-call failure, 23 tok) | **100%/100%/100%/100%/100%†** |
 | `qwen3.6:35b` *(prior baseline)* | 35B dense | 35B | 44 | 23 GB | N=3 confirmed | 3/3 pass, 2.0T, 898 tok | 100%/86%/80%/85%/89% |
-| `qwen3-coder-next` *(new primary)* | 80B MoE | 3B | 38 | 51 GB | **N=3 confirmed** | 3/3 pass, 2.0T/223 tok; 4.0T/638 tok | 100%/100%/100%/95%/100% |
+| `qwen3-coder-next` *(new primary)* | 80B MoE | 3B | 38 | 51 GB | **N=3 confirmed** | 3/3 both tasks; 2.0T/244 tok (IU); 4.0T/599 tok (MAR) | 100%/100%/87%/90%/96% |
 
 † qwen2.5-coder stress scores at N=1 — treat as directional. Neither model promoted to N=3 due to agentic disqualification.
 
