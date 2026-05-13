@@ -7,3 +7,4 @@ models:
   - name: qwen2.5-coder:32b
   - name: qwen3-coder-next:latest
   - name: qwen2.5-coder:14b
+  - name: devstral:24b
