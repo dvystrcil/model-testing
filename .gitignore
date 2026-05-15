@@ -1,3 +1,6 @@
 .venv/
 __pycache__/
 benchmarks/__pycache__/
+
+# Ephemeral — last-run pointer used by tooling, not a receipt
+benchmarks/results/.last_result
