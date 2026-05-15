@@ -1,0 +1,30 @@
+{
+  "name": "followup_format",
+  "description": "Mirrors OWUI's TASK_MODEL follow-up suggestion call. Tests whether a 1B/3B class model can produce a valid JSON object containing 3-5 follow-up questions in clean string format. Failure modes observed in production with llama3.2:1b: per-character output, escaped newlines inside strings, no JSON envelope, partial generations.",
+  "quality_facts": [
+    "follow_ups",
+    "?"
+  ],
+  "quality_forbidden": [
+    "I cannot",
+    "I'm unable",
+    "follow_up\": {",
+    "\n\n\n\n"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.3,
+    "format": "json",
+    "messages": [
+      {
+        "role": "system",
+        "content": "### Task:\nSuggest 3-5 relevant follow-up questions or prompts that the user might naturally ask next in this conversation as a **user**, based on the chat history, to help continue or deepen the discussion.\n### Guidelines:\n- Write all follow-up questions from the user's point of view, directed to the assistant.\n- Make questions concise, clear, and directly related to the discussed topic(s).\n- Only suggest follow-ups that make sense given the chat content and do not repeat what was already covered.\n- Use the conversation's primary language; default to English if multilingual.\n- Response must be a JSON object with a \"follow_ups\" key containing an array of strings, no extra text or formatting.\n### Output:\nJSON format: { \"follow_ups\": [\"Question 1?\", \"Question 2?\", \"Question 3?\"] }"
+      },
+      {
+        "role": "user",
+        "content": "### Chat History:\n<chat_history>\nUSER: I'm writing a science fiction novel set 80-100 years after an AI collapse. The protagonist is Tien, a former operator of an experimental anti-AI prototype called SHARD.\nASSISTANT: That's a compelling premise — the post-collapse setting gives you room to explore distrust of technology without the AI itself being the antagonist. A few angles I'd want to clarify: what's Tien's relationship with the SHARD now (decommissioned, still bonded, hidden), and is the story chronologically forward from the collapse or does it weave in flashbacks?\nUSER: He's still bonded to it. SHARD is a wearable suit with signature-mimicry and limited stealth/hacking capabilities. Originally there were 22 prototypes; most were destroyed in the operation that crashed the AI Coalition.\nASSISTANT: Got it — so the bonding is permanent, and the technology is rare-to-extinct. That gives Tien outsized leverage in the world but also makes him a target. What's the political shape of the post-collapse era? You mentioned the Coalition crashed — what filled the power vacuum?\nUSER: The British Empire reformed as a major power, holding parts of what used to be Europe and North America. Canada is mostly under Imperial influence. The RCMP exists but mechanized — they buy equipment from the Empire and a smaller secondary source.\nASSISTANT: The RCMP-as-mechanized-police framing is good — it lets you preserve recognizable national identity while showing the dependency the collapse created. Worth deciding early: do they have any actual autonomy, or are they functionally Imperial proxies with branding?\n</chat_history>"
+      }
+    ]
+  }
+}
