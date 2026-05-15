@@ -1,0 +1,22 @@
+topic: kv-quantization
+date: 2026-05-13
+slug: q4_0-vs-q8_0
+title: KV cache quantization — q4_0 vs q8_0 speed comparison
+trigger: settle the speed cost of switching to q4_0 KV cache (saves ~5 GB VRAM)
+method: in-cluster alpine probe → ollama Service, short + code-gen prompts
+hardware: gfx1151 (Strix Halo)
+ollama: 0.30.0-rc12 (homelab rebuild)
+models:
+  - qwen3-coder-next:latest  # Q4_K_M weights
+  - qwen3.6:35b
+payloads:
+  - ad-hoc (short + code-gen, not from payloads/)
+outcome:
+  finding: KV q4_0 vs q8_0 is speed-indistinguishable on gfx1151 (±3% within run-to-run noise)
+  recommendation: use q4_0 — same speed as q8_0, frees ~5 GB VRAM headroom for multi-model loading
+  caveat: tested at ≤200 input tokens; KV cost scales with context length, real-world performance at p95=242K untested
+links:
+  related_memory:
+    - project_qwen3_coder_next_sizing
+    - project_ollama_wedge_blocker
+  followup: 2026-05-13-wedge-resolution (separate gfx1151 wedge investigation)

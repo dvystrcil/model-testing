@@ -1,0 +1,24 @@
+topic: coder-models
+date: 2026-05-13
+slug: coder-candidates
+title: Smaller coder-model candidates vs qwen3-coder-next
+trigger: VRAM-lighter alternatives to qwen3-coder-next (51 GB) for gfx1151 wedge mitigation
+method: in-cluster alpine probe → ollama Service, two prompts (ping + LRUCache)
+hardware: gfx1151 (Strix Halo)
+models:
+  - qwen3-coder-next:latest
+  - qwen2.5-coder:32b
+  - qwen2.5-coder:14b
+  - qwen3.6-opencode:latest
+  - qwen3.6:35b-a3b
+payloads:
+  - ad-hoc (LRUCache code-gen prompt, not from payloads/)
+outcome:
+  winner: qwen2.5-coder:14b (fast-tier fallback)
+  baseline: qwen3-coder-next (daily-driver, fastest absolute)
+  recommendation: keep both for routing OR promote 14b for lower wedge risk
+links:
+  related_memory:
+    - project_ollama_wedge_blocker
+    - project_qwen3_coder_next_sizing
+  followup: 2026-05-13-full-sweep (broader payload coverage)

@@ -1,0 +1,37 @@
+topic: task-model
+date: 2026-05-15
+slug: followup-formatting
+title: TASK_MODEL pick — follow-up suggestion formatting (OWUI)
+trigger: OWUI follow-up suggestions rendered as per-character garbage with TASK_MODEL=llama3.2:1b
+method: replicate OWUI's FOLLOW_UP_GENERATION_PROMPT_TEMPLATE in sweep payload, 2 runs per model
+hardware: ollama on gfx1151 (Strix Halo), tested via port-forward from laptop
+models:
+  - qwen3:1.7b
+  - llama3.2:3b
+payloads:
+  - followup_format  # new payload added today, mirrors OWUI's actual prompt
+  - instruction_following  # cross-check
+outcome:
+  winner: llama3.2:3b
+  loser: qwen3:1.7b
+  evidence:
+    - qwen3:1.7b followup_format facts_score 50% with 1 of 2 runs timing out (5 min hang)
+    - llama3.2:3b followup_format facts_score 100% both runs, clean JSON envelope
+  action_taken:
+    - kubectl set env deployment/open-webui TASK_MODEL=llama3.2:3b
+    - committed to dvystrcil/open-webui main b9130c6
+    - committed to dvystrcil/open-webui main 92e7e65 (companion AIOHTTP_CLIENT_TIMEOUT=900)
+raw_artifacts:
+  - raw/sweep_20260515T152126Z.jsonl  # qwen3:1.7b × followup_format
+  - raw/sweep_20260515T152628Z.jsonl  # qwen3:1.7b × instruction_following
+  - raw/sweep_20260515T153124Z.jsonl  # llama3.2:3b × followup_format
+  - raw/sweep_20260515T153129Z.jsonl  # llama3.2:3b × instruction_following
+links:
+  related_memory:
+    - feedback_small_model_prompt_brevity  # D-040, extended by this report
+  related_issues:
+    - https://github.com/dvystrcil/homelab/issues/98  # dmf-eval workflow
+    - https://github.com/dvystrcil/open-webui/issues/22  # 0.9.5 chat-completions regression
+  related_commits:
+    - https://github.com/dvystrcil/open-webui/commit/b9130c6  # TASK_MODEL change
+    - https://github.com/dvystrcil/open-webui/commit/92e7e65  # AIOHTTP_CLIENT_TIMEOUT bump

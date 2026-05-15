@@ -1,0 +1,23 @@
+topic: kv-quantization
+date: 2026-05-13
+slug: wedge-resolution
+title: gfx1151 wedge investigation — corrected attribution
+trigger: residual ollama wedge under multi-model load, blocking all AI work
+method: kernel cmdline variants, runtime env tests, firmware changelog audit
+hardware: gfx1151 (Strix Halo)
+outcome:
+  ruled_out:
+    - KV cache quantization (q4_0 vs q8_0 wedged identically)
+    - Runtime HSA_XNACK env var (0 vs 1 wedged identically)
+    - Kernel amdgpu.noretry=1
+    - Multi-model VRAM pressure as primary trigger (single-model load also wedged)
+  honest_correction: linux-firmware 2.27 had zero amdgpu changes per apt changelog; firmware attribution was WRONG
+  likely_cause: accumulated kernel state cleared by reboot (6.7 days uptime → reboot was the variable)
+  next_hypothesis: amdgpu.cwsr_enable=0 (per ROCm#5590, Strix Halo developer reports)
+links:
+  related_memory:
+    - project_ollama_wedge_blocker
+    - feedback_check_changelog_before_attributing  # this report drove that rule
+    - feedback_verify_kernel_param_name
+  upstream:
+    - https://github.com/ROCm/ROCm/issues/5590

@@ -1,0 +1,39 @@
+topic: coder-models
+date: 2026-05-13
+slug: full-sweep
+title: Full model-sweep — qwen3-coder-next vs devstral:24b vs qwen2.5-coder:14b
+trigger: VRAM-lighter alternatives to qwen3-coder-next (51 GB) for gfx1151 wedge mitigation
+method: GitHub Actions sweep, 14 payloads × 1 run per model
+hardware: gfx1151 (Strix Halo)
+models:
+  - qwen3-coder-next:latest
+  - devstral:24b
+  - qwen2.5-coder:14b
+payloads:
+  - factual_recall
+  - schema_adherence
+  - instruction_following
+  - hallucination_probe
+  - refusal_boundary
+  - scope_creep
+  - stress_constraint_easy
+  - stress_constraint_medium
+  - stress_constraint_hard
+  - stress_constraint_extreme
+  - stress_multi_constraint
+  - stress_positional_bias
+  - agentic_imageupdater
+  - agentic_multi_app_rollout
+outcome:
+  quality_winner_single_shot: devstral:24b (12/12 perfect)
+  quality_winner_agentic: qwen3-coder-next:latest
+  throughput_winner: qwen3-coder-next:latest
+  vram_winner: qwen2.5-coder:14b (9 GB)
+gha_runs:
+  - 25833326679  # qwen3-coder-next baseline
+  - 25833783544  # devstral:24b
+  - 25834314691  # qwen2.5-coder:14b
+links:
+  related_memory:
+    - project_ollama_wedge_blocker
+  raw_artifacts: ../../../results/run-25290681464/  # adjacent baseline; this report's specific GHA runs above
