@@ -3,7 +3,6 @@ models:
   - name: qwen3.6:27B
   - name: gemma4:26b
   - name: gemma4:31b
-  - name: laguna-xs.2:q4_K_M
   - name: qwen2.5-coder:32b
   - name: qwen3-coder-next:latest
   - name: qwen2.5-coder:14b
