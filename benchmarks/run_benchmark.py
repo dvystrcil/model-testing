@@ -613,6 +613,11 @@ def main():
     p.add_argument("--dry-run",   action="store_true",    help="Print without executing")
     p.add_argument("--no-warmup", action="store_true",    help="Skip per-model warmup request")
     p.add_argument("--system-prompt", default=None,     help="Text appended to the system message of every payload")
+    p.add_argument("--report",  default=None,
+                   help="Write directly into a report's raw/ subdir, e.g. "
+                        "'benchmarks/reports/task-model/2026-05-15-followup-formatting'. "
+                        "Path is relative to repo root or absolute. When unset, writes to "
+                        "benchmarks/results/ as a staging area (the 'explore then promote' workflow).")
     args = p.parse_args()
 
     models = [args.model] if args.model else load_models(MODELS_FILE)
@@ -637,9 +642,16 @@ def main():
     if validated_payloads:
         info(f"kubectl schema validation enabled for: {validated_payloads}")
 
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    if args.report:
+        report_root = Path(args.report).expanduser().resolve()
+        if not report_root.is_dir():
+            sys.exit(f"ERROR: --report path is not a directory: {report_root}")
+        out_dir = report_root / "raw"
+    else:
+        out_dir = RESULTS_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
-    out_path = RESULTS_DIR / f"sweep_{ts}.jsonl"
+    out_path = out_dir / f"sweep_{ts}.jsonl"
 
     meta = {} if args.dry_run else collect_metadata(args.ollama)
     if meta:
@@ -667,7 +679,7 @@ def main():
     print_summary(results)
     if not args.dry_run and results:
         info(f"Results written to {out_path}")
-        (RESULTS_DIR / ".last_result").write_text(str(out_path))
+        (out_dir / ".last_result").write_text(str(out_path))
 
 
 if __name__ == "__main__":

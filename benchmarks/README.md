@@ -54,14 +54,36 @@ redundant evaluation.
 
 ## Adding a new report
 
-1. Decide the topic folder (`coder-models/`, `task-model/`, `kv-quantization/`,
-   `task-summary/`, etc.). Create a new one if none fit.
-2. Make a directory: `reports/<topic>/<YYYY-MM-DD>-<short-slug>/`
-3. Write `README.md` (the narrative — what, why, how, findings, action taken).
-4. Write `meta.yaml` matching the schema below.
-5. If the evaluation produced JSONL artifacts, place them in `raw/`.
+### Workflow A — explore then promote (ad-hoc, default)
+
+1. Run a sweep — JSONL lands in `benchmarks/results/sweep_<ts>.jsonl` (staging).
+2. Inspect output, decide whether it's worth a report.
+3. If yes: make a directory `reports/<topic>/<YYYY-MM-DD>-<short-slug>/raw/`
+   and `git mv` the staging JSONL into it.
+4. Write `README.md` (narrative — what, why, how, findings, action taken).
+5. Write `meta.yaml` matching the schema below.
 6. Append a line to `reports/INDEX.md`.
 7. Commit.
+
+### Workflow B — targeted run (CI, dmf-eval, anyone with a planned scope)
+
+1. Decide the topic folder and slug first.
+2. Make a directory: `reports/<topic>/<YYYY-MM-DD>-<short-slug>/`
+3. Run with `--report <that-directory>` — JSONL goes straight into `raw/`.
+
+   ```bash
+   python benchmarks/run_benchmark.py \
+     --model llama3.2:3b \
+     --payload followup_format \
+     --report benchmarks/reports/task-model/2026-05-15-followup-formatting
+   ```
+
+4. Write `README.md` and `meta.yaml`.
+5. Append a line to `reports/INDEX.md`.
+6. Commit.
+
+The `--report` flag is what the dmf-eval workflow ([dvystrcil/homelab#98](https://github.com/dvystrcil/homelab/issues/98))
+will pass from its k8s Job — bypasses the manual promotion step.
 
 ## meta.yaml schema
 

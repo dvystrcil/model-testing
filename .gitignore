@@ -2,5 +2,7 @@
 __pycache__/
 benchmarks/__pycache__/
 
-# Ephemeral — last-run pointer used by tooling, not a receipt
-benchmarks/results/.last_result
+# Ephemeral — last-run pointer the runner drops next to its JSONL output.
+# Lands in benchmarks/results/ for staging runs, or in any report's raw/
+# subdir when invoked with --report.
+**/.last_result
