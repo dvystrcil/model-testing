@@ -1,14 +1,10 @@
 name: model-sweep
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'benchmarks/payloads/**'
-      - 'benchmarks/run_benchmark.py'
-      - 'benchmarks/analyze.py'
-      # models.yaml intentionally omitted: adding a model should be followed by
-      # a targeted workflow_dispatch (--model <name>), not a full all-model sweep.
+  # Manual trigger only — auto-on-push was removed 2026-05-15 after two
+  # back-to-back commits today each triggered a full sweep that competed
+  # for VRAM with the user's live work (one trip of the ollama-inference
+  # health-watcher alarm). Sweeps now happen when explicitly invoked.
   workflow_dispatch:
     inputs:
       model:
