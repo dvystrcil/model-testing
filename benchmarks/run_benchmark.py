@@ -82,6 +82,20 @@ def load_payloads(name: str) -> list[dict]:
     return [json.loads(f.read_text()) for f in files]
 
 
+def apply_temperature_override(specs: list, temperature: float) -> None:
+    """Force temperature across all loaded specs (mutates in place).
+
+    Agentic payloads read spec["temperature"] at request-build time
+    (see run_agentic_one). Non-agentic payloads post spec["payload"]
+    verbatim, so the temperature lives inside that block. Set both so
+    a single CLI flag covers either shape.
+    """
+    for spec in specs:
+        spec["temperature"] = temperature
+        if isinstance(spec.get("payload"), dict):
+            spec["payload"]["temperature"] = temperature
+
+
 def ollama_chat(ollama_url: str, payload: dict) -> dict:
     body = json.dumps(payload).encode()
     req = urllib.request.Request(
@@ -610,6 +624,10 @@ def main():
     p.add_argument("--runs",    type=int, default=1,    help="Runs per model/payload pair")
     p.add_argument("--snippet-len", type=int, default=300, help="Response snippet length in results (0=omit)")
     p.add_argument("--save-responses", action="store_true", help="Save full response text in JSONL (for DPO dataset generation)")
+    p.add_argument("--temperature", type=float, default=None,
+                   help="Override per-payload temperature for ALL payloads (deterministic sweeps). "
+                        "Use 0.0 for code tasks per Mistral/Devstral docs. Leave unset to keep "
+                        "per-payload spec.")
     p.add_argument("--dry-run",   action="store_true",    help="Print without executing")
     p.add_argument("--no-warmup", action="store_true",    help="Skip per-model warmup request")
     p.add_argument("--system-prompt", default=None,     help="Text appended to the system message of every payload")
@@ -622,6 +640,10 @@ def main():
 
     models = [args.model] if args.model else load_models(MODELS_FILE)
     specs = load_payloads(args.payload)
+
+    if args.temperature is not None:
+        info(f"Temperature override: all payloads → {args.temperature}")
+        apply_temperature_override(specs, args.temperature)
 
     if args.system_prompt:
         info(f"System prompt injection: {args.system_prompt!r}")

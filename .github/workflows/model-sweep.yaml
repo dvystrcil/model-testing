@@ -23,6 +23,10 @@ on:
         description: 'Extra text appended to the system message of every payload (leave blank for none)'
         required: false
         default: ''
+      temperature:
+        description: 'Override temperature for ALL payloads (e.g. 0.0 for deterministic code-task sweeps). Leave blank to keep per-payload spec.'
+        required: false
+        default: ''
 
 concurrency:
   group: model-sweep
@@ -115,6 +119,8 @@ jobs:
             ARGS+=(--model "${{ github.event.inputs.model }}")
           [ -n "${{ github.event.inputs.system_prompt }}" ] && \
             ARGS+=(--system-prompt "${{ github.event.inputs.system_prompt }}")
+          [ -n "${{ github.event.inputs.temperature }}" ] && \
+            ARGS+=(--temperature "${{ github.event.inputs.temperature }}")
           python benchmarks/run_benchmark.py "${ARGS[@]}"
 
       - name: Save results to cache

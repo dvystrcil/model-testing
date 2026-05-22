@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "benchmarks"))
-from run_benchmark import grade, strip_think, stddev
+from run_benchmark import grade, strip_think, stddev, apply_temperature_override
 
 
 def test_grade_all_hits():
@@ -71,6 +71,51 @@ def test_stddev_known():
     # sample stddev (n-1): sqrt(32/7) ≈ 2.138
     result = stddev([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])
     assert abs(result - 2.138) < 0.01
+
+
+def test_temperature_override_non_agentic():
+    """Non-agentic spec → temperature lands inside spec['payload']."""
+    specs = [{
+        "name": "test-payload",
+        "payload": {"model": "x", "temperature": 0.7, "messages": []},
+    }]
+    apply_temperature_override(specs, 0.0)
+    assert specs[0]["temperature"] == 0.0
+    assert specs[0]["payload"]["temperature"] == 0.0
+
+
+def test_temperature_override_agentic():
+    """Agentic spec (no top-level 'payload' dict) → spec['temperature'] only."""
+    specs = [{
+        "name": "test-agentic",
+        "type": "agentic",
+        "temperature": 0.2,
+        "task": "do thing",
+    }]
+    apply_temperature_override(specs, 0.0)
+    assert specs[0]["temperature"] == 0.0
+    assert "payload" not in specs[0]
+
+
+def test_temperature_override_mixed_specs():
+    """Both shapes in one call → both get overridden."""
+    specs = [
+        {"name": "a", "payload": {"temperature": 0.9, "messages": []}},
+        {"name": "b", "type": "agentic", "temperature": 0.5},
+    ]
+    apply_temperature_override(specs, 0.0)
+    assert specs[0]["payload"]["temperature"] == 0.0
+    assert specs[0]["temperature"] == 0.0  # mirrored to top-level too
+    assert specs[1]["temperature"] == 0.0
+
+
+def test_temperature_override_extreme_values():
+    """No clamping — pass any float through verbatim."""
+    specs = [{"name": "x", "payload": {"temperature": 0.5}}]
+    apply_temperature_override(specs, 2.0)
+    assert specs[0]["payload"]["temperature"] == 2.0
+    apply_temperature_override(specs, 0.0)
+    assert specs[0]["payload"]["temperature"] == 0.0
 
 
 if __name__ == "__main__":
