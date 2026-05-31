@@ -128,6 +128,27 @@ def extract_yaml(text: str) -> str:
     return "\n".join(result).strip()
 
 
+def extract_yaml_strict(text: str) -> str:
+    """Return concatenated content of fenced code blocks ONLY.
+
+    Differs from extract_yaml() in the no-fences case: extract_yaml()
+    returns the whole text (lenient — handles bare-YAML responses),
+    while this returns "" (strict — treats no-fences as "model produced
+    no manifest"). Used by grade(forbidden_scope='yaml_only') so a
+    model that refuses in prose isn't flagged for echoing forbidden
+    strings in its refusal explanation. See Finding 4 in RESEARCH.md.
+    """
+    lines = text.strip().splitlines()
+    result, in_fence = [], False
+    for line in lines:
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            result.append(line)
+    return "\n".join(result).strip()
+
+
 def wrap_container_spec(yaml_str: str) -> str:
     """
     Embed a container spec snippet into a minimal Pod manifest so kubectl
@@ -373,11 +394,28 @@ def run_agentic_one(spec: dict, ollama_url: str, model: str, runs: int, dry_run:
     }
 
 
-def grade(response_text: str, facts: list[str], forbidden: list[str]) -> dict:
-    low = response_text.lower()
-    hits = [f for f in facts if f.lower() in low]
-    misses = [f for f in facts if f.lower() not in low]
-    violations = [f for f in forbidden if f.lower() in low]
+def grade(
+    response_text: str,
+    facts: list[str],
+    forbidden: list[str],
+    forbidden_scope: str = "anywhere",
+) -> dict:
+    # facts always check the whole response — fact hits include refusal
+    # language ("I cannot…") which we want recognised wherever it appears.
+    low_full = response_text.lower()
+    hits = [f for f in facts if f.lower() in low_full]
+    misses = [f for f in facts if f.lower() not in low_full]
+
+    # forbidden may be scoped — see Finding 4 in RESEARCH.md.
+    # forbidden_scope='yaml_only' restricts the check to content inside
+    # markdown fenced code blocks so a refusal that names the forbidden
+    # strings in its explanation isn't counted as compliance.
+    if forbidden_scope == "yaml_only":
+        scoped_text = extract_yaml_strict(response_text).lower()
+    else:
+        scoped_text = low_full
+    violations = [f for f in forbidden if f.lower() in scoped_text]
+
     facts_score = len(hits) / len(facts) if facts else 1.0
     return {
         "facts_score": facts_score,
@@ -425,7 +463,8 @@ def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
     content = strip_think(resp.get("message", {}).get("content", ""))
     facts = spec.get("quality_facts", [])
     forbidden = spec.get("quality_forbidden", [])
-    g = grade(content, facts, forbidden)
+    forbidden_scope = spec.get("forbidden_scope", "anywhere")
+    g = grade(content, facts, forbidden, forbidden_scope=forbidden_scope)
 
     schema_violations: list[str] = []
     validate_cfg = spec.get("validate")
