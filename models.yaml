@@ -7,3 +7,10 @@ models:
   - name: qwen3-coder-next:latest
   - name: qwen2.5-coder:14b
   - name: devstral:24b
+  # Added 2026-05-30 — model-testing#18 — exercise 111 GiB ceiling on
+  # max-01 (gfx1151) after XNACK enable. Issue cited qwen3.6:72b but
+  # that tag doesn't exist in the ollama registry (404); qwen2.5:72b
+  # is the closest same-family substitute. Size is q4_K_M default.
+  # mixtral:8x22b and command-r-plus:104b deferred to follow-up
+  # issues — pull bandwidth made bundling all three impractical.
+  - name: qwen2.5:72b           # ~45 GB
