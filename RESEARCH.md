@@ -234,6 +234,30 @@ The 14b failure is the more informative one. 528 tokens on `agentic_multi_app_ro
 
 `qwen3-coder-next` does not have this problem — it generates structured `tool_calls` responses that the harness reads correctly. It was trained explicitly on agentic RL traces, which likely includes format-correct tool invocations.
 
+### Finding 10: qwen2.5:72b matches top-quality models but is 10× slower
+
+First sweep against the 111 GiB ceiling on max-01 (gfx1151) post-XNACK enable. `qwen2.5:72b` (47 GB on disk, ~51 GiB VRAM footprint when loaded) was added to `models.yaml` per #18. Full 15-payload, 9-model sweep (run [26701189607](https://github.com/dvystrcil/model-testing/actions/runs/26701189607)) completed 2026-05-31. The analyze job timed out (5min budget vs ~8min needed for the LLM summary call on a result set this large) — captured separately as a finding in #18's close-out comment; the raw JSONLs are intact and the numbers below are extracted directly.
+
+| Model | #payloads | avg facts | perfect | violations | avg TPS |
+|---|---|---|---|---|---|
+| `gemma4:26b` | 15/15 | 0.87 | 7/15 | 0 | **40.9** |
+| `qwen3.6:35b` | 15/15 | 0.87 | 7/15 | 0 | 37.9 |
+| `qwen3-coder-next` | 15/15 | **0.92** | **12/15** | 0 | 31.7 |
+| `qwen2.5-coder:14b` | 15/15 | 0.92 | 12/15 | 1 | 20.0 |
+| `devstral:24b` | 15/15 | 0.92 | 12/15 | 0 | 13.0 |
+| `qwen2.5-coder:32b` | 15/15 | 0.92 | 12/15 | 0 | 9.5 |
+| `qwen3.6:27B` | 13/15 | 0.86 | 7/15 | 0 | 9.3 |
+| `gemma4:31b` | 15/15 | 0.87 | 7/15 | 0 | 8.4 |
+| **`qwen2.5:72b`** | **15/15** | **0.92** | **12/15** | 1 | **4.0** |
+
+**What's notable:** `qwen2.5:72b` lands at the same quality tier as the best 32B-and-under models (0.92 average facts, 12/15 perfect) — confirming the size-quality scaling on the gfx1151 lane works as expected through the 111 GiB ceiling. But it pays a 10× throughput penalty vs the fastest model (4.0 TPS vs 40.9 for gemma4:26b).
+
+**Practical placement:** `qwen2.5:72b` is a candidate for HIGH-quality / LOW-throughput roles — batch summarisation, deep-context document analysis, code-review where 60s/turn is acceptable. It's NOT suitable for interactive coding-assistant or chat workloads (a 200-token response takes 50 seconds at 4 TPS). The current top-of-stack interactive role belongs to `qwen3-coder-next` and `gemma4:26b`, both of which clear 30 TPS at competitive quality.
+
+**`qwen3.6:27B` partial coverage (13/15):** two payloads did not complete in the run's budget. The pattern matches Finding 4's note about run 25288614864 — qwen3.6:27B sits right at the edge of the 300s per-payload timeout. Not a quality regression; a latency-budget concern.
+
+**Analyze job timeout:** the post-sweep `analyze` step (which sends results to qwen3.6:35b for a Markdown summary) timed out at 5 min — too tight when the input result set is 9 models × 15 payloads (135 inferences worth of content). Worth raising the timeout to 15 min OR splitting the analysis into per-payload chunks rather than one big call. Not blocking; the JSONLs are sufficient for manual analysis.
+
 ### Finding 7: Structured tool boundaries are more reliable guardrails than prose instructions
 
 `laguna-xs.2` passed the agentic harness 3/3 with zero scope violations — it respected file-level tool boundaries perfectly. Simultaneously, it ignored textual version pinning instructions in every stress payload.
