@@ -27,10 +27,20 @@ on:
         description: 'Override temperature for ALL payloads (e.g. 0.0 for deterministic code-task sweeps). Leave blank to keep per-payload spec.'
         required: false
         default: ''
+      requester:
+        description: 'Who/what triggered this sweep. Free-form (e.g. "operator", "n8n:sweep-runner", "@user"). Logged in the analyze step and surfaces in the n8n-posted tracking issue.'
+        required: false
+        default: 'operator'
 
+# Single-sweep mutex: queue subsequent runs instead of cancelling the
+# in-progress one. gfx1151 ollama wedge fear (project_ollama_wedge_mode):
+# cancelling a sweep mid-flight leaves partially-loaded models in ollama
+# memory and the GPU in an indeterminate state, which has wedged max-01
+# in the past. Queueing means the second request waits ~1-2 hours; that's
+# the correct trade.
 concurrency:
   group: model-sweep
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   RESULTS_BASE: /mnt/benchmark-results
@@ -166,11 +176,38 @@ jobs:
             exit 1
           fi
           echo "Analyzing: $FILES"
+          # Prepend a header line that downstream consumers (the n8n
+          # sweep-runner posting tracking issues) can grep for to know
+          # which sweep this report belongs to.
+          {
+            echo "<!--"
+            echo "  sweep_id:   ${{ github.run_id }}"
+            echo "  model:      ${{ github.event.inputs.model || 'all' }}"
+            echo "  payload:    ${{ github.event.inputs.payload || 'all' }}"
+            echo "  runs:       ${{ github.event.inputs.runs || '1' }}"
+            echo "  requester:  ${{ github.event.inputs.requester || 'operator' }}"
+            echo "-->"
+            echo
+          } > report.md
           python benchmarks/analyze.py $FILES \
             --ollama "$OLLAMA_URL" \
-            --out report.md
+            --out /tmp/analyze.md
+          cat /tmp/analyze.md >> report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
           cp report.md "${RESULTS_BASE}/run-${{ github.run_id }}/report.md"
+
+      # Upload report.md as a workflow artifact so the n8n sweep-runner
+      # can fetch it via the GH API without needing PVC mounts. Retained
+      # for 30 days; the canonical copy lives on the benchmark-results
+      # PVC for longer-term querying.
+      - name: Upload report.md as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ github.run_id }}
+          path: report.md
+          retention-days: 30
+          if-no-files-found: warn
 
       - name: Prune runs older than 30 days
         if: always()
