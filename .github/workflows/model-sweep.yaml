@@ -165,7 +165,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Analyze results
+      - name: Analyze results (local — qwen3.6:35b)
+        id: analyze-local
         env:
           OLLAMA_URL: http://ollama.ollama.svc.cluster.local
         run: |
@@ -175,6 +176,8 @@ jobs:
             echo "No result files found in $RUN_DIR — all sweep jobs may have failed."
             exit 1
           fi
+          # Stash for the Claude step to reuse without re-finding.
+          echo "result_files=$FILES" >> "$GITHUB_OUTPUT"
           echo "Analyzing: $FILES"
           # Prepend a header line that downstream consumers (the n8n
           # sweep-runner posting tracking issues) can grep for to know
@@ -196,16 +199,61 @@ jobs:
           cat report.md >> "$GITHUB_STEP_SUMMARY"
           cp report.md "${RESULTS_BASE}/run-${{ github.run_id }}/report.md"
 
-      # Upload report.md as a workflow artifact so the n8n sweep-runner
-      # can fetch it via the GH API without needing PVC mounts. Retained
-      # for 30 days; the canonical copy lives on the benchmark-results
-      # PVC for longer-term querying.
-      - name: Upload report.md as artifact
+      # Phase 2 dual-summarize (model-testing#36): same JSONL data also
+      # gets analyzed via Claude (through OWUI's Anthropic Connection) so
+      # every sweep produces two paired summaries — one local, one Claude.
+      # That data closes the A3 row of homelab#292 (quality-gap
+      # measurement of Anthropic vs local LLMs).
+      #
+      # continue-on-error so a Claude/OWUI failure (network, rate limit,
+      # missing secret on fresh deploy) doesn't fail the whole sweep —
+      # we still ship the local report. The notify step downstream
+      # checks for report-claude.md and falls back to a stub if missing.
+      - name: Analyze results (Claude — claude-haiku-4-5)
+        id: analyze-claude
+        continue-on-error: true
+        env:
+          OWUI_URL: http://open-webui.open-webui.svc.cluster.local
+          OWUI_API_KEY: ${{ secrets.OWUI_API_KEY }}
+          CLAUDE_MODEL: claude-haiku-4-5-20251001
+        run: |
+          if [ -z "$OWUI_API_KEY" ]; then
+            echo "::warning::OWUI_API_KEY not set in repo secrets — skipping Claude analysis. Set with: gh secret set OWUI_API_KEY --repo dvystrcil/model-testing"
+            exit 0
+          fi
+          FILES="${{ steps.analyze-local.outputs.result_files }}"
+          if [ -z "$FILES" ]; then
+            echo "No result files to analyze; skipping Claude step."
+            exit 0
+          fi
+          {
+            echo "<!--"
+            echo "  sweep_id:   ${{ github.run_id }}"
+            echo "  summarizer: $CLAUDE_MODEL"
+            echo "-->"
+            echo
+          } > report-claude.md
+          python benchmarks/analyze_claude.py $FILES \
+            --owui-url "$OWUI_URL" \
+            --model "$CLAUDE_MODEL" \
+            --out /tmp/analyze-claude.md
+          cat /tmp/analyze-claude.md >> report-claude.md
+          echo "## Claude analysis (via OWUI)" >> "$GITHUB_STEP_SUMMARY"
+          cat report-claude.md >> "$GITHUB_STEP_SUMMARY"
+          cp report-claude.md "${RESULTS_BASE}/run-${{ github.run_id }}/report-claude.md"
+
+      # Upload report.md (local) + report-claude.md (Claude) as workflow
+      # artifacts so the n8n sweep-runner can fetch them via the GH API
+      # without needing PVC mounts. Retained for 30 days; the canonical
+      # copies live on the benchmark-results PVC for longer-term querying.
+      - name: Upload reports as artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: report-${{ github.run_id }}
-          path: report.md
+          path: |
+            report.md
+            report-claude.md
           retention-days: 30
           if-no-files-found: warn
 
@@ -240,6 +288,13 @@ jobs:
             REPORT_FILE="/tmp/empty-report.md"
             printf "_(no report.md produced — sweep failed before analyze step)_\n" > "$REPORT_FILE"
           fi
+          # Claude side: may be missing if the secret is unset or the step
+          # failed (continue-on-error). Stub so the JSON body stays valid.
+          REPORT_CLAUDE_FILE="report-claude.md"
+          if [ ! -f "$REPORT_CLAUDE_FILE" ]; then
+            REPORT_CLAUDE_FILE="/tmp/empty-report-claude.md"
+            printf "_(no Claude analysis produced — OWUI_API_KEY may be unset, or the analyze-claude step failed)_\n" > "$REPORT_CLAUDE_FILE"
+          fi
           BODY=$(jq -nc \
             --arg run_id "${{ github.run_id }}" \
             --arg status "$STATUS" \
@@ -247,7 +302,8 @@ jobs:
             --arg requester "${{ github.event.inputs.requester }}" \
             --arg payload "${{ github.event.inputs.payload }}" \
             --rawfile report "$REPORT_FILE" \
-            '{run_id: $run_id, status: $status, model: $model, requester: $requester, payload: $payload, report: $report}')
+            --rawfile report_claude "$REPORT_CLAUDE_FILE" \
+            '{run_id: $run_id, status: $status, model: $model, requester: $requester, payload: $payload, report: $report, report_claude: $report_claude}')
           curl -sS --max-time 60 -X POST \
             -H 'Content-Type: application/json' \
             -d "$BODY" \
