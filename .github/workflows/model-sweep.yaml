@@ -214,3 +214,31 @@ jobs:
         run: |
           find "${RESULTS_BASE}" -maxdepth 1 -mindepth 1 -type d -mtime +30 \
             -exec echo "Pruning: {}" \; -exec rm -rf {} +
+
+      # Final step: notify the n8n model_sweep_complete webhook so the
+      # tracking GH issue gets a result comment + Discord ping. The
+      # webhook receiver lives in n8n-workflow/workflows/model_sweep_complete.json
+      # (model-testing#36 Phase 1 PR2). Defensive: failures here don't
+      # break the workflow — the artifact + report.md are still on the
+      # PVC, and the operator can fetch them by run_id.
+      - name: Notify n8n sweep-complete webhook
+        if: always()
+        env:
+          N8N_WEBHOOK_URL: http://n8n.n8n.svc.cluster.local:5678/webhook/model-sweep-complete
+        run: |
+          STATUS="${{ job.status }}"
+          BODY=$(jq -nc \
+            --arg run_id "${{ github.run_id }}" \
+            --arg status "$STATUS" \
+            --arg model "${{ github.event.inputs.model }}" \
+            --arg requester "${{ github.event.inputs.requester }}" \
+            --arg payload "${{ github.event.inputs.payload }}" \
+            '{run_id: $run_id, status: $status, model: $model, requester: $requester, payload: $payload}')
+          curl -sS --max-time 30 -X POST \
+            -H 'Content-Type: application/json' \
+            -d "$BODY" \
+            "$N8N_WEBHOOK_URL" \
+            && rc=0 || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "::warning::n8n sweep-complete notification failed (rc=$rc). report.md is still on PVC at ${RESULTS_BASE}/run-${{ github.run_id }}/report.md and as workflow artifact."
+          fi
