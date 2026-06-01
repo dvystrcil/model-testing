@@ -232,7 +232,7 @@ jobs:
       - name: Notify n8n sweep-complete webhook
         if: always()
         env:
-          N8N_WEBHOOK_URL: http://n8n.n8n.svc.cluster.local:5678/webhook/model-sweep-complete
+          N8N_WEBHOOK_URL: http://n8n.n8n-workflow.svc.cluster.local/webhook/model-sweep-complete
         run: |
           STATUS="${{ job.status }}"
           REPORT_FILE="report.md"
