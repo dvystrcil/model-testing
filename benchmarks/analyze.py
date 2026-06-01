@@ -17,7 +17,13 @@ from pathlib import Path
 
 DEFAULT_OLLAMA = "http://localhost:11434"
 ANALYSIS_MODEL = "qwen3.6:35b"
-HTTP_TIMEOUT = 300
+# 30 min — qwen3.6:35b on gfx1151 chews structured input at ~30 TPS,
+# so even a single-payload sweep result with ~8K tokens of structured
+# input can take 5-15 min. Sweep #44 (2026-06-01) tripped the prior
+# 5-min cap; same root cause as the n8n weekly_stack_summary timeout
+# fix in n8n-workflow#72. 30 min matches the headroom Claude-side
+# (analyze_claude.py) uses on the slow-but-rare path.
+HTTP_TIMEOUT = 1800
 
 
 def load_results(*paths: Path) -> tuple[dict | None, list[dict], list[dict]]:
