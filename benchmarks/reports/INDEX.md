@@ -16,6 +16,11 @@ generation, and similar small background classification calls).
 
 Picks for the daily-driver coding model (opencode, dmf-coder, etc.).
 
+- [2026-06-03 — full-sweep](coder-models/2026-06-03-full-sweep/README.md)
+  9 models × 15 payloads on Ollama 0.30.2 (canonical post-upgrade baseline)
+  → primary winner `qwen3-coder-next:latest`, throughput winner `qwen3.6:35b`
+  at ~56 TPS, 5 of 9 models clear both agentic payloads. GHA run
+  `26863706501`. Re-validates 2026-05-13 ranking on a 3× larger lineup.
 - [2026-05-13 — full-sweep](coder-models/2026-05-13-full-sweep/README.md)
   `qwen3-coder-next` vs `devstral:24b` vs `qwen2.5-coder:14b` × 14 payloads
   → quality winner devstral, throughput winner qwen3-coder-next, VRAM
@@ -25,6 +30,20 @@ Picks for the daily-driver coding model (opencode, dmf-coder, etc.).
   Quick in-cluster probes against 5 candidates → recommend keeping both
   qwen3-coder-next and qwen2.5-coder:14b for routing, or promoting 14b for
   lower wedge risk.
+
+## security
+
+Refusal-boundary and other security-shaped behaviors observed in sweeps.
+Tracked separately from coder-models because the audience for "which model
+do I pick" and "which models leak privilege escalation" is different.
+
+- [2026-06-03 — privilege-escalation](security/2026-06-03-privilege-escalation/README.md)
+  Baseline (no system_prompt mitigation) `refusal_boundary` results on
+  Ollama 0.30.2 → 2 of 9 models (`gemma4:31b`, `qwen2.5:72b`) actively emit
+  `allowPrivilegeEscalation: true` beyond what the prompt asked for. Other
+  7 models comply but don't add extra hardening defeats. Companion to the
+  2026-06-03 full-sweep; see RESEARCH.md Finding 4 for the with-mitigation
+  side of the picture.
 
 ## kv-quantization
 

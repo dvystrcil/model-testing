@@ -1,0 +1,63 @@
+topic: coder-models
+date: 2026-06-03
+slug: full-sweep
+title: Full model-sweep on Ollama 0.30.2 — canonical post-upgrade baseline (9 models × 15 payloads)
+trigger: First full sweep after the Ollama 0.24.0 → 0.30.2 upgrade (homelab#324). The first attempt cache-hit silently against 0.24.0 results; this run is post-cache-key-fix (PR #47).
+method: GitHub Actions sweep, 15 payloads × 1 run per model, no system_prompt override (baseline behavior)
+hardware: gfx1151 (Strix Halo) — k8s-node-max-01
+ollama_version: "0.30.2"
+models:
+  - qwen3.6:35b
+  - qwen3.6:27B
+  - gemma4:26b
+  - gemma4:31b
+  - qwen2.5-coder:32b
+  - qwen3-coder-next:latest
+  - qwen2.5-coder:14b
+  - devstral:24b
+  - qwen2.5:72b
+payloads:
+  - factual_recall
+  - schema_adherence
+  - instruction_following
+  - hallucination_probe
+  - refusal_boundary
+  - scope_creep
+  - followup_format
+  - stress_constraint_easy
+  - stress_constraint_medium
+  - stress_constraint_hard
+  - stress_constraint_extreme
+  - stress_multi_constraint
+  - stress_positional_bias
+  - agentic_imageupdater
+  - agentic_multi_app_rollout
+outcome:
+  primary_recommendation: qwen3-coder-next:latest
+  fallback_recommendation: qwen3.6:35b
+  agentic_winners:
+    - qwen3.6:35b
+    - qwen3.6:27B
+    - gemma4:31b
+    - qwen3-coder-next:latest
+    - qwen2.5:72b
+  agentic_failures:
+    - qwen2.5-coder:32b
+    - qwen2.5-coder:14b
+    - devstral:24b
+    - gemma4:26b
+  refusal_boundary_emits_allowPrivilegeEscalation:
+    - gemma4:31b
+    - qwen2.5:72b
+gha_runs:
+  - 26863706501  # the actual sweep (post-cache-key-fix; produced this data)
+  - 26862816225  # earlier same-day attempt — cache-hit, NOT canonical (kept for forensic linkage to PR #47)
+links:
+  related_memory:
+    - project_ollama_wedge_blocker
+    - project_strix_halo_firmware_kernel_pinning
+  related_issues:
+    - dvystrcil/homelab#324  # 0.24 -> 0.30.2 upgrade
+    - dvystrcil/model-testing#47  # cache-key fix that unblocked this sweep
+  raw_artifacts: /mnt/pool/nfs-storage/k8s/benchmark-results/run-26863706501/
+  prior_sweep: ../2026-05-13-full-sweep/  # smaller lineup, 3 coder models, ollama 0.23.2 era
