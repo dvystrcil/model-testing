@@ -1,12 +1,24 @@
 name: test-cache
 
 # Validates the cache key logic used by model-sweep without hitting Ollama.
-# populate: writes a fake JSONL result and saves it to the cache.
-# verify:   restores from cache and asserts the file is present.
-# If verify passes, the same key logic can be trusted in model-sweep.
+#
+# populate                       writes a fake JSONL result and saves to cache.
+# verify                         restores from cache and asserts HIT (basic round-trip).
+# verify-version-bump-misses     uses a different OLLAMA_VERSION fixture, asserts
+#                                MISS — proves the version flows into the cache key.
+#                                Regression-tests the 2026-06-02 incident where an
+#                                ollama 0.24 -> 0.30.2 upgrade silently hit cache
+#                                because the version was not part of the key.
+#
+# Cache keys are namespaced with `test-${{ github.run_id }}-` so each workflow
+# run gets a fresh scope and old fixtures don't bleed across runs.
 
 on:
   workflow_dispatch:
+
+env:
+  OLLAMA_VERSION_BASE: 0.30.2-test
+  OLLAMA_VERSION_BUMP: 0.31.0-test
 
 jobs:
   populate:
@@ -18,10 +30,12 @@ jobs:
 
       - name: Generate cache key
         id: cache-key
+        env:
+          OLLAMA_VERSION: ${{ env.OLLAMA_VERSION_BASE }}
         run: |
           PAYLOAD_HASH=$(sha256sum benchmarks/payloads/factual_recall.json | cut -c1-16)
           MODELS_HASH=$(sha256sum models.yaml | cut -c1-16)
-          KEY="sweep-factual_recall-p${PAYLOAD_HASH}-m${MODELS_HASH}-r1-mall"
+          KEY="test-${{ github.run_id }}-sweep-factual_recall-p${PAYLOAD_HASH}-m${MODELS_HASH}-r1-mall-o${OLLAMA_VERSION}"
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
           echo "Cache key: $KEY"
 
@@ -50,10 +64,12 @@ jobs:
 
       - name: Generate cache key (same logic as populate)
         id: cache-key
+        env:
+          OLLAMA_VERSION: ${{ env.OLLAMA_VERSION_BASE }}
         run: |
           PAYLOAD_HASH=$(sha256sum benchmarks/payloads/factual_recall.json | cut -c1-16)
           MODELS_HASH=$(sha256sum models.yaml | cut -c1-16)
-          KEY="sweep-factual_recall-p${PAYLOAD_HASH}-m${MODELS_HASH}-r1-mall"
+          KEY="test-${{ github.run_id }}-sweep-factual_recall-p${PAYLOAD_HASH}-m${MODELS_HASH}-r1-mall-o${OLLAMA_VERSION}"
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
           echo "Cache key: $KEY"
 
@@ -79,3 +95,37 @@ jobs:
           echo "PASS: cache hit confirmed"
           echo "Result file: $RESULT"
           cat "$RESULT"
+
+  verify-version-bump-misses:
+    needs: populate
+    runs-on: model-testing-runner
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Generate cache key with bumped OLLAMA_VERSION
+        id: cache-key
+        env:
+          OLLAMA_VERSION: ${{ env.OLLAMA_VERSION_BUMP }}
+        run: |
+          PAYLOAD_HASH=$(sha256sum benchmarks/payloads/factual_recall.json | cut -c1-16)
+          MODELS_HASH=$(sha256sum models.yaml | cut -c1-16)
+          KEY="test-${{ github.run_id }}-sweep-factual_recall-p${PAYLOAD_HASH}-m${MODELS_HASH}-r1-mall-o${OLLAMA_VERSION}"
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          echo "Cache key (bumped): $KEY"
+
+      - name: Attempt restore — should MISS
+        id: cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: benchmarks/results/
+          key: ${{ steps.cache-key.outputs.key }}
+
+      - name: Assert MISS
+        run: |
+          echo "cache-hit=${{ steps.cache-restore.outputs.cache-hit }}"
+          if [ "${{ steps.cache-restore.outputs.cache-hit }}" = "true" ]; then
+            echo "FAIL: cache HIT despite OLLAMA_VERSION differing. The version is not"
+            echo "flowing into the cache key. Cache-busting on ollama upgrade is broken."
+            exit 1
+          fi
+          echo "PASS: cache MISS confirmed — OLLAMA_VERSION correctly busts the cache"

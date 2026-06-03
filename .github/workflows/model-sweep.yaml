@@ -76,15 +76,35 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Probe live ollama version so the cache key changes when the binary
+      # changes. Without this, an upstream binary upgrade (e.g. 0.24 -> 0.30.2
+      # on 2026-06-02) silently re-serves prior results because nothing in the
+      # workflow inputs changed. Regression-tested by
+      # .github/workflows/test-cache.yaml::verify-version-bump-misses.
+      - name: Probe ollama version
+        id: ollama
+        env:
+          OLLAMA_URL: http://ollama.ollama.svc.cluster.local
+        run: |
+          VERSION=$(curl -fsS --max-time 10 "${OLLAMA_URL}/api/version" | jq -r '.version')
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "::error::Could not probe ollama version from ${OLLAMA_URL}/api/version — refusing to generate cache key without it (would risk stale-cache reuse on binary upgrades)."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Ollama version: $VERSION"
+
       - name: Generate cache key
         id: cache-key
+        env:
+          OLLAMA_VERSION: ${{ steps.ollama.outputs.version }}
         run: |
           PAYLOAD_HASH=$(sha256sum benchmarks/payloads/${{ matrix.payload }}.json | cut -c1-16)
           MODELS_HASH=$(sha256sum models.yaml | cut -c1-16)
           RUNS="${{ github.event.inputs.runs || '1' }}"
           MODEL="${{ github.event.inputs.model || 'all' }}"
           SYSPROMPT_HASH=$(echo -n "${{ github.event.inputs.system_prompt }}" | sha256sum | cut -c1-8)
-          KEY="sweep-${{ matrix.payload }}-p${PAYLOAD_HASH}-m${MODELS_HASH}-r${RUNS}-m${MODEL}-s${SYSPROMPT_HASH}"
+          KEY="sweep-${{ matrix.payload }}-p${PAYLOAD_HASH}-m${MODELS_HASH}-r${RUNS}-m${MODEL}-s${SYSPROMPT_HASH}-o${OLLAMA_VERSION}"
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
           echo "Cache key: $KEY"
 
