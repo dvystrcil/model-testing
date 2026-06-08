@@ -13,6 +13,14 @@ models:
   # by-side sweep showing the QAT variant matches or beats it on
   # text-only payloads.
   - name: gemma4:31b-it-qat       # ~18 GB
+  # Added 2026-06-08 — qwen3.6:35b replacement candidate. TPS smoke
+  # measured 53.5 tok/s vs qwen3.6:35b at 53.5 tok/s — exact match on
+  # generation throughput, with 35% smaller disk (15 GB vs 23 GB) and
+  # ~half the cold-load time (8.9s vs 16.4s). MoE architecture with
+  # ~4B active params per token (the "a4b" in the tag name), matching
+  # qwen35moe's MoE structural class for fair comparison. Sweep tells
+  # us if quality + agentic + refusal-boundary dimensions also hold up.
+  - name: gemma4:26b-a4b-it-qat   # ~15 GB
   - name: qwen2.5-coder:32b
   - name: qwen3-coder-next:latest
   - name: qwen2.5-coder:14b
