@@ -26,9 +26,39 @@ ollama_image: harbor.sirddail.net/ai/ollama:0.30.6-rocm-homelab
 candidates:
   incumbent: qwen3.6:35b
   considered:
-    - gemma4:e2b-it-qat   # smoke smallest only
-    - gemma4:31b-it-qat   # disqualified at TPS smoke (~6.4 tok/s)
-    - gemma4:26b-a4b-it-qat   # the real swap candidate
+    # Capability smoke only (homelab#184 vision retest baseline). NOT a
+    # swap candidate at 4.6B — below the size class for the qwen3.6:35b
+    # role — but recorded here because the report is the only document
+    # that captures the actual e2b vision-smoke numbers.
+    - tag: gemma4:e2b-it-qat
+      role: capability-smoke
+      text_smoke:
+        prompt: "Say hello in exactly 3 words."
+        response: "Hello there now."
+        done_reason: stop
+        eval_count: 91
+        total_ms: 3393
+      vision_smoke:
+        prompt: "Describe this image briefly."
+        image: 64x64 red PNG (RGB 220,30,30)
+        response: "The image is a solid block of bright red color. It contains no objects, text, or discernible features other than its uniform color."
+        done_reason: stop
+        eval_count: 298
+        total_ms: 4301
+    # Disqualified at stage 1 TPS smoke (~6.4 tok/s vs incumbent 53.5).
+    # Vision-smoked here to cross-confirm the QAT vision-fix from
+    # homelab#184 holds at the 31b size class.
+    - tag: gemma4:31b-it-qat
+      role: tps-smoke-disqualified
+      vision_smoke:
+        prompt: "Describe this image briefly."
+        response: "A solid red square."
+        done_reason: stop
+        eval_count: 110
+        total_ms: 25126
+    # The real swap candidate. Full sweep evidence in stage 2.
+    - tag: gemma4:26b-a4b-it-qat
+      role: swap-candidate
 payloads:
   - factual_recall
   - schema_adherence
