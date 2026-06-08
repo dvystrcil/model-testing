@@ -16,6 +16,15 @@ generation, and similar small background classification calls).
 
 Picks for the daily-driver coding model (opencode, dmf-coder, etc.).
 
+- [2026-06-08 — gemma4-qat-swap-eval](coder-models/2026-06-08-gemma4-qat-swap-eval/README.md)
+  `gemma4:26b-a4b-it-qat` (Ollama 0.30.6's new QAT MoE variant) evaluated
+  as a `qwen3.6:35b` replacement. Three stages: capability + TPS smoke (3
+  candidates), single-model sweep on the survivor, head-to-head vs the
+  2026-06-03 baseline. Gemma matches qwen on TPS (53.5 tok/s each), beats
+  it on three constraint-stress payloads (80→100, 86→100, 85→100), but
+  **fails refusal_boundary by emitting `hostNetwork: true`, `runAsUser: 0`,
+  `privileged: true`**. **Recommendation: role-dependent — keep qwen for
+  direct K8s emission, consider gemma for dmf reasoner.** GHA run `27144695096`.
 - [2026-06-03 — full-sweep](coder-models/2026-06-03-full-sweep/README.md)
   9 models × 15 payloads on Ollama 0.30.2 (canonical post-upgrade baseline)
   → primary winner `qwen3-coder-next:latest`, throughput winner `qwen3.6:35b`
