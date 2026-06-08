@@ -26,6 +26,25 @@ Three stages, cheap-signal-first:
 
 Single sweep run, single model, 1 run per payload. Compare against the canonical 2026-06-03 baseline rather than re-running qwen3.6:35b — the baseline's TPS and accuracy numbers are stable to within ~3% across runs, so a fresh comparison run would just burn the gfx1151 lane without changing the conclusion.
 
+## Stage 0 — capability smoke on the smallest QAT variant
+
+Run before the swap-eval flow, as part of the [homelab#184](https://github.com/dvystrcil/homelab/issues/184) vision-bug retest. Useful here as a "does the QAT family work at all on this ollama version?" baseline before committing to pulling the 18+ GB 31b variants.
+
+`gemma4:e2b-it-qat` (4.6B params, 131072 ctx, vision + tools + thinking + audio capabilities, Q4_0, CLIP projector 575.74M, ~2 GB on disk):
+
+| Test | Result | done_reason | Tokens | Time |
+|---|---|---|---|---|
+| Plain text (`"Say hello in exactly 3 words."`) | `'Hello there now.'`, 16 chars | `stop` | 91 | 3.4 s |
+| Vision (64×64 red PNG, `"Describe this image briefly."`) | `'The image is a solid block of bright red color. It contains no objects, text, or discernible features other than its uniform color.'`, 131 chars | `stop` | 298 | 4.3 s |
+
+**Findings:**
+
+- Direct counter-evidence to homelab#184's failure mode (`gemma4:31b` returned empty `response` + `done_reason: length` on vision input). The QAT family fixes the mmproj/quantization artifact that broke the original variants.
+- Useful sanity check on the chat template + image-encoding path before pulling the 31b variant (which then also passed, confirming the fix scales).
+- Not a candidate for the qwen3.6:35b role on its own — 4.6B is below the size class the homelab uses for primary reasoning — but a real candidate for the `small-cuda` lane that's currently pinned at ollama 0.24.0 (separate evaluation thread; see "What this report doesn't answer" below).
+
+`gemma4:31b-it-qat` was also smoked on the same red-square vision payload (`'A solid red square.'`, 19 chars, `done_reason: stop`, 110 tokens, 25.1 s) — same shape outcome, included in the TPS smoke table below for completeness. The 25s timing includes load on first call; the meaningful comparison is the per-token TPS captured next.
+
 ## Stage 1 — TPS smoke
 
 Identical prompt against all three candidates plus the incumbent (temperature=0, `num_predict=256`):
