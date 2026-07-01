@@ -198,9 +198,23 @@ def _interactive_provider(task, dim):
         print("    enter 0, 1, 2, or 3")
 
 
-def score_rows(rows, provider=_interactive_provider):
+def _row_key(r):
+    return (r["task_id"], r["side"], r["run_n"])
+
+
+def score_rows(rows, provider=_interactive_provider, prior=None, on_scored=None):
+    """Score each row. `prior` (key -> scores) skips already-done rows so an
+    interrupted interactive session resumes; `on_scored` persists each newly
+    scored row immediately so nothing is lost if the process dies mid-session."""
+    prior = prior or {}
     for row in rows:
+        key = _row_key(row)
+        if key in prior:
+            row["scores"] = prior[key]
+            continue
         row["scores"] = {**auto_scores(row), **collect_human(row, provider)}
+        if on_scored:
+            on_scored(row)
     return rows
 
 
@@ -301,7 +315,24 @@ def main(argv=None):
     else:
         provider = _interactive_provider
 
-    score_rows(rows, provider)
+    # Resume + crash-safe persistence: prior scores are reloaded, new ones are
+    # appended as they're entered so a long interactive session survives a crash.
+    scored_path = args.inp.with_suffix(".scored.jsonl")
+    prior = {}
+    if scored_path.exists():
+        for line in scored_path.read_text().splitlines():
+            if line.strip():
+                pr = json.loads(line)
+                prior[_row_key(pr)] = pr["scores"]
+        if prior:
+            print(f"resuming: {len(prior)} rows already scored in {scored_path.name}")
+
+    with scored_path.open("a") as sink_f:
+        def on_scored(row):
+            sink_f.write(json.dumps(row) + "\n")
+            sink_f.flush()
+        score_rows(rows, provider, prior=prior, on_scored=on_scored)
+
     agg = aggregate(rows)
     out = args.out or args.inp.with_suffix(".report.md")
     write_report(agg, out)
