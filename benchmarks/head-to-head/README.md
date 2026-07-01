@@ -38,6 +38,25 @@ enough," and what would close it.** This is calibration, not a sales pitch.
 benchmark only means anything if memory injection is confirmed live on the
 opencode side — hence the pre-run probe (AC4).
 
+## Capture mode — response-only (Option 1)
+
+opencode is **agentic**: left alone it *executes* a task with tools (writes
+files, runs commands) and returns a terse summary, so the artifact never appears
+in stdout — not comparable to `claude -p`'s inline answer, and a repo-pollution
+risk. To keep the comparison symmetric this harness runs **response-only**:
+
+- Every task prompt (both sides) gets `RESPONSE_ONLY_SUFFIX` appended: *return
+  the complete answer inline, don't write files or use tools*.
+- opencode runs in a throwaway `--dir` sandbox (defense in depth — its writes,
+  if any, can't touch the repo under test).
+
+This measures **model answer quality**, apples-to-apples. The trade-off (accepted
+when Option 1 was chosen): tasks that would exercise real tool use can't. So for
+the three execution-flavored tasks (03, 05, 14) `tool_coherence` is scored as
+*reasoning* coherence — does the described plan/walk-through hold together —
+rather than "did it invoke the tool." A later revision could add an agent-aware
+capture path for those (Option 3); this is the honest first pass.
+
 ## Directory layout
 
 ```
