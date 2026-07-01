@@ -20,8 +20,10 @@ not buried in the code.
 import argparse
 import datetime
 import json
+import os
 import re
 import shlex
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -44,6 +46,10 @@ PIPELINES_SELECTOR = "app=owui-pipelines"
 FILTER_MARKER = "memory_loader_postgres/filter/inlet"
 PROBE_BUFFER_SECS = 5  # small look-back cushion before the probe call starts
 PROBE_PROMPT = "Reply with the single word: ok"
+# Per-run wall cap. opencode is agentic and can stall in a tool loop (observed
+# on cross-repo-linking); without this one hung call blocks the whole sweep.
+# A timeout becomes a recorded stall row, not an infinite block.
+RUN_TIMEOUT_SECS = 300
 
 FIXTURE_RE = re.compile(r"<contents of (fixtures/[^>]+)>")
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -98,11 +104,21 @@ def run_cli(cmd_template: str, prompt: str, dry_run: bool):
     if dry_run:
         return f"[dry-run] would run: {cmd[:120]}...", 0.0
     start = utcnow()
-    proc = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    # start_new_session so a timeout can kill the whole process group -- opencode
+    # spawns node workers that a plain proc kill would orphan.
+    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True, start_new_session=True)
+    try:
+        stdout, stderr = proc.communicate(timeout=RUN_TIMEOUT_SECS)
+    except subprocess.TimeoutExpired:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        proc.communicate()
+        latency = (utcnow() - start).total_seconds()
+        return f"[TIMEOUT after {RUN_TIMEOUT_SECS}s -- stall]", latency
     latency = (utcnow() - start).total_seconds()
-    out = clean_output(proc.stdout)
+    out = clean_output(stdout)
     if proc.returncode != 0:
-        out = f"[exit {proc.returncode}] {clean_output(proc.stderr)}\n{out}"
+        out = f"[exit {proc.returncode}] {clean_output(stderr)}\n{out}"
     return out, latency
 
 
