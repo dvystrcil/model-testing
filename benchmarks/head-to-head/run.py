@@ -31,10 +31,12 @@ PAYLOADS_DIR = HERE / "payloads"
 FIXTURES_DIR = HERE / "fixtures"
 RESULTS_DIR = HERE.parent / "results"
 
-# --- environment-specific knobs (TUNE for the local CLIs / cluster) -----------
+# --- environment-specific knobs (verified against the live env 2026-07-01) ----
 # {prompt} is substituted with the assembled task prompt.
 CLAUDE_CMD = 'claude -p {prompt}'
-OPENCODE_CMD = 'opencode run {prompt}'
+# opencode -m takes the config dict KEY, not the display name (qwen3-coder-next
+# surfaces as this key). `opencode models` lists them.
+OPENCODE_CMD = 'opencode run -m openwebui/qwen3-coder-next-opencode {prompt}'
 # opencode side memory-injection probe: filter activity must appear in the
 # pipelines pod logs within this window, or the run is aborted (AC4).
 PIPELINES_NS = "open-webui"
