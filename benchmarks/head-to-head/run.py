@@ -42,10 +42,20 @@ OPENCODE_CMD = 'opencode run -m openwebui/qwen3-coder-next-opencode {prompt}'
 PIPELINES_NS = "open-webui"
 PIPELINES_SELECTOR = "app=owui-pipelines"
 FILTER_MARKER = "memory_loader_postgres/filter/inlet"
-PROBE_WINDOW_SECS = 30
+PROBE_BUFFER_SECS = 5  # small look-back cushion before the probe call starts
 PROBE_PROMPT = "Reply with the single word: ok"
 
 FIXTURE_RE = re.compile(r"<contents of (fixtures/[^>]+)>")
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+# opencode prints a "> build · <model>" session header around the reply.
+OPENCODE_CHROME_RE = re.compile(r"^\s*>\s*build\s*·.*$", re.M)
+
+
+def clean_output(text: str) -> str:
+    """Strip terminal chrome so scored output is the model's actual reply."""
+    text = ANSI_RE.sub("", text)
+    text = OPENCODE_CHROME_RE.sub("", text)
+    return text.strip()
 
 
 def utcnow():
@@ -90,21 +100,30 @@ def run_cli(cmd_template: str, prompt: str, dry_run: bool):
     start = utcnow()
     proc = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     latency = (utcnow() - start).total_seconds()
-    out = proc.stdout.strip()
+    out = clean_output(proc.stdout)
     if proc.returncode != 0:
-        out = f"[exit {proc.returncode}] {proc.stderr.strip()}\n{out}"
+        out = f"[exit {proc.returncode}] {clean_output(proc.stderr)}\n{out}"
     return out, latency
 
 
 def probe_memory_injection(dry_run: bool) -> bool:
-    """AC4: confirm memory_loader_postgres filter fired recently. Abort if not."""
+    """AC4: confirm the memory_loader_postgres filter fires for the opencode path.
+
+    Brackets the actual probe call: records a start timestamp BEFORE nudging the
+    pipeline, then checks logs since that instant. This is robust to slow
+    generations (opencode on qwen3-coder-next runs ~30s -- a fixed --since=30s
+    lookback measured after the call races the window). Still fail-closed: it
+    only counts a filter fire triggered at/after this probe's start, so a stale
+    earlier fire can't produce a false pass.
+    """
     if dry_run:
         return True
-    # Nudge the pipeline so a fresh filter line lands, then inspect the logs.
+    start = utcnow() - datetime.timedelta(seconds=PROBE_BUFFER_SECS)
     run_cli(OPENCODE_CMD, PROBE_PROMPT, dry_run=False)
+    since = start.strftime("%Y-%m-%dT%H:%M:%SZ")
     cmd = (
         f"kubectl logs -n {PIPELINES_NS} -l {PIPELINES_SELECTOR} "
-        f"--since={PROBE_WINDOW_SECS}s --tail=500"
+        f"--since-time={since} --tail=2000"
     )
     proc = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     return FILTER_MARKER in proc.stdout
@@ -142,18 +161,22 @@ def main(argv=None):
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     out_path = args.out or (RESULTS_DIR / f"head-to-head-{utcnow():%Y%m%dT%H%M%S}.jsonl")
 
+    # AC4: confirm memory injection ONCE up front before counting any opencode
+    # runs. Routing doesn't change within a session, so a per-run probe just
+    # burns a ~30s opencode call each time.
+    if "opencode" in sides and not probe_memory_injection(args.dry_run):
+        print(
+            f"ABORT: memory injection not confirmed for opencode (no "
+            f"'{FILTER_MARKER}' in {PIPELINES_NS} logs for the probe call). "
+            f"Fix routing before counting runs.",
+            file=sys.stderr,
+        )
+        return 2
+
     n = 0
     with out_path.open("w") as f:
         for task_id in tasks:
             for side in sides:
-                if side == "opencode" and not probe_memory_injection(args.dry_run):
-                    print(
-                        f"ABORT: memory injection not confirmed for opencode "
-                        f"(no '{FILTER_MARKER}' in {PIPELINES_NS} logs in "
-                        f"{PROBE_WINDOW_SECS}s). Fix routing before counting runs.",
-                        file=sys.stderr,
-                    )
-                    return 2
                 for run_n in range(1, args.runs + 1):
                     row = run_one(task_id, side, run_n, args.dry_run)
                     f.write(json.dumps(row) + "\n")
