@@ -23,9 +23,11 @@ import json
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).parent
@@ -37,8 +39,21 @@ RESULTS_DIR = HERE.parent / "results"
 # {prompt} is substituted with the assembled task prompt.
 CLAUDE_CMD = 'claude -p {prompt}'
 # opencode -m takes the config dict KEY, not the display name (qwen3-coder-next
-# surfaces as this key). `opencode models` lists them.
-OPENCODE_CMD = 'opencode run -m openwebui/qwen3-coder-next-opencode {prompt}'
+# surfaces as this key). `opencode models` lists them. --dir sandboxes its file
+# writes into a throwaway dir so it can never touch the repo under test -- even
+# in response-only mode (defense in depth); {dir} is filled per session.
+OPENCODE_CMD = 'opencode run -m openwebui/qwen3-coder-next-opencode --dir {dir} {prompt}'
+
+# Response-only capture (model-testing#20, Option 1). opencode is agentic and
+# would otherwise DO the task via tools (write files, run commands) and return a
+# terse summary -- not comparable to claude -p's inline answer. Appended to every
+# task prompt on BOTH sides so the comparison is symmetric: model answer quality.
+RESPONSE_ONLY_SUFFIX = (
+    "\n\n---\n"
+    "IMPORTANT: Return the COMPLETE answer inline as text in this reply. Do not "
+    "write files, create issues/PRs, or use tools to perform the task -- produce "
+    "the full answer here in your response."
+)
 # opencode side memory-injection probe: filter activity must appear in the
 # pipelines pod logs within this window, or the run is aborted (AC4).
 PIPELINES_NS = "open-webui"
@@ -122,7 +137,7 @@ def run_cli(cmd_template: str, prompt: str, dry_run: bool):
     return out, latency
 
 
-def probe_memory_injection(dry_run: bool) -> bool:
+def probe_memory_injection(dry_run: bool, sandbox_dir: str) -> bool:
     """AC4: confirm the memory_loader_postgres filter fires for the opencode path.
 
     Brackets the actual probe call: records a start timestamp BEFORE nudging the
@@ -135,7 +150,7 @@ def probe_memory_injection(dry_run: bool) -> bool:
     if dry_run:
         return True
     start = utcnow() - datetime.timedelta(seconds=PROBE_BUFFER_SECS)
-    run_cli(OPENCODE_CMD, PROBE_PROMPT, dry_run=False)
+    run_cli(opencode_cmd(sandbox_dir), PROBE_PROMPT, dry_run=False)
     since = start.strftime("%Y-%m-%dT%H:%M:%SZ")
     cmd = (
         f"kubectl logs -n {PIPELINES_NS} -l {PIPELINES_SELECTOR} "
@@ -145,9 +160,13 @@ def probe_memory_injection(dry_run: bool) -> bool:
     return FILTER_MARKER in proc.stdout
 
 
-def run_one(task_id: str, side: str, run_n: int, dry_run: bool) -> dict:
-    prompt = load_prompt(task_id)
-    cmd_template = CLAUDE_CMD if side == "claude" else OPENCODE_CMD
+def opencode_cmd(sandbox_dir: str) -> str:
+    return OPENCODE_CMD.replace("{dir}", shlex.quote(sandbox_dir))
+
+
+def run_one(task_id: str, side: str, run_n: int, dry_run: bool, sandbox_dir: str) -> dict:
+    prompt = load_prompt(task_id) + RESPONSE_ONLY_SUFFIX
+    cmd_template = CLAUDE_CMD if side == "claude" else opencode_cmd(sandbox_dir)
     output, latency = run_cli(cmd_template, prompt, dry_run)
     return {
         "timestamp": utcnow().isoformat(),
@@ -177,29 +196,35 @@ def main(argv=None):
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     out_path = args.out or (RESULTS_DIR / f"head-to-head-{utcnow():%Y%m%dT%H%M%S}.jsonl")
 
-    # AC4: confirm memory injection ONCE up front before counting any opencode
-    # runs. Routing doesn't change within a session, so a per-run probe just
-    # burns a ~30s opencode call each time.
-    if "opencode" in sides and not probe_memory_injection(args.dry_run):
-        print(
-            f"ABORT: memory injection not confirmed for opencode (no "
-            f"'{FILTER_MARKER}' in {PIPELINES_NS} logs for the probe call). "
-            f"Fix routing before counting runs.",
-            file=sys.stderr,
-        )
-        return 2
+    # Throwaway sandbox for opencode's --dir so its (response-only-suppressed but
+    # not guaranteed-absent) file writes never land in the repo under test.
+    sandbox_dir = tempfile.mkdtemp(prefix="h2h-opencode-")
+    try:
+        # AC4: confirm memory injection ONCE up front before counting any opencode
+        # runs. Routing doesn't change within a session, so a per-run probe just
+        # burns a ~30s opencode call each time.
+        if "opencode" in sides and not probe_memory_injection(args.dry_run, sandbox_dir):
+            print(
+                f"ABORT: memory injection not confirmed for opencode (no "
+                f"'{FILTER_MARKER}' in {PIPELINES_NS} logs for the probe call). "
+                f"Fix routing before counting runs.",
+                file=sys.stderr,
+            )
+            return 2
 
-    n = 0
-    with out_path.open("w") as f:
-        for task_id in tasks:
-            for side in sides:
-                for run_n in range(1, args.runs + 1):
-                    row = run_one(task_id, side, run_n, args.dry_run)
-                    f.write(json.dumps(row) + "\n")
-                    f.flush()
-                    n += 1
-                    print(f"[{n}] {task_id} {side} run {run_n} "
-                          f"({row['latency_seconds']}s, {row['output_tokens']} tok)")
+        n = 0
+        with out_path.open("w") as f:
+            for task_id in tasks:
+                for side in sides:
+                    for run_n in range(1, args.runs + 1):
+                        row = run_one(task_id, side, run_n, args.dry_run, sandbox_dir)
+                        f.write(json.dumps(row) + "\n")
+                        f.flush()
+                        n += 1
+                        print(f"[{n}] {task_id} {side} run {run_n} "
+                              f"({row['latency_seconds']}s, {row['output_tokens']} tok)")
+    finally:
+        shutil.rmtree(sandbox_dir, ignore_errors=True)
 
     print(f"\nwrote {n} rows -> {out_path}")
     return 0
