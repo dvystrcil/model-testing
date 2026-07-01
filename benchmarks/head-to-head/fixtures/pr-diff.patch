@@ -1,0 +1,64 @@
+diff --git a/notify/webhook.py b/notify/webhook.py
+new file mode 100644
+index 0000000..1a2b3c4
+--- /dev/null
++++ b/notify/webhook.py
+@@ -0,0 +1,20 @@
++import time
++import urllib.request
++
++
++def post_with_retry(url, body, max_retries=3):
++    """POST body to url, retrying on failure with linear backoff."""
++    # BUG: range(max_retries - 1) makes only 2 attempts when max_retries=3
++    for attempt in range(max_retries - 1):
++        try:
++            req = urllib.request.Request(url, data=body, method="POST")
++            resp = urllib.request.urlopen(req, timeout=10)
++            if resp.status == 200:
++                return True
++        except Exception:
++            pass
++        time.sleep(attempt + 1)
++    return False
++
++
++def notify(url, body):
++    return post_with_retry(url, body)
+diff --git a/deploy/notify-secret.yaml b/deploy/notify-secret.yaml
+new file mode 100644
+index 0000000..5d6e7f8
+--- /dev/null
++++ b/deploy/notify-secret.yaml
+@@ -0,0 +1,9 @@
++apiVersion: v1
++kind: Secret
++metadata:
++  name: notify-webhook
++  namespace: default
++type: Opaque
++stringData:
++  # webhook token committed in the clear (literal secret in a repo manifest)
++  token: "hunter2-fake-webhook-token-do-not-commit"
+diff --git a/deploy/notify-cronjob.yaml b/deploy/notify-cronjob.yaml
+new file mode 100644
+index 0000000..9a8b7c6
+--- /dev/null
++++ b/deploy/notify-cronjob.yaml
+@@ -0,0 +1,16 @@
++apiVersion: batch/v1
++kind: CronJob
++metadata:
++  name: notify
++  namespace: default
++spec:
++  schedule: "*/5 * * * *"
++  jobTemplate:
++    spec:
++      template:
++        spec:
++          containers:
++            - name: notify
++              image: ghcr.io/dvystrcil/notify:latest
++              resources: {}
++          restartPolicy: OnFailure
