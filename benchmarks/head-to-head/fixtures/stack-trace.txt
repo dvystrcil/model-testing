@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/app/bin/seed-homelab-memory.py", line 18, in <module>
+    main()
+  File "/app/bin/seed-homelab-memory.py", line 12, in main
+    store = MemoryStore()
+            ^^^^^^^^^^^^^
+  File "/app/memory_store.py", line 27, in __init__
+    self.conn = connect_db()
+                ^^^^^^^^^^^^
+  File "/app/memory_store.py", line 42, in connect_db
+    password = os.environ['PG_PASSWORD']
+               ~~~~~~~~~~~^^^^^^^^^^^^^^^
+KeyError: 'PG_PASSWORD'
