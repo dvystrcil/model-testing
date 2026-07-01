@@ -28,7 +28,7 @@ enough," and what would close it.** This is calibration, not a sales pitch.
 | | Side A — Claude Code | Side B — opencode→OWUI |
 |---|---|---|
 | Driver | `claude` CLI (Anthropic) | `opencode` CLI (laptop) |
-| Primary model | `claude-opus-4-8` | `openwebui/qwen3-coder-next:latest` |
+| Primary model | `claude-opus-4-8` | `openwebui/qwen3-coder-next-opencode` (opencode key) |
 | Small model | n/a (single-tier) | `qwen3:0.6b` (dmf triage) |
 | Memory access | Auto-memory at `~/.claude/.../memory/*.md` | Same memory via OWUI filter (`memory_loader_postgres`) |
 | Skills | `~/.claude/skills/` | Same skills via opencode `skills.paths` |
