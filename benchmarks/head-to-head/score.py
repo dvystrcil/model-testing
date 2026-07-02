@@ -259,11 +259,13 @@ BIASES = """\
 - Tasks 09, 10, 11, 12, 16 are especially Claude-Code-style-sensitive; read with extra skepticism."""
 
 
-def write_report(agg, out_path: Path):
+def write_report(agg, out_path: Path, provenance: str = ""):
     lines = ["# Head-to-head report", "",
              "Claude Code (Side A) vs opencode->OWUI qwen3-coder-next (Side B).",
-             "Feeds homelab#292 A3 / open-webui#100.", "",
-             "## Per-side aggregate (0-3, higher better; latency/token_io raw)", ""]
+             "Feeds homelab#292 A3 / open-webui#100.", ""]
+    if provenance:
+        lines += [provenance, ""]
+    lines += ["## Per-side aggregate (0-3, higher better; latency/token_io raw)", ""]
     dims = QUAL_DIMS + ["latency", "token_io"]
     lines.append("| Side | " + " | ".join(dims) + " |")
     lines.append("|" + "---|" * (len(dims) + 1))

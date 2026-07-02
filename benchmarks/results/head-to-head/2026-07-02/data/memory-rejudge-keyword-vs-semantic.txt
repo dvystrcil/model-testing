@@ -1,0 +1,15 @@
+=== memory: keyword baseline vs semantic judge, per tier ===
+tier           keyword  judge  delta
+opus-4.8          2.38   2.88  +0.50
+sonnet-4.6        2.25   2.43  +0.18
+local(qwen)       0.88   1.00  +0.12
+
+=== per-task (keyword / judge), local(qwen) ===
+  01-issue-scoping           kw=0  judge=0
+  03-skill-invocation        kw=1  judge=2
+  04-manifest-authoring      kw=0  judge=3
+  06-tdd-design              kw=1  judge=0
+  08-arch-decision           kw=3  judge=3
+  09-cross-repo-linking      kw=1  judge=0
+  13-memory-qa               kw=0  judge=0
+  14-verification-design     kw=1  judge=0
