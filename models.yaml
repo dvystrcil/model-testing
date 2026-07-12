@@ -1,8 +1,8 @@
 models:
-  - name: qwen3.6:35b
-  - name: qwen3.6:27B
-  - name: gemma4:26b
-  - name: gemma4:31b
+  # - name: qwen3.6:35b
+  # - name: qwen3.6:27B
+  # - name: gemma4:26b
+  # - name: gemma4:31b
   # Added 2026-06-08 — homelab#184 — Gemma 4 QAT variant.
   # The plain `gemma4:31b` tag had broken vision (empty response,
   # done_reason=length) on ollama 0.30.x; the it-qat variant ships
@@ -12,7 +12,7 @@ models:
   # 575.74M. Keeping `gemma4:31b` in the lineup until we have a side-
   # by-side sweep showing the QAT variant matches or beats it on
   # text-only payloads.
-  - name: gemma4:31b-it-qat       # ~18 GB
+  # - name: gemma4:31b-it-qat       # ~18 GB
   # Added 2026-06-08 — qwen3.6:35b replacement candidate. TPS smoke
   # measured 53.5 tok/s vs qwen3.6:35b at 53.5 tok/s — exact match on
   # generation throughput, with 35% smaller disk (15 GB vs 23 GB) and
@@ -20,15 +20,18 @@ models:
   # ~4B active params per token (the "a4b" in the tag name), matching
   # qwen35moe's MoE structural class for fair comparison. Sweep tells
   # us if quality + agentic + refusal-boundary dimensions also hold up.
-  - name: gemma4:26b-a4b-it-qat   # ~15 GB
-  - name: qwen2.5-coder:32b
-  - name: qwen3-coder-next:latest
-  - name: qwen2.5-coder:14b
-  - name: devstral:24b
+  # - name: gemma4:26b-a4b-it-qat   # ~15 GB
+  # - name: qwen2.5-coder:32b
+  # - name: qwen3-coder-next:latest
+  # - name: qwen2.5-coder:14b
+  # - name: devstral:24b
   # Added 2026-05-30 — model-testing#18 — exercise 111 GiB ceiling on
   # max-01 (gfx1151) after XNACK enable. Issue cited qwen3.6:72b but
   # that tag doesn't exist in the ollama registry (404); qwen2.5:72b
   # is the closest same-family substitute. Size is q4_K_M default.
   # mixtral:8x22b and command-r-plus:104b deferred to follow-up
   # issues — pull bandwidth made bundling all three impractical.
-  - name: qwen2.5:72b           # ~45 GB
+  #- name: qwen2.5:72b           # ~45 GB
+  # Added 2026-07-11 - trying out qwen3.5:122b as it looks like it has potential. 
+  # this will be the first human initiated sweep test... wish me luck.
+  - name: qwen3.5:122b
