@@ -164,13 +164,22 @@ def opencode_cmd(sandbox_dir: str) -> str:
     return OPENCODE_CMD.replace("{dir}", shlex.quote(sandbox_dir))
 
 
-def run_one(task_id: str, side: str, run_n: int, dry_run: bool, sandbox_dir: str) -> dict:
+def claude_cmd(model: str | None) -> str:
+    # Pin a specific Claude tier (e.g. claude-sonnet-4-6, claude-fable-5) for the
+    # multi-tier Side-A sweep; bare CLAUDE_CMD uses the CLI default (Opus 4.8).
+    if not model:
+        return CLAUDE_CMD
+    return f"claude --model {shlex.quote(model)} -p {{prompt}}"
+
+
+def run_one(task_id: str, side: str, run_n: int, dry_run: bool, sandbox_dir: str,
+            claude_model: str | None = None, label: str | None = None) -> dict:
     prompt = load_prompt(task_id) + RESPONSE_ONLY_SUFFIX
-    cmd_template = CLAUDE_CMD if side == "claude" else opencode_cmd(sandbox_dir)
+    cmd_template = claude_cmd(claude_model) if side == "claude" else opencode_cmd(sandbox_dir)
     output, latency = run_cli(cmd_template, prompt, dry_run)
     return {
         "timestamp": utcnow().isoformat(),
-        "side": side,
+        "side": label or side,  # tier label for the multi-model comparison
         "task_id": task_id,
         "run_n": run_n,
         "latency_seconds": round(latency, 3),
@@ -188,6 +197,10 @@ def main(argv=None):
     ap.add_argument("--runs", type=int, default=3)
     ap.add_argument("--out", type=Path, default=None, help="JSONL output path")
     ap.add_argument("--dry-run", action="store_true", help="assemble + echo, don't invoke CLIs")
+    ap.add_argument("--claude-model", default=None,
+                    help="pin a Claude tier for Side A (e.g. claude-sonnet-4-6, claude-fable-5); default = CLI default")
+    ap.add_argument("--label", default=None,
+                    help="override the recorded side label (e.g. sonnet-4-6) for the multi-tier sweep")
     args = ap.parse_args(argv)
 
     sides = ["claude", "opencode"] if args.side == "both" else [args.side]
@@ -217,7 +230,8 @@ def main(argv=None):
             for task_id in tasks:
                 for side in sides:
                     for run_n in range(1, args.runs + 1):
-                        row = run_one(task_id, side, run_n, args.dry_run, sandbox_dir)
+                        row = run_one(task_id, side, run_n, args.dry_run, sandbox_dir,
+                                      claude_model=args.claude_model, label=args.label)
                         f.write(json.dumps(row) + "\n")
                         f.flush()
                         n += 1
