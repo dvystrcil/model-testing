@@ -1,8 +1,8 @@
 models:
   # - name: qwen3.6:35b
   # - name: qwen3.6:27B
-  # - name: gemma4:26b
-  # - name: gemma4:31b
+  - name: gemma4:26b
+  - name: gemma4:31b
   # Added 2026-06-08 — homelab#184 — Gemma 4 QAT variant.
   # The plain `gemma4:31b` tag had broken vision (empty response,
   # done_reason=length) on ollama 0.30.x; the it-qat variant ships
