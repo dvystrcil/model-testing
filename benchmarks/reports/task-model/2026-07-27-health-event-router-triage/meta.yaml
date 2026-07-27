@@ -1,0 +1,36 @@
+topic: task-model
+date: 2026-07-27
+slug: health-event-router-triage
+title: Health Event Router triage pick — keep llama3.2:1b, don't swap to lfm2.5-thinking:1.2b
+trigger: general small-LLM CUDA-lane sweep (GHA 30289109165) recommended lfm2.5-thinking:1.2b as a blanket llama3.2:1b replacement, but tested no payload matching Health Event Router's actual one-line-classification prompt shape
+method: replicate Build Triage Prompt's exact wording in a new sweep payload (triage_one_line_classification), run both candidates, cross-check the wrong answer against Parse Triage's existing severity-ceiling logic
+hardware: ollama 0.32.1 on gfx1151 (Strix Halo), small-CUDA lane candidates
+models:
+  - llama3.2:1b
+  - lfm2.5-thinking:1.2b
+payloads:
+  - triage_one_line_classification  # new payload, mirrors Health Event Router's Build Triage Prompt exactly
+  - structured_json_triage_summary  # new payload, bonus finding (invalid JSON caught)
+  - structured_json_fix_proposal    # new payload, ran clean in this isolated (non-OWUI) context
+outcome:
+  winner: llama3.2:1b
+  loser: lfm2.5-thinking:1.2b
+  evidence:
+    - "both models answered wrong on a severity=CRITICAL OOMKilled scenario expecting needs_escalation"
+    - "llama3.2:1b said informational (8 tokens, 0.06s) -- Parse Triage's existing ceiling rule (severity=CRITICAL + informational -> needs_escalation) silently corrects this in production"
+    - "lfm2.5-thinking:1.2b said needs_action (859 tokens, 4.28s, 70x slower) -- the ceiling rule does NOT cover this case; this wrong answer would ship uncorrected"
+    - "bonus: llama3.2:1b produced invalid JSON on structured_json_triage_summary (echoed the enum placeholder literally, trailing prose after the JSON object) -- first real catch by the new validate:json_parse harness feature"
+  action_taken:
+    - "no change -- Health Event Router keeps llama3.2:1b"
+    - "posted as a status note on dvystrcil/homelab#571"
+raw_artifacts:
+  - raw/triage_one_line_classification.jsonl
+  - raw/structured_json_triage_summary.jsonl
+  - raw/structured_json_fix_proposal.jsonl
+links:
+  related_memory:
+    - feedback_small_model_triage_pattern_is_a_trap  # 1b too dumb, 3b too slow -- extended here: thinking-mode models add a third trap (verbose + falls outside the safety net)
+  related_issues:
+    - https://github.com/dvystrcil/homelab/issues/571
+    - https://github.com/dvystrcil/homelab/issues/577
+  related_commits: []

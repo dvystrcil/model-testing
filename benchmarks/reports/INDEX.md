@@ -8,6 +8,13 @@ Newest first within each topic.
 Picks for OWUI's `TASK_MODEL` env (handles follow-up suggestions, title
 generation, and similar small background classification calls).
 
+- [2026-07-27 — health-event-router-triage](task-model/2026-07-27-health-event-router-triage/README.md)
+  `llama3.2:1b` vs `lfm2.5-thinking:1.2b` on Health Event Router's exact
+  one-line-classification prompt shape → **winner: llama3.2:1b** (both
+  models answered wrong, but llama's wrong answer is caught by an existing
+  production safety net while lfm2.5's isn't — and lfm2.5 took 70x longer).
+  Overrides the general-sweep recommendation to swap to lfm2.5-thinking for
+  this specific role. GHA run `30292609330`.
 - [2026-05-15 — followup-formatting](task-model/2026-05-15-followup-formatting/README.md)
   `qwen3:1.7b` vs `llama3.2:3b` → **winner: llama3.2:3b** (qwen had per-token
   garbage output + a 5-min timeout; llama produced clean JSON)
