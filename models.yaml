@@ -1,5 +1,5 @@
 models:
-  # - name: qwen3.6:35b
+  - name: qwen3.6:35b
   # - name: qwen3.6:27B
   #- name: gemma4:26b
   #- name: gemma4:31b
@@ -20,7 +20,17 @@ models:
   # ~4B active params per token (the "a4b" in the tag name), matching
   # qwen35moe's MoE structural class for fair comparison. Sweep tells
   # us if quality + agentic + refusal-boundary dimensions also hold up.
-  # - name: gemma4:26b-a4b-it-qat   # ~15 GB
+  #
+  # Re-enabled 2026-07-27 alongside qwen3.6:35b — homelab#571/#577
+  # surfaced gemma4:26b-a4b-it-qat authoring malformed JSON and (via a
+  # separate OWUI builtin-tools bug) an unresolved question of whether
+  # it's even the right model for Log Analysis Agent / Health Event Fix
+  # Proposal's "reason about a fix, or confidently decline" role. This
+  # report's own "what this report doesn't answer" flagged a real
+  # integration test as missing before adopting this model for any
+  # reasoner role — this re-enable is exactly that follow-up, scoped to
+  # the structured_json_* payloads (not the general suite).
+  - name: gemma4:26b-a4b-it-qat   # ~15 GB
   # - name: qwen2.5-coder:32b
   # - name: qwen3-coder-next:latest
   # - name: qwen2.5-coder:14b
@@ -36,10 +46,10 @@ models:
   # this will be the first human initiated sweep test... wish me luck.
   #- name: qwen3.5:122b
   # Added 2026-07-27 - testing small models
-  - name: llama3.2:1b
-  - name: deepseek-r1:1.5b
-  - name: granite4.1:3b
-  - name: qwen3.5:2b
-  - name: qwen3.5:4b
-  - name: lfm2.5-thinking:1.2b
+  # - name: llama3.2:1b
+  # - name: deepseek-r1:1.5b
+  # - name: granite4.1:3b
+  # - name: qwen3.5:2b
+  # - name: qwen3.5:4b
+  # - name: lfm2.5-thinking:1.2b
   
