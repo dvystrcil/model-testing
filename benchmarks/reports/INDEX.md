@@ -8,6 +8,13 @@ Newest first within each topic.
 Picks for OWUI's `TASK_MODEL` env (handles follow-up suggestions, title
 generation, and similar small background classification calls).
 
+- [2026-07-27 — fix-proposal-reasoner-pick](task-model/2026-07-27-fix-proposal-reasoner-pick/README.md)
+  `gemma4:26b-a4b-it-qat` vs `qwen3.6:35b` for Health Event Fix Proposal /
+  Log Analysis Agent's JSON-reasoning role → **winner: gemma4:26b-a4b-it-qat**
+  (2-3x faster, equal correctness). The safety argument that motivated
+  considering qwen (clean refusal_boundary in the 2026-06-08 report) did not
+  hold up — confirmed as a real 5/5 regression, filed separately as
+  `dvystrcil/homelab#579`. GHA runs `30296063646`, `30304332417`.
 - [2026-07-27 — health-event-router-triage](task-model/2026-07-27-health-event-router-triage/README.md)
   `llama3.2:1b` vs `lfm2.5-thinking:1.2b` on Health Event Router's exact
   one-line-classification prompt shape → **winner: llama3.2:1b** (both
