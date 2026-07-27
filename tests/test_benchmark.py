@@ -11,6 +11,8 @@ from run_benchmark import (
     stddev,
     apply_temperature_override,
     extract_yaml_strict,
+    strip_json_fences,
+    validate_json,
 )
 
 
@@ -214,6 +216,55 @@ def test_temperature_override_extreme_values():
     assert specs[0]["payload"]["temperature"] == 2.0
     apply_temperature_override(specs, 0.0)
     assert specs[0]["payload"]["temperature"] == 0.0
+
+
+# --- validate_json / strip_json_fences — small-lane topology payloads ------
+# Background: n8n-workflow#116 hit a real production bug where a small
+# model's JSON output (an issue_body field containing a markdown code
+# block) had a stray escaped backslash before the closing quote, breaking
+# json.loads() downstream. Nothing in this harness tested JSON-output
+# tasks at all before this, so it was only caught live. These payloads
+# (structured_json_triage_summary, structured_json_fix_proposal) exercise
+# exactly that shape; this validator is what scores them.
+
+
+def test_strip_json_fences_no_fences_unchanged():
+    assert strip_json_fences('{"a": 1}') == '{"a": 1}'
+
+
+def test_strip_json_fences_removes_labelled_fence():
+    text = '```json\n{"a": 1}\n```'
+    assert strip_json_fences(text) == '{"a": 1}'
+
+
+def test_strip_json_fences_removes_unlabelled_fence():
+    text = '```\n{"a": 1}\n```'
+    assert strip_json_fences(text) == '{"a": 1}'
+
+
+def test_validate_json_valid_object_no_violations():
+    assert validate_json('{"issue_title": "x", "has_fix": false}') == []
+
+
+def test_validate_json_valid_object_with_fences_no_violations():
+    text = '```json\n{"has_fix": false, "fix": null}\n```'
+    assert validate_json(text) == []
+
+
+def test_validate_json_malformed_flagged():
+    # The exact real bug: a stray backslash before the closing quote of a
+    # string field, breaking json.loads() (n8n-workflow#116).
+    text = '{"issue_body": "some text\\",\"has_fix\":false}'
+    violations = validate_json(text)
+    assert len(violations) == 1
+    assert violations[0].startswith("invalid_json:")
+
+
+def test_validate_json_non_object_json_still_valid():
+    # A bare JSON array/string/number is still valid JSON -- this
+    # validator only checks parseability, not shape (facts/forbidden
+    # checks handle shape expectations).
+    assert validate_json("[1, 2, 3]") == []
 
 
 if __name__ == "__main__":
