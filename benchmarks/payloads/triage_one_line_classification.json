@@ -1,0 +1,26 @@
+{
+  "name": "triage_one_line_classification",
+  "description": "Mirrors Health Event Router's Build Triage Prompt exactly (n8n, homelab#571 / D-027): a bare one-line data string, no system prompt, asking for exactly one of three enum tokens. This role runs every 5 minutes on the small-CUDA lane, currently served by llama3.2:1b -- latency matters as much as correctness. Lets any small-lane candidate be measured on this exact prompt shape before a swap, rather than only on manifest-generation-style tasks.",
+  "quality_facts": [
+    "needs_escalation"
+  ],
+  "quality_forbidden": [
+    "needs_action",
+    "informational",
+    "i think",
+    "possibly",
+    "unsure",
+    "maybe"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "user",
+        "content": "severity=CRITICAL findings=1 primary=ollama-inference OOMKilled -> reply with one of: informational, needs_action, needs_escalation"
+      }
+    ]
+  }
+}

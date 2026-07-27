@@ -149,6 +149,37 @@ def extract_yaml_strict(text: str) -> str:
     return "\n".join(result).strip()
 
 
+def strip_json_fences(text: str) -> str:
+    """Strip markdown code fences the way n8n's Parse Fix Proposal / Parse
+    Triage nodes clean model output before JSON.parse (`.replace(/```[a-z]*\n?/g, '')`),
+    so this validator's leniency matches production exactly rather than an
+    idealized fenced-block extractor."""
+    return re.sub(r"```[a-zA-Z]*\n?", "", text).strip()
+
+
+def validate_json(text: str) -> list[str]:
+    """Confirm json.loads() succeeds on model output cleaned the same way
+    n8n's Parse Fix Proposal / Parse Triage nodes clean it (strip_think is
+    already applied by the caller before this runs; strip_json_fences here
+    mirrors their markdown-fence stripping). Returns [] for valid JSON,
+    else a one-element list describing the parse failure -- same contract
+    as validate_kubectl (empty = clean) so both feed the same
+    schema_violations column downstream.
+
+    Real motivating bug (n8n-workflow#116, homelab#573): a small model's
+    JSON output had an issue_body string field containing a markdown code
+    block; a stray escaped backslash before the closing quote broke
+    json.loads() downstream in production. Nothing in this harness tested
+    JSON-output tasks before this, so it was only caught live.
+    """
+    cleaned = strip_json_fences(text)
+    try:
+        json.loads(cleaned)
+        return []
+    except json.JSONDecodeError as e:
+        return [f"invalid_json: {e}"]
+
+
 def wrap_container_spec(yaml_str: str) -> str:
     """
     Embed a container spec snippet into a minimal Pod manifest so kubectl
@@ -469,14 +500,19 @@ def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
     schema_violations: list[str] = []
     validate_cfg = spec.get("validate")
     if validate_cfg:
-        raw_yaml = extract_yaml(content)
-        if validate_cfg.get("yaml_type") == "container_spec":
-            raw_yaml = wrap_container_spec(raw_yaml)
-        dry_run = validate_cfg.get("kubectl_dry_run", "client")
-        namespace = validate_cfg.get("namespace")
-        schema_violations = validate_kubectl(raw_yaml, dry_run, namespace)
-        if schema_violations:
-            info(f"[validate] unknown K8s fields: {schema_violations}")
+        if validate_cfg.get("type") == "json_parse":
+            schema_violations = validate_json(content)
+            if schema_violations:
+                info(f"[validate] invalid JSON: {schema_violations}")
+        else:
+            raw_yaml = extract_yaml(content)
+            if validate_cfg.get("yaml_type") == "container_spec":
+                raw_yaml = wrap_container_spec(raw_yaml)
+            dry_run = validate_cfg.get("kubectl_dry_run", "client")
+            namespace = validate_cfg.get("namespace")
+            schema_violations = validate_kubectl(raw_yaml, dry_run, namespace)
+            if schema_violations:
+                info(f"[validate] unknown K8s fields: {schema_violations}")
 
     return {
         "pec": resp.get("prompt_eval_count", 0),
@@ -506,8 +542,10 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         for m in spec["payload"].get("messages", [])
     )
 
+    validate_type = spec.get("validate", {}).get("type", "kubectl") if validates else None
+
     info(f"payload={name}  model={model}  msgs={msg_count}  ~{approx_tokens} tokens  runs={runs}"
-         + ("  +kubectl-validate" if validates else ""))
+         + (f"  +{validate_type}-validate" if validates else ""))
     if forbidden:
         print(f"         forbidden terms: {len(forbidden)}")
 
@@ -517,7 +555,10 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         print("  [dry-run] quality_forbidden:", forbidden)
         if validates:
             cfg = spec["validate"]
-            print(f"  [dry-run] kubectl validate: dry_run={cfg.get('kubectl_dry_run', 'client')}  yaml_type={cfg.get('yaml_type', 'full_resource')}")
+            if validate_type == "json_parse":
+                print("  [dry-run] json_parse validate: enabled")
+            else:
+                print(f"  [dry-run] kubectl validate: dry_run={cfg.get('kubectl_dry_run', 'client')}  yaml_type={cfg.get('yaml_type', 'full_resource')}")
         return None
 
     raw_results = []
@@ -701,7 +742,7 @@ def main():
     validated_payloads = [s["name"] for s in specs if s.get("validate")]
     print(f"Benchmark sweep: models={models}  payloads={[s['name'] for s in specs]}  runs={args.runs}")
     if validated_payloads:
-        info(f"kubectl schema validation enabled for: {validated_payloads}")
+        info(f"schema/format validation enabled for: {validated_payloads}")
 
     if args.report:
         report_root = Path(args.report).expanduser().resolve()

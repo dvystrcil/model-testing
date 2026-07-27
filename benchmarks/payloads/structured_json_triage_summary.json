@@ -1,0 +1,24 @@
+{
+  "name": "structured_json_triage_summary",
+  "description": "Mirrors Log Analysis Agent's OWUI Triage role (n8n, homelab#574 grounding): summarize a batch of raw Loki error/warning lines into structured JSON with per-error triage, overall severity, and an executive summary. Tests JSON-schema discipline and validity under multi-item summarization, not just single-field enum classification -- a distinct corner of the topology from the bare one-line triage payload.",
+  "quality_facts": [
+    "\"overall_severity\"",
+    "\"executive_summary\"",
+    "\"triaged\""
+  ],
+  "quality_forbidden": [],
+  "validate": {
+    "type": "json_parse"
+  },
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "user",
+        "content": "You are a Kubernetes log triage assistant. Given the following raw log lines from the last 6 hours, respond ONLY with valid JSON (no markdown fences), exactly this shape: {\"triaged\": [{\"service\": \"...\", \"signal\": \"...\", \"severity\": \"info|warn|error|critical\"}], \"overall_severity\": \"...\", \"executive_summary\": \"...\"}.\n\nLog lines:\n[2026-07-27T10:02:11Z] level=error service=harbor-registry msg=\"connection refused to postgres-repo1: dial tcp 10.96.4.12:5432: connect: connection refused\"\n[2026-07-27T10:02:14Z] level=error service=harbor-registry msg=\"connection refused to postgres-repo1: dial tcp 10.96.4.12:5432: connect: connection refused\"\n[2026-07-27T10:05:02Z] level=warn service=n8n msg=\"webhook registration retry 2/3\"\n[2026-07-27T10:12:44Z] level=error service=ollama msg=\"CUDA out of memory: tried to allocate 512.00 MiB\""
+      }
+    ]
+  }
+}

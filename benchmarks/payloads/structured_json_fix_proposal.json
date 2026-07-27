@@ -1,0 +1,24 @@
+{
+  "name": "structured_json_fix_proposal",
+  "description": "Mirrors Health Event Fix Proposal's OWUI Fix Proposal node exactly (n8n-workflow#116, homelab#571) -- same prompt template, using a scenario (OOMKilled + a plausible resource-limit fix) likely to invite a markdown code block inside the issue_body JSON string field. This is the exact shape that broke json.loads() in production this session (a stray escaped backslash before the closing quote of issue_body). validate:json_parse is the whole point of this payload -- facts/forbidden only check gross shape.",
+  "quality_facts": [
+    "\"issue_title\"",
+    "\"issue_body\"",
+    "\"has_fix\""
+  ],
+  "quality_forbidden": [],
+  "validate": {
+    "type": "json_parse"
+  },
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "user",
+        "content": "You are a Kubernetes cluster health analyst reviewing an automated health-probe event from a homelab cluster.\n\nEvent: severity=CRITICAL classification=needs_escalation run_id=sweep-json-escaping-test\n\nFindings:\n1. service=ollama-inference signal=OOMKilled\n\nProbe summary:\n{\"service\":\"ollama-inference\",\"status\":\"crashlooping\",\"restart_count\":4}\n\nYour job:\n1. Always draft a well-thought-out GitHub issue describing this event -- background, what is known, affected service(s).\n2. Attempt to identify ONE specific, git-trackable fix (e.g. a resource-limit bump, a probe-timeout adjustment, a toleration change) ONLY if you can determine the deploying repo and the exact file to change with reasonable confidence. If you cannot determine this with confidence, set has_fix to false -- do not guess. \"I do not have enough information to propose a specific fix\" is a valid, expected outcome, not a failure.\n3. A fix must touch exactly ONE file in ONE repo under github.com/dvystrcil.\n\nRespond ONLY with valid JSON (no markdown fences), exactly this shape:\n{\"issue_title\":\"...\",\"issue_body\":\"...\",\"has_fix\":false,\"fix\":null}\nor, if a fix is identified:\n{\"issue_title\":\"...\",\"issue_body\":\"...\",\"has_fix\":true,\"fix\":{\"repo\":\"dvystrcil/<repo>\",\"file_path\":\"...\",\"new_content\":\"...\",\"commit_message\":\"...\",\"pr_title\":\"...\",\"pr_body\":\"...\"}}"
+      }
+    ]
+  }
+}
