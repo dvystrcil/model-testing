@@ -1,0 +1,3 @@
+resources:
+  - benchmark-results-pvc.yaml
+  - schema-validate-rbac.yaml
