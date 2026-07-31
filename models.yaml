@@ -39,9 +39,10 @@ models:
   # max-01 (gfx1151) after XNACK enable. Issue cited qwen3.6:72b but
   # that tag doesn't exist in the ollama registry (404); qwen2.5:72b
   # is the closest same-family substitute. Size is q4_K_M default.
-  # mixtral:8x22b and command-r-plus:104b deferred to follow-up
-  # issues — pull bandwidth made bundling all three impractical.
-  #- name: qwen2.5:72b           # ~45 GB
+  # command-r-plus:104b deferred to follow-up issue; mixtral:8x22b added
+  # per model-testing#27 (MoE architectural variety, ~80 GB at q4_K_M).
+  - name: mixtral:8x22b           # ~80 GB MoE (~4B active per token)
+  # - name: qwen2.5:72b           # ~45 GB
   # Added 2026-07-11 - trying out qwen3.5:122b as it looks like it has potential. 
   # this will be the first human initiated sweep test... wish me luck.
   #- name: qwen3.5:122b
