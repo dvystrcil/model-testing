@@ -119,7 +119,7 @@ jobs:
         if: steps.cache-restore.outputs.cache-hit == 'true'
         run: echo "Cache hit — skipping Ollama for ${{ matrix.payload }}"
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         if: steps.cache-restore.outputs.cache-hit != 'true'
         with:
           python-version: '3.14'
@@ -178,7 +178,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
 
