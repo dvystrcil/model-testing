@@ -51,7 +51,7 @@ jobs:
           cat "$OUTFILE"
 
       - name: Save to cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: benchmarks/results/
           key: ${{ steps.cache-key.outputs.key }}
@@ -75,7 +75,7 @@ jobs:
 
       - name: Restore from cache
         id: cache-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: benchmarks/results/
           key: ${{ steps.cache-key.outputs.key }}
@@ -115,7 +115,7 @@ jobs:
 
       - name: Attempt restore — should MISS
         id: cache-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: benchmarks/results/
           key: ${{ steps.cache-key.outputs.key }}
