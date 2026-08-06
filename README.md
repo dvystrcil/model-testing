@@ -6,6 +6,8 @@ Benchmark suite for evaluating local LLMs as AI coding assistants in a homelab K
 
 The homelab runs an AI coding assistant pipeline (`dual_model_filter`) that routes tasks between a fast model (coder) and a reasoning model. When a new model is released, it needs to pass these benchmarks before being promoted to production. The tests are designed to catch the real failure modes we've observed: hallucinated YAML fields, scope violations (touching files outside the task), and forgetting constraints under cognitive load.
 
+Read [`LEARNED.md`](LEARNED.md) before proposing a model swap or a new sweep — it's the terse record of findings that turned out to matter, including the wrong hypotheses that were chased before being disproven. Cheaper to read than to re-discover.
+
 ## Repo layout
 
 ```
