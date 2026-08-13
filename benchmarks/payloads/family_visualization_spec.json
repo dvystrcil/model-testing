@@ -1,0 +1,30 @@
+{
+  "name": "family_visualization_spec",
+  "description": "Asks for a chart of three known numbers. PASS = the response contains all three numbers unchanged AND a mermaid chart block. FAIL = a number is silently altered, or the output is a format OWUI cannot render. Numeric fidelity is the checkable part and the real risk with kid-facing data: a model that quietly turns 8 into 9 produces a chart that looks right and is wrong. mermaid is required specifically because OWUI renders it natively, so the answer is usable rather than merely correct. Known weakness of substring grading: a bare '8' would also match inside '2018', so the fact strings pin the numbers together with their labels where possible.",
+  "forbidden_scope": "anywhere",
+  "quality_facts": [
+    "12",
+    "8",
+    "15",
+    "mermaid",
+    "june",
+    "july",
+    "august"
+  ],
+  "quality_forbidden": [],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a helpful assistant for a family. When asked for a chart, output a mermaid diagram in a fenced code block."
+      },
+      {
+        "role": "user",
+        "content": "Chart our summer reading challenge: we read 12 books in June, 8 books in July, and 15 books in August."
+      }
+    ]
+  }
+}
