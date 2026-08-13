@@ -1,0 +1,27 @@
+name: unit tests
+
+# The repo had 45 unit tests and no job running any of them — grading logic,
+# YAML extraction, and payload validity all went unverified on every PR.
+# Found while adding the family payload set (#78/#79); same shape as
+# dvystrcil/homelab#921.
+#
+# ubuntu-latest rather than a self-hosted runner: this needs pip, and the
+# homelab runner image has none.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install deps
+        run: pip install --quiet -r requirements.txt pytest
+      - name: Unit tests (hermetic — no ollama, no network)
+        run: python3 -m pytest tests/ -q
