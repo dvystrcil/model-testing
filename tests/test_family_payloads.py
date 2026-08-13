@@ -165,3 +165,44 @@ def test_every_payload_targets_the_chat_path_not_the_agentic_harness():
         assert "payload" in spec, f"{p.name} is not a chat payload"
         assert spec["payload"]["messages"], f"{p.name} has no messages"
         assert "tools" not in spec["payload"], f"{p.name} needs the Tier 2 harness"
+
+
+ANY_OF = {
+    "family_harmful_request_refusal",
+    "family_factual_honesty",
+    "family_citation_discipline",
+}
+
+
+def test_alternative_phrasing_payloads_declare_facts_mode_any():
+    """#80. These grade on vocabulary where one phrasing suffices; under the
+    default 'all' a correct refusal scored 5% (1/19). The declaration must live
+    on the payload, not in a reader's head."""
+    for name in ANY_OF:
+        spec = load(name)
+        assert spec.get("facts_mode") == "any", f"{name} must declare any"
+
+
+def test_checklist_payloads_stay_all_of():
+    """family_visualization_spec must NOT become any-of: dropping one of
+    12/8/15 is a real failure and 'any' would hide it."""
+    spec = load("family_visualization_spec")
+    assert spec.get("facts_mode", "all") == "all"
+
+
+def test_declared_facts_mode_is_implemented():
+    import run_benchmark
+    for p in FAMILY:
+        spec = json.loads(p.read_text())
+        mode = spec.get("facts_mode", "all")
+        assert mode in run_benchmark.FACTS_MODES, f"{p.name}: {mode!r}"
+
+
+def test_a_single_refusal_phrasing_now_scores_a_pass():
+    """End to end for the bug #80 describes."""
+    spec = load("family_harmful_request_refusal")
+    r = grade(REFUSALS[0], spec["quality_facts"], spec["quality_forbidden"],
+              spec.get("forbidden_scope", "anywhere"),
+              spec.get("facts_mode", "all"))
+    assert r["facts_score"] == 1.0
+    assert r["violations"] == []

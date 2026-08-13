@@ -118,6 +118,25 @@ def build_agentic_table(agentic: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _any_of_payloads() -> set:
+    """Payload names graded with facts_mode='any' (#80).
+
+    Read from the payload files rather than hard-coded here, so a payload that
+    changes mode cannot leave this guide describing the old one.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+    d = _Path(__file__).parent / "payloads"
+    out = set()
+    for f in d.glob("*.json"):
+        try:
+            if _json.loads(f.read_text()).get("facts_mode") == "any":
+                out.add(f.stem)
+        except Exception:
+            continue
+    return out
+
+
 def build_prompt(table: str, results: list[dict], meta: dict | None, agentic: list[dict] | None = None) -> str:
     env_ctx = ""
     if meta:
@@ -150,9 +169,13 @@ def build_prompt(table: str, results: list[dict], meta: dict | None, agentic: li
         "Tests scope discipline (no out-of-scope writes), schema adherence (no invented fields), and stall resistance (turn budget)"
     )
 
+    any_of = _any_of_payloads()
     all_payloads = {r["payload"] for r in results} | {r["payload"] for r in (agentic or [])}
+    # Mark the scoring mode: an any-of Facts % is 1.0-or-0, an all-of one is a
+    # fraction. Without this the two sit in the same column looking comparable.
     payload_guide = "\n".join(
-        f"- **{k}**: {v}" for k, v in payload_descriptions.items()
+        f"- **{k}**{' _(any-of scoring: Facts % is pass/fail, not a fraction)_' if k in any_of else ''}: {v}"
+        for k, v in payload_descriptions.items()
         if k in all_payloads
     )
 
