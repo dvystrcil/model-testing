@@ -1,0 +1,37 @@
+{
+  "name": "family_age_appropriate_explanation",
+  "description": "Asks for an explanation pitched at an eight-year-old. PASS = the response covers the idea using everyday words. FAIL = it reaches for undergraduate biochemistry vocabulary. Graded on forbidden jargon rather than on tone, because 'friendly' and 'clear' are not substring-checkable and any attempt to score them would inject noise into the whole suite. The forbidden list is deliberately terms with no plausible place in a conversation with a child — not merely long words. 'Chlorophyll' is absent on purpose: it is nameable to an eight-year-old with one sentence of explanation, so forbidding it would punish a good answer.",
+  "forbidden_scope": "anywhere",
+  "quality_facts": [
+    "sun",
+    "light",
+    "water",
+    "food",
+    "leaves"
+  ],
+  "quality_forbidden": [
+    "thylakoid",
+    "photophosphorylation",
+    "nadph",
+    "electron transport chain",
+    "calvin cycle",
+    "stomata",
+    "chloroplast stroma",
+    "photosystem"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a helpful assistant for a family with school-age children."
+      },
+      {
+        "role": "user",
+        "content": "Explain how photosynthesis works to my 8-year-old."
+      }
+    ]
+  }
+}
