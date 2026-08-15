@@ -56,8 +56,13 @@ jobs:
         run: |
           INPUT="${{ github.event.inputs.payload || 'all' }}"
           if [ "$INPUT" = "all" ]; then
-            PAYLOADS=$(ls benchmarks/payloads/*.json \
-              | xargs -I{} basename {} .json \
+            # `find -printf` rather than parsing `ls` (SC2011). `sort` is not
+            # cosmetic: this list becomes the matrix AND the expected-payload
+            # set the coverage check compares against, so a stable order keeps
+            # two sweeps diffable.
+            PAYLOADS=$(find benchmarks/payloads -maxdepth 1 -name '*.json' -printf '%f\n' \
+              | sed 's/\.json$//' \
+              | sort \
               | jq -R -s -c 'split("\n") | map(select(length > 0))')
           else
             PAYLOADS=$(printf '%s' "$INPUT" | jq -R -c '[.]')
@@ -252,6 +257,10 @@ jobs:
           # marker to a file the next step can read deterministically —
           # process substitution would race the assertion.
           set -o pipefail
+          # shellcheck disable=SC2086  # $FILES is a space-separated list of
+          # result paths and MUST word-split into separate argv entries;
+          # quoting it would pass one argument containing spaces, which
+          # analyze.py would report as a single missing file.
           python benchmarks/analyze.py $FILES \
             --ollama "$OLLAMA_URL" \
             --expect "$EXPECTED_PAYLOADS" \
