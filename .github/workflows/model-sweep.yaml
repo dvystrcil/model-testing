@@ -129,9 +129,34 @@ jobs:
         with:
           python-version: '3.14'
 
+      # Retried because one Fastly edge node in PyPI's rotation is serving
+      # `502 I/O error`, and it took four families out of run 31905169831.
+      # Measured from this cluster on 2026-08-15, 39 requests for the same
+      # wheel:
+      #
+      #     33x 200  cache-iad-kiad7000039-IAD
+      #      6x 502  cache-pae2080020
+      #
+      # Every failure came from that one node and every success from the
+      # other, so this is upstream and not ours to fix. pip's own retries do
+      # not help: they reuse the connection and land on the same broken node,
+      # which is why the error is "too many 502 error responses" rather than
+      # a connection failure. A fresh process re-resolves and usually lands
+      # elsewhere — at ~15% per attempt, three attempts leaves ~0.3%.
       - name: Install dependencies
         if: steps.cache-restore.outputs.cache-hit != 'true'
-        run: pip install -r requirements.txt
+        run: |
+          for attempt in 1 2 3; do
+            if pip install -r requirements.txt; then
+              exit 0
+            fi
+            echo "::warning::pip install failed (attempt ${attempt}/3) — "\
+                 "retrying; see the PyPI/Fastly note above"
+            sleep $((attempt * 10))
+          done
+          echo "::error::pip install failed three times — this is no longer "\
+               "explained by the known flaky PyPI edge node"
+          exit 1
 
       - name: Install kubectl
         if: steps.cache-restore.outputs.cache-hit != 'true'
@@ -190,8 +215,20 @@ jobs:
         with:
           python-version: '3.14'
 
+      # Same flaky-PyPI-edge retry as the sweep job above. This one matters
+      # more, not less: a failure here loses the report for every family that
+      # DID run, not just one.
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          for attempt in 1 2 3; do
+            if pip install -r requirements.txt; then
+              exit 0
+            fi
+            echo "::warning::pip install failed (attempt ${attempt}/3) — retrying"
+            sleep $((attempt * 10))
+          done
+          echo "::error::pip install failed three times"
+          exit 1
 
       # OWUI_API_KEY is sourced from Infisical (homelab-bz-gt/prod) —
       # matches the helm-update-ai pattern (feedback_cicd_app_not_pat,
