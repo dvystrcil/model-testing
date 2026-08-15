@@ -170,7 +170,10 @@ jobs:
             || echo "No result file found for ${{ matrix.payload }} — job may have failed"
 
   analyze:
-    needs: sweep
+    # `setup` too, not just `sweep` — analyze needs the matrix it was
+    # supposed to cover in order to tell a missing family from one that was
+    # never requested.
+    needs: [setup, sweep]
     if: always()
     runs-on: model-testing-runner
     timeout-minutes: 30
@@ -230,12 +233,50 @@ jobs:
             echo "-->"
             echo
           } > report.md
+          # --expect is the matrix this run was actually launched with, so a
+          # deliberate single-payload sweep is complete at 1/1 while a failed
+          # job in a full sweep is not. The marker analyze prints is captured
+          # for the assertion step below.
+          # pipefail so a tee'd failure is still a failure. The tee keeps
+          # progress visible during a 30-minute LLM call while writing the
+          # marker to a file the next step can read deterministically —
+          # process substitution would race the assertion.
+          set -o pipefail
           python benchmarks/analyze.py $FILES \
             --ollama "$OLLAMA_URL" \
-            --out /tmp/analyze.md
+            --expect '${{ join(fromJson(needs.setup.outputs.matrix).payload, ",") }}' \
+            --out /tmp/analyze.md 2>&1 | tee /tmp/analyze.err
           cat /tmp/analyze.md >> report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
           cp report.md "${RESULTS_BASE}/run-${{ github.run_id }}/report.md"
+
+      # Deliberately a SEPARATE step, after the report has been written and
+      # copied to the PVC. Failing inside the step above would abort before
+      # `cp`, discarding a perfectly good report for 23 families because the
+      # 24th failed — losing more data to the alarm than to the fault.
+      - name: Assert every requested payload was analyzed
+        run: |
+          MARKER=$(grep -m1 '^ANALYZE-COVERAGE' /tmp/analyze.err 2>/dev/null || true)
+          if [ -z "$MARKER" ]; then
+            echo "::error::analyze.py emitted no ANALYZE-COVERAGE marker — "
+            echo "coverage was never evaluated, so this run proves nothing "
+            echo "about completeness."
+            exit 1
+          fi
+          echo "$MARKER"
+          case "$MARKER" in
+            *"expected=unknown"*)
+              echo "::error::coverage UNKNOWN — the expected payload set did "
+              echo "not reach analyze.py (check the matrix expression)."
+              exit 1 ;;
+            *"missing=none"*"unexpected=none"*)
+              echo "All requested payloads were analyzed." ;;
+            *)
+              echo "::error::${MARKER} — at least one payload produced no "
+              echo "results. The report is published but INCOMPLETE; see its "
+              echo "Coverage section."
+              exit 1 ;;
+          esac
 
       # Phase 2 dual-summarize (model-testing#36): same JSONL data also
       # gets analyzed via Claude (through OWUI's Anthropic Connection) so

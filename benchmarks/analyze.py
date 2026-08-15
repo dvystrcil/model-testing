@@ -26,6 +26,101 @@ ANALYSIS_MODEL = "qwen3.6:35b"
 HTTP_TIMEOUT = 1800
 
 
+# ------------------------------------------------------------------ coverage
+#
+# A sweep is a matrix of independent jobs, and a job that dies before running
+# produces no file. Nothing downstream noticed: the PVC copy is `if: always()`
+# with a `|| echo`, and analyze only ever failed when it found ZERO files. So
+# 23-of-24 rendered as a complete-looking report (run 31905169831,
+# family_citation_discipline, 2026-08-15).
+#
+# The danger is not the missing row, it is that a missing row and a family
+# that was never requested look identical to a reader — and a regression can
+# hide in that ambiguity. These four functions exist to make the report state
+# what it was supposed to cover.
+
+
+def parse_expected(raw: str | None) -> list[str] | None:
+    """The payload names this sweep was supposed to produce, or None.
+
+    None means "nobody told us", which is NOT an empty list. An empty list
+    would say we expected nothing and got it — perfect coverage of nothing,
+    reported as a pass. `--expect ""` is exactly what an unset GHA expression
+    expands to, so it maps to None too.
+
+    Accepts a comma list or a JSON array because the value comes from a GHA
+    matrix, where the quoting is easy to get subtly wrong.
+    """
+    if raw is None or not raw.strip():
+        return None
+    s = raw.strip()
+    if s.startswith("["):
+        return [str(x).strip() for x in json.loads(s) if str(x).strip()]
+    return [p.strip() for p in s.split(",") if p.strip()]
+
+
+def coverage(expected: list[str] | None, seen: list[str]) -> dict:
+    """Compare what should have been analyzed against what was.
+
+    `unexpected` is not padding: results for a payload outside the matrix mean
+    another run's data leaked into the directory, so the report would silently
+    mix two sweeps.
+    """
+    seen_set = set(seen)
+    if expected is None:
+        return {"known": False, "complete": False, "expected": None,
+                "analyzed": sorted(seen_set), "missing": [], "unexpected": []}
+    exp_set = set(expected)
+    missing = sorted(exp_set - seen_set)
+    unexpected = sorted(seen_set - exp_set)
+    return {"known": True,
+            "complete": not missing and not unexpected,
+            "expected": sorted(exp_set),
+            "analyzed": sorted(seen_set),
+            "missing": missing,
+            "unexpected": unexpected}
+
+
+def render_coverage(c: dict) -> str:
+    """The human-facing section. This has to live in the report, not just in
+    a job log, because the report is what gets read and compared."""
+    if not c["known"]:
+        return ("## Coverage\n\n"
+                "**UNKNOWN** — this report was produced without an expected "
+                "payload set, so it cannot say whether any family is missing. "
+                f"{len(c['analyzed'])} analyzed.\n")
+    if c["complete"]:
+        return (f"## Coverage\n\n"
+                f"Complete — {len(c['expected'])} of {len(c['expected'])} "
+                f"payloads analyzed.\n")
+    lines = [f"## Coverage\n",
+             f"**INCOMPLETE** — {len(c['analyzed'])} of "
+             f"{len(c['expected'])} expected payloads analyzed.\n"]
+    if c["missing"]:
+        lines.append("Missing (the job produced no results — it failed, was "
+                     "cancelled, or never started):\n")
+        lines += [f"- `{m}`" for m in c["missing"]]
+        lines.append("")
+    if c["unexpected"]:
+        lines.append("Analyzed but not requested (stale data from another "
+                     "run may have leaked into this one):\n")
+        lines += [f"- `{u}`" for u in c["unexpected"]]
+        lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def coverage_marker(c: dict) -> str:
+    """One machine-readable line, so CI can fail the run without re-deriving
+    any of this, and so a skipped step is distinguishable from a clean one."""
+    if not c["known"]:
+        return (f"ANALYZE-COVERAGE expected=unknown "
+                f"analyzed={len(c['analyzed'])}")
+    return (f"ANALYZE-COVERAGE expected={len(c['expected'])} "
+            f"analyzed={len(c['analyzed'])} "
+            f"missing={','.join(c['missing']) if c['missing'] else 'none'} "
+            f"unexpected={','.join(c['unexpected']) if c['unexpected'] else 'none'}")
+
+
 def load_results(*paths: Path) -> tuple[dict | None, list[dict], list[dict]]:
     rows = []
     for path in paths:
@@ -218,6 +313,10 @@ def main():
     p.add_argument("results_files", nargs="+",  help="One or more sweep JSONL files to merge and analyze")
     p.add_argument("--ollama", default=DEFAULT_OLLAMA, help="Ollama base URL")
     p.add_argument("--out",    default=None,           help="Output markdown file (default: stdout)")
+    p.add_argument("--expect", default=None,
+                   help="Payload names this sweep should have produced "
+                        "(comma list or JSON array). Omit and coverage is "
+                        "reported as UNKNOWN rather than assumed complete.")
     args = p.parse_args()
 
     paths = [Path(f) for f in args.results_files]
@@ -237,6 +336,15 @@ def main():
     print(f"[INFO] Loaded {len(paths)} file(s) — {len(results)} standard + {len(agentic)} agentic results", file=sys.stderr)
     print(f"[INFO] Models: {models_seen}", file=sys.stderr)
     print(f"[INFO] Payloads: {payloads_seen}", file=sys.stderr)
+
+    # Computed BEFORE the (slow, failure-prone) LLM call so the marker is
+    # emitted even if the summarizer dies — a run that fails at the analysis
+    # step must not also lose the record of which families went missing.
+    cov = coverage(parse_expected(args.expect), payloads_seen)
+    print(coverage_marker(cov), file=sys.stderr)
+    for m in cov["missing"]:
+        print(f"::warning::no results for payload '{m}' — its sweep job "
+              f"produced nothing", file=sys.stderr)
     if meta:
         print(f"[INFO] Environment: ollama={meta.get('ollama_version')}  "
               f"host={meta.get('hostname')}  commit={meta.get('git_commit')}", file=sys.stderr)
@@ -255,6 +363,10 @@ def main():
     output = (
         f"# Benchmark Report\n\n"
         f"## Environment\n\n{env_block}\n"
+        # Directly under Environment, above the numbers. A reader must know
+        # the report is partial BEFORE reading results they would otherwise
+        # compare against a previous, complete sweep.
+        f"{render_coverage(cov)}\n"
         f"## Results\n\n{table}\n"
         f"{agentic_section}\n"
         f"## AI Analysis\n\n{analysis}\n"
