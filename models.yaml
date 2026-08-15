@@ -1,6 +1,7 @@
 models:
   - name: qwen3.6:35b
-  # - name: qwen3.6:27B
+  - name: qwen3.6:27B
+  - name: qwen3.8:27b
   #- name: gemma4:26b
   #- name: gemma4:31b
   # Added 2026-06-08 — homelab#184 — Gemma 4 QAT variant.
@@ -53,6 +54,6 @@ models:
   # - name: qwen3.5:2b
   # - name: qwen3.5:4b
   # - name: lfm2.5-thinking:1.2b
-  - name: hf.co/peculiar-ragdoll/Dagger-Qwen3.6-27B-GGUF:Q4_K_M
-  - name: hf.co/peculiar-ragdoll/Nail-Qwen3.6-35B-A3B-GGUF:UD-Q4_K_XL
+  # - name: hf.co/peculiar-ragdoll/Dagger-Qwen3.6-27B-GGUF:Q4_K_M
+  # - name: hf.co/peculiar-ragdoll/Nail-Qwen3.6-35B-A3B-GGUF:UD-Q4_K_XL
   
