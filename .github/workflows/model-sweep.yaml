@@ -210,6 +210,16 @@ jobs:
         id: analyze-local
         env:
           OLLAMA_URL: http://ollama.ollama.svc.cluster.local
+          # Bound here rather than inline in the script below. An expression
+          # inside a `run:` block scalar has to nest its own single-quoted
+          # string literal inside the shell's quoting, and getting that wrong
+          # does not fail the step — it makes the whole workflow file
+          # unparseable, so every job disappears and the run reports
+          # `startup_failure` with no step to point at (2026-08-15: shipped
+          # `","`, which GHA rejects since expression literals are
+          # single-quoted). As a standalone `env:` value the expression is a
+          # plain YAML scalar with no nesting at all.
+          EXPECTED_PAYLOADS: ${{ join(fromJson(needs.setup.outputs.matrix).payload, ',') }}
         run: |
           RUN_DIR="${RESULTS_BASE}/run-${{ github.run_id }}"
           FILES=$(find "$RUN_DIR" -name "*.jsonl" 2>/dev/null | sort | tr '\n' ' ')
@@ -244,7 +254,7 @@ jobs:
           set -o pipefail
           python benchmarks/analyze.py $FILES \
             --ollama "$OLLAMA_URL" \
-            --expect '${{ join(fromJson(needs.setup.outputs.matrix).payload, ",") }}' \
+            --expect "$EXPECTED_PAYLOADS" \
             --out /tmp/analyze.md 2>&1 | tee /tmp/analyze.err
           cat /tmp/analyze.md >> report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"

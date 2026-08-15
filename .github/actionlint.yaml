@@ -1,0 +1,7 @@
+# Self-hosted runner labels used by this repo. actionlint validates
+# `runs-on:` against GitHub's hosted labels and cannot know ours, so without
+# this every job reports an unknown-label error and the real findings drown
+# in the noise — which is how a linter gets switched off.
+self-hosted-runner:
+  labels:
+    - model-testing-runner
