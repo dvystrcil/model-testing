@@ -6,3 +6,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dvystrcil/kustomize-validate-action@v1
+
+  # Added after model-testing#82 merged green while leaving
+  # model-sweep.yaml unparseable: it used `","` in a GHA expression, where
+  # only single quotes are legal. Nothing in CI reads the workflow files, so
+  # every check passed and the breakage only appeared on the next dispatch —
+  # as `startup_failure`, with no job and no step to point at.
+  #
+  # That is the worst shape of failure available here: the checks are green,
+  # the file is dead, and the error surfaces at the moment someone wanted to
+  # run a sweep. `yaml.safe_load` would not have caught it either — the YAML
+  # is valid; the expression inside it is not.
+  workflows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Lint workflow files
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color
