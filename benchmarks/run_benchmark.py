@@ -17,6 +17,7 @@ import re
 import socket
 import subprocess
 import sys
+import time
 import textwrap
 import urllib.request
 from pathlib import Path
@@ -572,20 +573,39 @@ def stddev(values: list[float]) -> float:
     return math.sqrt(sum((x - mean) ** 2 for x in values) / (len(values) - 1))
 
 
-def warmup_model(ollama_url: str, model: str) -> None:
-    info(f"warming up {model} — ensuring model is fully loaded into VRAM...")
-    payload = {
-        "model": model,
-        "stream": False,
-        "options": {"num_gpu": -1},
-        "messages": [{"role": "user", "content": "hi"}],
-    }
-    try:
-        resp = ollama_chat(ollama_url, payload)
-        load_ms = resp.get("total_duration", 0) / 1e6
-        info(f"warmup done  total={load_ms:.0f}ms")
-    except Exception as e:
-        info(f"warmup failed (continuing anyway): {e}")
+def warmup_model(ollama_url: str, model: str, attempts: int = 3) -> bool:
+    """Load the model into VRAM before anything is timed. True if it loaded.
+
+    This used to swallow the failure and continue. That is a silent skew, not
+    a survivable one: with no warmup the FIRST measured run absorbs the whole
+    load-into-VRAM cost — seconds for a 27B — and it is recorded as inference
+    latency. The row looks like a slow model rather than a missing warmup, and
+    a sweep exists to compare exactly that number.
+
+    A freshly pulled model is the likeliest case to trip it, which is now also
+    the common case (models are pulled on demand so unused ones can be
+    evicted), so it retries: a model that has just landed on disk may need a
+    moment before it will answer.
+    """
+    for i in range(1, attempts + 1):
+        info(f"warming up {model} (attempt {i}/{attempts}) — "
+             f"ensuring model is fully loaded into VRAM...")
+        payload = {
+            "model": model,
+            "stream": False,
+            "options": {"num_gpu": -1},
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        try:
+            resp = ollama_chat(ollama_url, payload)
+            load_ms = resp.get("total_duration", 0) / 1e6
+            info(f"warmup done  total={load_ms:.0f}ms")
+            return True
+        except Exception as e:                     # noqa: BLE001 - reported
+            info(f"warmup attempt {i} failed: {e}")
+            if i < attempts:
+                time.sleep(i * 5)
+    return False
 
 
 def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
@@ -934,7 +954,16 @@ def main():
         info(f"MODEL: {model}")
         info(f"{'='*50}")
         if not args.dry_run and not args.no_warmup:
-            warmup_model(args.ollama, model)
+            if not warmup_model(args.ollama, model):
+                # Refusing beats publishing. Numbers from an unwarmed model
+                # are wrong in a direction nobody can see afterwards, and
+                # --no-warmup remains available for anyone who wants them
+                # anyway.
+                print(f"ERROR: {model} would not warm up after 3 attempts — "
+                      f"refusing to record latencies that would include "
+                      f"model load time as if it were inference",
+                      file=sys.stderr)
+                sys.exit(1)
         for spec in specs:
             result = run_one(spec, args.ollama, model, args.runs, args.snippet_len, args.dry_run, args.save_responses)
             if result is not None:
