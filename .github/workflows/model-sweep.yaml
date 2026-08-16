@@ -392,6 +392,46 @@ jobs:
               exit 1 ;;
           esac
 
+      # The two markers below were added with their checks but WITHOUT
+      # anything that fails on them. `::error::` annotates a run; it does not
+      # fail a step. So an invented model produced a red annotation on a green
+      # run — a check that reports and does not gate, which is the same
+      # "looks fine" failure the markers were added to catch.
+      - name: Assert every model ran, and that the analysis invented none
+        run: |
+          CELLS=$(grep -m1 '^ANALYZE-CELLS' /tmp/analyze.err 2>/dev/null || true)
+          CONF=$(grep -m1 '^ANALYZE-CONFABULATION' /tmp/analyze.err 2>/dev/null || true)
+          rc=0
+          if [ -z "$CELLS" ] || [ -z "$CONF" ]; then
+            echo "::error::analyze.py emitted no ANALYZE-CELLS/CONFABULATION "
+            echo "marker — neither was evaluated, so this run proves nothing "
+            echo "about model coverage or confabulation."
+            exit 1
+          fi
+          echo "$CELLS"
+          echo "$CONF"
+          case "$CELLS" in
+            *"expected=unknown"*)
+              echo "::error::model coverage UNKNOWN — the expected model set "
+              echo "did not reach analyze.py."
+              rc=1 ;;
+            *"missing_by_model=none"*) : ;;
+            *)
+              echo "::error::${CELLS} — at least one model is missing from at "
+              echo "least one payload, so the side-by-side comparison this "
+              echo "sweep exists for is incomplete."
+              rc=1 ;;
+          esac
+          case "$CONF" in
+            *"invented=none"*) : ;;
+            *)
+              echo "::error::${CONF} — the generated analysis names models "
+              echo "that appear in no result row. The report is published and "
+              echo "labelled; its analysis section is not trustworthy."
+              rc=1 ;;
+          esac
+          exit $rc
+
       # Phase 2 dual-summarize (model-testing#36): same JSONL data also
       # gets analyzed via Claude (through OWUI's Anthropic Connection) so
       # every sweep produces two paired summaries — one local, one Claude.
