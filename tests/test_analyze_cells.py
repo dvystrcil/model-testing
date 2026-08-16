@@ -142,3 +142,30 @@ class PullOutcomeTest(unittest.TestCase):
     def test_garbage_lines_do_not_crash_it(self):
         ok, _ = rb.pull_outcome(["not json", '{"status":"success"}'])
         self.assertTrue(ok)
+
+
+class WarmupTest(unittest.TestCase):
+    """A failed warmup used to be swallowed. With no warmup the FIRST
+    measured run absorbs the load-into-VRAM cost and it is recorded as
+    inference latency — the row reads as a slow model rather than a missing
+    warmup, and comparing that number is the entire point of a sweep."""
+
+    def test_it_returns_false_rather_than_pretending(self):
+        self.assertFalse(rb.warmup_model("http://127.0.0.1:1", "m", attempts=1))
+
+    def test_it_retries_before_giving_up(self):
+        """A model that has just been pulled may need a moment before it
+        answers, and pulls are now the common path."""
+        calls = []
+        orig = rb.ollama_chat
+        try:
+            def flaky(url, payload):
+                calls.append(1)
+                if len(calls) < 2:
+                    raise RuntimeError("model is loading")
+                return {"total_duration": 1_000_000}
+            rb.ollama_chat = flaky
+            self.assertTrue(rb.warmup_model("http://x", "m", attempts=3))
+            self.assertEqual(len(calls), 2)
+        finally:
+            rb.ollama_chat = orig
