@@ -66,6 +66,86 @@ def collect_metadata(ollama_url: str) -> dict:
     return meta
 
 
+def available_models(ollama_url: str) -> set[str] | None:
+    """Model tags ollama actually has loaded, or None if it could not be asked.
+
+    None is not an empty set: an unreachable ollama must not read as "no
+    models installed", which would fail every sweep for the wrong reason.
+    """
+    try:
+        req = urllib.request.Request(f"{ollama_url.rstrip('/')}/api/tags")
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception:                              # noqa: BLE001 - reported below
+        return None
+    return {m.get("name", "") for m in data.get("models", [])}
+
+
+def pull_outcome(stream_lines: list[str]) -> tuple[bool, str]:
+    """Did an /api/pull stream succeed? (ok, detail)
+
+    Ollama streams JSON objects and reports failure in an `error` field with
+    HTTP 200 — so the status code proves nothing and the LAST line is what
+    decides. Treating 200 as success is how a failed pull becomes a sweep
+    that silently skips the model, which is the bug this whole preflight
+    exists to remove.
+    """
+    last_status = ""
+    for line in stream_lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if obj.get("error"):
+            return False, str(obj["error"])[:200]
+        if obj.get("status"):
+            last_status = str(obj["status"])
+    if last_status == "success":
+        return True, "pulled"
+    return False, f"stream ended without success (last status: {last_status or 'none'})"
+
+
+def pull_model(ollama_url: str, tag: str, timeout: int = 5400) -> tuple[bool, str]:
+    """Pull one model, streaming so a large download does not look hung.
+
+    A 27B pull moves ~17GB, so the timeout is generous — but finite, because
+    a hung pull that never times out is a sweep that never reports.
+    """
+    body = json.dumps({"model": tag}).encode()
+    req = urllib.request.Request(
+        f"{ollama_url.rstrip('/')}/api/pull", data=body,
+        headers={"Content-Type": "application/json"}, method="POST")
+    lines = []
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            for raw in r:
+                line = raw.decode("utf-8", "replace")
+                lines.append(line)
+                try:
+                    st = json.loads(line).get("status", "")
+                except json.JSONDecodeError:
+                    continue
+                if st and st != (lines[-2] if len(lines) > 1 else ""):
+                    info(f"[pull {tag}] {st}")
+    except Exception as e:                          # noqa: BLE001 - reported
+        return False, f"{type(e).__name__}: {str(e)[:160]}"
+    return pull_outcome(lines)
+
+
+def missing_models(requested: list[str], present: set[str]) -> list[str]:
+    """Requested tags ollama does not have.
+
+    Case-insensitive: models.yaml says `qwen3.6:27B`, ollama reports
+    `qwen3.6:27B` and `qwen3.6:27b` as distinct strings, and a spelling
+    difference must not read as an absent model.
+    """
+    have = {p.lower() for p in present}
+    return [r for r in requested if r.lower() not in have]
+
+
 def load_models(path: Path) -> list[str]:
     data = yaml.safe_load(path.read_text())
     return [m["name"] for m in data["models"]]
@@ -750,6 +830,61 @@ def main():
     args = p.parse_args()
 
     models = [args.model] if args.model else load_models(MODELS_FILE)
+
+    # Preflight. `qwen3.8:27b` sat in models.yaml while ollama had never
+    # pulled it (sweep 31915264873): every call for it failed, no rows were
+    # written, and the sweep reported success with that model simply absent
+    # from the comparison it was dispatched to make. The tag is real and
+    # pullable — it was just not here.
+    #
+    # Refusing to start is the point. A sweep that silently drops a model
+    # produces a report whose gaps look like findings.
+    present = available_models(args.ollama)
+    if present is None:
+        print(f"ERROR: could not reach {args.ollama}/api/tags — refusing to "
+              f"start a sweep without knowing which models are loaded",
+              file=sys.stderr)
+        sys.exit(1)
+    absent = missing_models(models, present)
+    if absent:
+        info(f"[preflight] not loaded: {', '.join(absent)} — pulling")
+        failed = []
+        for tag in absent:
+            t0 = time.monotonic()
+            ok, detail = pull_model(args.ollama, tag)
+            dt = time.monotonic() - t0
+            if ok:
+                # Duration is logged because the intended end state is
+                # pruning models that have not been used in a while and
+                # letting a sweep pull them back on demand. What that costs
+                # per model is the number that decision needs, and it is
+                # only observable here.
+                info(f"[preflight] {tag}: {detail} in {dt:.0f}s")
+            else:
+                failed.append((tag, detail))
+        if failed:
+            # Distinguish "no such model" from "could not load it" — one is a
+            # typo in models.yaml, the other is a broken or too-large pull,
+            # and they need different fixes.
+            for tag, detail in failed:
+                kind = ("not found in the registry"
+                        if "not found" in detail.lower()
+                        or "manifest" in detail.lower()
+                        else "could not be pulled")
+                print(f"ERROR: {tag} {kind}: {detail}", file=sys.stderr)
+            print("       Refusing to run a partial comparison silently — a "
+                  "sweep missing a model produces a report whose gaps look "
+                  "like findings.", file=sys.stderr)
+            sys.exit(1)
+        # Re-check rather than trusting the pull: the model must be LOADABLE,
+        # not merely reported as downloaded.
+        present = available_models(args.ollama) or set()
+        still = missing_models(models, present)
+        if still:
+            print(f"ERROR: pulled but still not listed by ollama: "
+                  f"{', '.join(still)}", file=sys.stderr)
+            sys.exit(1)
+
     specs = load_payloads(args.payload)
 
     if args.temperature is not None:
