@@ -839,6 +839,15 @@ def main():
     #
     # Refusing to start is the point. A sweep that silently drops a model
     # produces a report whose gaps look like findings.
+    #
+    # A cold pull is accepted as part of the cost of a sweep, not an
+    # exception to it — the intended end state is evicting models that have
+    # gone unused and letting the next sweep that needs one bring it back.
+    # The cost is bounded and paid once: ollama is shared across the matrix,
+    # so only the FIRST job to want a model pulls it and the other 23 find it
+    # present. Cache-hit jobs skip this path entirely. The sweep job allows
+    # 180 minutes against a 90-minute per-model pull ceiling, so even several
+    # cold models fit without the timeout becoming the thing that fails.
     present = available_models(args.ollama)
     if present is None:
         print(f"ERROR: could not reach {args.ollama}/api/tags — refusing to "
