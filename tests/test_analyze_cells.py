@@ -192,3 +192,21 @@ class EvictionTest(unittest.TestCase):
 
     def test_entries_without_a_name_are_skipped(self):
         self.assertEqual(rb.parse_resident({"models": [{"size": 1}]}), [])
+
+
+class DryRunTest(unittest.TestCase):
+    """--dry-run exists to check payload wiring with no ollama at all.
+    Gating the preflight on it was a regression that made the one mode
+    designed to work offline the one mode that could not."""
+
+    def test_dry_run_reaches_payload_loading_without_ollama(self):
+        import subprocess, sys as _s
+        from pathlib import Path as _P
+        root = _P(__file__).resolve().parent.parent
+        r = subprocess.run(
+            [_s.executable, str(root / "benchmarks" / "run_benchmark.py"),
+             "--dry-run", "--payload", "factual_recall",
+             "--ollama", "http://127.0.0.1:1"],
+            capture_output=True, text=True, timeout=120, cwd=root)
+        self.assertNotIn("could not reach", r.stderr,
+                         "dry run must not require a reachable ollama")
