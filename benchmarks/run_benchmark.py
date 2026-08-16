@@ -922,13 +922,17 @@ def main():
     #
     # Refusing to start is the point. A sweep that silently drops a model
     # produces a report whose gaps look like findings.
-    present = available_models(args.ollama)
-    if present is None:
+    # Skipped for --dry-run, which exists to check payload wiring and prompt
+    # shaping with no ollama at all. Requiring a reachable server to do that
+    # was a regression: it made the one mode designed to work offline the one
+    # mode that could not.
+    present = None if args.dry_run else available_models(args.ollama)
+    if not args.dry_run and present is None:
         print(f"ERROR: could not reach {args.ollama}/api/tags — refusing to "
               f"start a sweep without knowing which models are loaded",
               file=sys.stderr)
         sys.exit(1)
-    absent = missing_models(models, present)
+    absent = [] if args.dry_run else missing_models(models, present or set())
     if absent:
         info(f"[preflight] not loaded: {', '.join(absent)} — pulling")
         failed = []
