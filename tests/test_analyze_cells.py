@@ -169,3 +169,26 @@ class WarmupTest(unittest.TestCase):
             self.assertEqual(len(calls), 2)
         finally:
             rb.ollama_chat = orig
+
+
+class EvictionTest(unittest.TestCase):
+    """Without emptying VRAM first, a model's 'load time' depends on whether
+    it happened to be resident — so the first model in a sweep pays a cold
+    load and the rest may not, and whichever model ran last previously gets
+    a flattering number. That is not comparable, which is the one thing a
+    comparison sweep must be."""
+
+    def test_resident_models_are_listed(self):
+        payload = {"models": [{"name": "a:1"}, {"name": "b:2"}]}
+        self.assertEqual(rb.parse_resident(payload), ["a:1", "b:2"])
+
+    def test_nothing_resident_is_an_empty_list(self):
+        self.assertEqual(rb.parse_resident({"models": []}), [])
+
+    def test_unreadable_is_none_not_empty(self):
+        """'nothing is resident' means proceed; 'could not ask' means the
+        eviction never happened and the next number is not a cold load."""
+        self.assertIsNone(rb.parse_resident(None))
+
+    def test_entries_without_a_name_are_skipped(self):
+        self.assertEqual(rb.parse_resident({"models": [{"size": 1}]}), [])

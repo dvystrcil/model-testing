@@ -573,6 +573,66 @@ def stddev(values: list[float]) -> float:
     return math.sqrt(sum((x - mean) ** 2 for x in values) / (len(values) - 1))
 
 
+def parse_resident(payload: dict | None) -> list[str] | None:
+    """Model tags currently held in VRAM, per /api/ps. None if unreadable.
+
+    None is not an empty list: "nothing is resident" and "we could not ask"
+    lead to opposite actions — the first means proceed, the second means the
+    eviction never happened and the load time about to be measured is not a
+    cold one.
+    """
+    if payload is None:
+        return None
+    return [m.get("name", "") for m in payload.get("models", []) if m.get("name")]
+
+
+def resident_models(ollama_url: str) -> list[str] | None:
+    try:
+        req = urllib.request.Request(f"{ollama_url.rstrip('/')}/api/ps")
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return parse_resident(json.loads(r.read().decode("utf-8", "replace")))
+    except Exception:                              # noqa: BLE001 - reported by caller
+        return None
+
+
+def unload_model(ollama_url: str, tag: str) -> bool:
+    """Evict one model from VRAM. keep_alive: 0 is ollama's unload signal.
+
+    Disk is untouched — this drops the weights out of memory only, so the
+    next request pays a genuine cold load.
+    """
+    body = json.dumps({"model": tag, "keep_alive": 0}).encode()
+    req = urllib.request.Request(
+        f"{ollama_url.rstrip('/')}/api/generate", data=body,
+        headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            r.read()
+        return True
+    except Exception as e:                         # noqa: BLE001 - reported
+        info(f"unload {tag} failed: {e}")
+        return False
+
+
+def evict_all(ollama_url: str) -> tuple[bool, list[str]]:
+    """Empty VRAM so the next load is measurably cold. (ok, evicted tags)
+
+    Without this, a model's warmup time depends on whether it HAPPENED to be
+    resident — the first model in a sweep pays a cold load and the rest may
+    not, so "load time" is not comparable across the very models the sweep
+    exists to compare. Whichever model ran last in the previous sweep gets a
+    flattering number.
+    """
+    resident = resident_models(ollama_url)
+    if resident is None:
+        return False, []
+    ok = True
+    for tag in resident:
+        if not unload_model(ollama_url, tag):
+            ok = False
+    return ok, resident
+
+
 def warmup_model(ollama_url: str, model: str, attempts: int = 3) -> bool:
     """Load the model into VRAM before anything is timed. True if it loaded.
 
@@ -599,7 +659,10 @@ def warmup_model(ollama_url: str, model: str, attempts: int = 3) -> bool:
         try:
             resp = ollama_chat(ollama_url, payload)
             load_ms = resp.get("total_duration", 0) / 1e6
-            info(f"warmup done  total={load_ms:.0f}ms")
+            # With VRAM emptied first this IS the cold-load time, and is
+            # comparable across models. Without the eviction it would only be
+            # a load time for whichever model happened not to be resident.
+            info(f"warmup done  cold_load={load_ms:.0f}ms")
             return True
         except Exception as e:                     # noqa: BLE001 - reported
             info(f"warmup attempt {i} failed: {e}")
@@ -954,6 +1017,18 @@ def main():
         info(f"MODEL: {model}")
         info(f"{'='*50}")
         if not args.dry_run and not args.no_warmup:
+            # Empty VRAM first so the warmup below measures a genuine cold
+            # load. Disk is untouched: the weights stay pulled, only the
+            # memory residency is dropped.
+            evicted_ok, evicted = evict_all(args.ollama)
+            if not evicted_ok:
+                # Not fatal, but must not pass silently — the load time about
+                # to be recorded may be a warm one, and a warm number sitting
+                # in a column labelled cold is worse than no number.
+                info("::warning::could not empty VRAM before warming "
+                     f"{model} — its load time may not be a cold one")
+            elif evicted:
+                info(f"evicted from VRAM: {', '.join(evicted)}")
             if not warmup_model(args.ollama, model):
                 # Refusing beats publishing. Numbers from an unwarmed model
                 # are wrong in a direction nobody can see afterwards, and
