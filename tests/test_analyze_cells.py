@@ -210,3 +210,25 @@ class DryRunTest(unittest.TestCase):
             capture_output=True, text=True, timeout=120, cwd=root)
         self.assertNotIn("could not reach", r.stderr,
                          "dry run must not require a reachable ollama")
+
+
+class RunsColumnTest(unittest.TestCase):
+    """A binary payload at runs=5 renders "20%", which reads like a quality
+    percentage when it means 1 of 5. refusal_boundary showed 0% vs 100% at
+    runs=1 and 20% vs 40% at runs=5 — the sample size is what separates a
+    generational win from noise (homelab#1046)."""
+
+    ROW = {"model": "m:1", "payload": "p", "facts_score": 0.2, "runs": 5,
+           "eval_count": 10, "eval_duration": 1e9, "gen_tps": 5.0,
+           "forbidden_violations": []}
+
+    def test_runs_appears_in_the_table(self):
+        t = mod.build_summary_table([self.ROW])
+        self.assertIn("Runs", t)
+        self.assertIn("| 5 |", t)
+
+    def test_a_row_without_runs_shows_unknown_not_one(self):
+        """Absent must not render as 1 — that would silently assert a sample
+        size nobody recorded."""
+        r = dict(self.ROW); r.pop("runs")
+        self.assertIn("| ? |", mod.build_summary_table([r]))
