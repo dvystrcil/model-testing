@@ -109,7 +109,15 @@ jobs:
           RUNS="${{ github.event.inputs.runs || '1' }}"
           MODEL="${{ github.event.inputs.model || 'all' }}"
           SYSPROMPT_HASH=$(echo -n "${{ github.event.inputs.system_prompt }}" | sha256sum | cut -c1-8)
-          KEY="sweep-${{ matrix.payload }}-p${PAYLOAD_HASH}-m${MODELS_HASH}-r${RUNS}-m${MODEL}-s${SYSPROMPT_HASH}-o${OLLAMA_VERSION}"
+          # v2 salt: every pre-existing entry is discarded. Entries
+          # written before 2026-08-16 claim to represent a
+          # models.yaml they hold no results for — qwen3.8:27b was
+          # never loaded in ollama, produced no rows, and the
+          # partial result was cached under a key naming that
+          # models.yaml anyway. Those entries would keep serving a
+          # 2-model answer to a 3-model question forever, and
+          # fixing the pull would not dislodge them.
+          KEY="sweep-v2-${{ matrix.payload }}-p${PAYLOAD_HASH}-m${MODELS_HASH}-r${RUNS}-m${MODEL}-s${SYSPROMPT_HASH}-o${OLLAMA_VERSION}"
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
           echo "Cache key: $KEY"
 
@@ -183,12 +191,50 @@ jobs:
             ARGS+=(--temperature "${{ github.event.inputs.temperature }}")
           python benchmarks/run_benchmark.py "${ARGS[@]}"
 
-      - name: Save results to cache
+      # A cache entry is an ASSERTION that this key's result is complete.
+      # Saving a partial one poisons every future run sharing the key, and
+      # the poisoning outlives its cause: fixing the pull does not invalidate
+      # an answer cached before the fix.
+      - name: Is this result complete enough to cache?
+        id: complete
         if: steps.cache-restore.outputs.cache-hit != 'true'
+        run: |
+          python3 - <<'PYEOF' >> "$GITHUB_OUTPUT"
+          import glob, json, yaml
+          want = {m["name"].lower()
+                  for m in yaml.safe_load(open("models.yaml"))["models"]}
+          seen = set()
+          for f in glob.glob("benchmarks/results/*.jsonl"):
+              for line in open(f):
+                  try:
+                      d = json.loads(line)
+                  except Exception:
+                      continue
+                  if d.get("model"):
+                      seen.add(str(d["model"]).lower())
+          missing = sorted(want - seen)
+          print(f"cacheable={'false' if missing else 'true'}")
+          print(f"missing={','.join(missing) if missing else 'none'}")
+          PYEOF
+          cat "$GITHUB_OUTPUT"
+
+      - name: Save results to cache
+        if: >-
+          steps.cache-restore.outputs.cache-hit != 'true' &&
+          steps.complete.outputs.cacheable == 'true'
         uses: actions/cache/save@v6
         with:
           path: benchmarks/results/
           key: ${{ steps.cache-key.outputs.key }}
+
+      # Reported rather than skipped silently: "the cache never warms" is
+      # otherwise a mystery with no message anywhere.
+      - name: Explain why nothing was cached
+        if: >-
+          steps.cache-restore.outputs.cache-hit != 'true' &&
+          steps.complete.outputs.cacheable != 'true'
+        run: |
+          echo "::warning::not caching ${{ matrix.payload }} — no results for ${{ steps.complete.outputs.missing }}; caching a partial result under a key naming this models.yaml would serve it to every future run as complete"
 
       - name: Copy results to PVC — ${{ matrix.payload }}
         if: always()
