@@ -251,8 +251,14 @@ def build_env_block(meta: dict | None, path: Path) -> str:
 
 def build_summary_table(results: list[dict]) -> str:
     has_schema = any(r.get("schema_violations") is not None for r in results)
-    header = "| Model | Payload | Facts | Violations | Gen Tok | Gen Time | Gen TPS |"
-    sep    = "|-------|---------|-------|------------|---------|----------|---------|"
+    # `Runs` is not decoration. A binary payload at runs=5 renders its score
+    # as e.g. "20%", which reads like a continuous quality measure when it
+    # actually means 1 of 5. That ambiguity nearly caused a model swap:
+    # refusal_boundary read 0% vs 100% at runs=1 and 20% vs 40% at runs=5 —
+    # same direction, a fraction of the size, and both models failing most of
+    # the time (homelab#1046). The sample size has to travel with the number.
+    header = "| Model | Payload | Facts | Runs | Violations | Gen Tok | Gen Time | Gen TPS |"
+    sep    = "|-------|---------|-------|------|------------|---------|----------|---------|"
     if has_schema:
         header += " Schema |"
         sep    += "--------|"
@@ -262,6 +268,7 @@ def build_summary_table(results: list[dict]) -> str:
         viol_str = f"**{len(viol)} ❌** `{'`, `'.join(viol)}`" if viol else "✅ 0"
         row = (
             f"| `{r['model']}` | {r['payload']} | {r['facts_score']:.0%} "
+            f"| {r.get('runs', '?')} "
             f"| {viol_str} | {r['eval_count']} | {r['eval_duration']/1e9:.2f}s "
             f"| {r['gen_tps']:.1f} |"
         )
