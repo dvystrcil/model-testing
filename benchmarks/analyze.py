@@ -40,6 +40,73 @@ HTTP_TIMEOUT = 1800
 # what it was supposed to cover.
 
 
+# re.I matters: `qwen3.6:27B` is a real tag, and a case-sensitive class
+# stops at the capital B, yielding "qwen3.6:27" — a real model reported
+# as invented. One false alarm is all it takes for the check to be
+# dismissed the next time it fires for real.
+MODEL_TOKEN = re.compile(
+    r"`?\b([a-z][a-z0-9._-]*\d[a-z0-9._-]*:[a-z0-9._-]+)`?", re.I)
+
+
+def models_in_text(text: str) -> set[str]:
+    """Model-like identifiers named anywhere in a block of prose.
+
+    Deliberately loose: a false positive here costs one line of review, a
+    false negative lets an invented model through as a finding.
+    """
+    return {m.group(1) for m in MODEL_TOKEN.finditer(text or "")}
+
+
+def invented_models(analysis: str, known: list[str]) -> list[str]:
+    """Models the generated analysis names that no result row contains.
+
+    The generative layer produced `qwen3.10:30b` in sweep 31915264873 —
+    four times, with fabricated metrics ("~97% factual score", "~8.5
+    turns") — for a model that is not in models.yaml, not in ollama, and
+    not in a single result row. The computed table above it was correct
+    the whole time.
+
+    This is the check that makes that structurally catchable: every model
+    the prose names must appear in the data the prose is about. Comparing
+    against the COMPUTED set rather than models.yaml is deliberate — a
+    model that was requested but produced nothing is exactly the case that
+    misleads, so "it is in models.yaml" must not excuse it.
+    """
+    known_norm = {k.lower() for k in known}
+    return sorted(m for m in models_in_text(analysis)
+                  if m.lower() not in known_norm)
+
+
+def cell_coverage(expected_payloads: list[str] | None,
+                  expected_models: list[str] | None,
+                  seen_cells: set[tuple[str, str]]) -> dict:
+    """Coverage over (model, payload) CELLS, not payloads.
+
+    A sweep comparing three models across 24 payloads has 72 units of work.
+    Counting payloads alone passes a run where an entire model is absent,
+    because the payload files exist — another model produced them. That is
+    exactly what happened in 31915264873: 23 of 24 payloads present, and
+    qwen3.8 missing from every single one.
+    """
+    if not expected_payloads or not expected_models:
+        return {"known": False, "complete": False, "missing": [],
+                "expected": 0, "analyzed": len(seen_cells)}
+    want = {(m, p) for m in expected_models for p in expected_payloads}
+    missing = sorted(want - seen_cells)
+    return {"known": True, "complete": not missing,
+            "missing": missing, "expected": len(want),
+            "analyzed": len(want) - len(missing)}
+
+
+def missing_by_model(missing: list[tuple[str, str]]) -> dict[str, int]:
+    """A model absent from EVERY payload is a different fact from one that
+    lost a payload, and the report must not make them look alike."""
+    out: dict[str, int] = {}
+    for m, _ in missing:
+        out[m] = out.get(m, 0) + 1
+    return out
+
+
 def parse_expected(raw: str | None) -> list[str] | None:
     """The payload names this sweep was supposed to produce, or None.
 
@@ -107,6 +174,20 @@ def render_coverage(c: dict) -> str:
         lines += [f"- `{u}`" for u in c["unexpected"]]
         lines.append("")
     return "\n".join(lines) + "\n"
+
+
+def cell_marker(c: dict) -> str:
+    if not c["known"]:
+        return "ANALYZE-CELLS expected=unknown analyzed=%d" % c["analyzed"]
+    miss = missing_by_model(c["missing"])
+    detail = ",".join(f"{k}:{v}" for k, v in sorted(miss.items())) or "none"
+    return (f"ANALYZE-CELLS expected={c['expected']} "
+            f"analyzed={c['analyzed']} missing_by_model={detail}")
+
+
+def confabulation_marker(bogus: list[str]) -> str:
+    return ("ANALYZE-CONFABULATION invented="
+            + (",".join(bogus) if bogus else "none"))
 
 
 def coverage_marker(c: dict) -> str:
@@ -313,6 +394,10 @@ def main():
     p.add_argument("results_files", nargs="+",  help="One or more sweep JSONL files to merge and analyze")
     p.add_argument("--ollama", default=DEFAULT_OLLAMA, help="Ollama base URL")
     p.add_argument("--out",    default=None,           help="Output markdown file (default: stdout)")
+    p.add_argument("--expect-models", default=None,
+                   help="Model names this sweep should have produced, from "
+                        "models.yaml. Without it, cell coverage is UNKNOWN "
+                        "rather than assumed complete.")
     p.add_argument("--expect", default=None,
                    help="Payload names this sweep should have produced "
                         "(comma list or JSON array). Omit and coverage is "
@@ -345,6 +430,19 @@ def main():
     for m in cov["missing"]:
         print(f"::warning::no results for payload '{m}' — its sweep job "
               f"produced nothing", file=sys.stderr)
+
+    # Cell coverage. Payload coverage passes a run where an ENTIRE MODEL is
+    # missing, because the payload files exist — another model produced
+    # them. Sweep 31915264873 reported 23-of-24 payloads while qwen3.8 was
+    # absent from every one of them, which is the comparison the sweep was
+    # dispatched to make.
+    seen_cells = {(r["model"], r["payload"]) for r in results + agentic}
+    cells = cell_coverage(parse_expected(args.expect),
+                          parse_expected(args.expect_models), seen_cells)
+    print(cell_marker(cells), file=sys.stderr)
+    for mdl, n in sorted(missing_by_model(cells["missing"]).items()):
+        print(f"::warning::model '{mdl}' is missing from {n} payload(s)",
+              file=sys.stderr)
     if meta:
         print(f"[INFO] Environment: ollama={meta.get('ollama_version')}  "
               f"host={meta.get('hostname')}  commit={meta.get('git_commit')}", file=sys.stderr)
@@ -359,6 +457,26 @@ def main():
         {"role": "user",   "content": prompt},
     ])
 
+    # Confabulation gate. The generated analysis may name models that no
+    # result row contains — sweep 31915264873 produced `qwen3.10:30b` four
+    # times with invented metrics, under a table that was correct. The
+    # claims are NOT edited out: silently deleting a sentence would hide
+    # that the summariser is unreliable. They are labelled, and the run is
+    # failed, so the report stays readable and untrustworthy rather than
+    # unreadable or trusted.
+    bogus = invented_models(analysis, models_seen)
+    print(confabulation_marker(bogus), file=sys.stderr)
+    warn_block = ""
+    if bogus:
+        for b in bogus:
+            print(f"::error::generated analysis names '{b}', which appears "
+                  f"in no result row", file=sys.stderr)
+        warn_block = (
+            "\n> **This analysis names models that produced no results: "
+            + ", ".join(f"`{b}`" for b in bogus)
+            + ".** Every claim about them is unsupported by the data in this "
+              "report. The tables above are computed and unaffected.\n")
+
     agentic_section = f"\n## Agentic Results\n\n{build_agentic_table(agentic)}\n" if agentic else ""
     output = (
         f"# Benchmark Report\n\n"
@@ -369,7 +487,7 @@ def main():
         f"{render_coverage(cov)}\n"
         f"## Results\n\n{table}\n"
         f"{agentic_section}\n"
-        f"## AI Analysis\n\n{analysis}\n"
+        f"## AI Analysis\n{warn_block}\n{analysis}\n"
     )
 
     if args.out:

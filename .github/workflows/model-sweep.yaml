@@ -262,7 +262,18 @@ jobs:
           # single-quoted). As a standalone `env:` value the expression is a
           # plain YAML scalar with no nesting at all.
           EXPECTED_PAYLOADS: ${{ join(fromJson(needs.setup.outputs.matrix).payload, ',') }}
+          # Read from models.yaml in the step below rather than passed as an
+          # expression: the sweep may have been dispatched with a --model
+          # override, in which case models.yaml is NOT what ran and using it
+          # would report every other model as missing.
+          SWEEP_MODEL_OVERRIDE: ${{ github.event.inputs.model }}
         run: |
+          if [ -n "$SWEEP_MODEL_OVERRIDE" ]; then
+            EXPECTED_MODELS="$SWEEP_MODEL_OVERRIDE"
+          else
+            EXPECTED_MODELS=$(python3 -c "import yaml;print(','.join(m['name'] for m in yaml.safe_load(open('models.yaml'))['models']))")
+          fi
+          echo "expecting models: $EXPECTED_MODELS"
           RUN_DIR="${RESULTS_BASE}/run-${{ github.run_id }}"
           FILES=$(find "$RUN_DIR" -name "*.jsonl" 2>/dev/null | sort | tr '\n' ' ')
           if [ -z "$FILES" ]; then
@@ -301,6 +312,7 @@ jobs:
           python benchmarks/analyze.py $FILES \
             --ollama "$OLLAMA_URL" \
             --expect "$EXPECTED_PAYLOADS" \
+            --expect-models "$EXPECTED_MODELS" \
             --out /tmp/analyze.md 2>&1 | tee /tmp/analyze.err
           cat /tmp/analyze.md >> report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
