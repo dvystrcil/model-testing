@@ -1,0 +1,36 @@
+{
+    "name": "creative_scene_in_voice",
+    "description": "Asks for a short piece of narrative prose with three concrete elements named in the brief, delivered as the scene itself. PASS = the scene contains all three elements and reads as prose. FAIL = the model wraps it in assistant framing ('Here is a short scene...', 'I hope this helps!'), or drops a required element. Graded on brief-adherence and frame-breaking, NOT on prose quality: 'evocative' and 'well-paced' are not substring-checkable, and scoring them would inject noise into the whole suite exactly as family_age_appropriate_explanation warns. The forbidden list is confined to phrases with no plausible place inside third-person narrative prose - deliberately NOT 'certainly' or 'here's a', which can legitimately appear in dialogue. Motivated by homelab#1151 and the fiction-writer preset, which had no measurable payload at all: the suite could rank models on refusal and schema adherence but said nothing about whether a model can stay inside a story.",
+    "forbidden_scope": "anywhere",
+    "facts_mode": "all",
+    "quality_facts": [
+        "lighthouse",
+        "storm",
+        "letter"
+    ],
+    "quality_forbidden": [
+        "as an ai",
+        "language model",
+        "i hope this helps",
+        "let me know if you",
+        "feel free to",
+        "here is a short scene",
+        "here's a short scene",
+        "word count"
+    ],
+    "payload": {
+        "model": "REPLACED_BY_RUNNER",
+        "stream": false,
+        "temperature": 0.8,
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a fiction writer. When asked for a scene, you reply with the scene itself and nothing else - no preamble, no commentary, no closing offer to revise."
+            },
+            {
+                "role": "user",
+                "content": "Write a short scene, about 150 words, in third person past tense. It must involve a lighthouse, a storm, and a letter that goes unread. Reply with only the scene."
+            }
+        ]
+    }
+}

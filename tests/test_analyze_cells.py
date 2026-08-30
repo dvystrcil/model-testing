@@ -84,6 +84,94 @@ class CellCoverageTest(unittest.TestCase):
         self.assertFalse(mod.cell_coverage(["p"], None, set())["complete"])
 
 
+class WhollyAbsentTest(unittest.TestCase):
+    """model-testing#94: partial gaps must not grade like a lost family.
+
+    Run 33293895544 lost 4 cells of 216 to per-call timeouts on the two
+    slowest models and was FAILED for it, which discarded a complete report
+    and skipped the Claude analysis entirely. Sweep 31915264873 lost an
+    entire model and must keep failing. These are the two sides.
+    """
+
+    PAYLOADS = ["a", "b", "c", "d"]
+    MODELS = ["m1", "m2"]
+
+    def _cells(self, seen):
+        return mod.cell_coverage(self.PAYLOADS, self.MODELS, seen)
+
+    def test_a_model_absent_from_every_payload_is_wholly_absent(self):
+        seen = {("m1", p) for p in self.PAYLOADS}
+        c = self._cells(seen)
+        self.assertEqual(mod.wholly_absent_models(c, self.PAYLOADS), ["m2"])
+
+    def test_a_model_missing_only_some_payloads_is_NOT_wholly_absent(self):
+        # The 33293895544 shape: present for most, timed out on a few.
+        seen = {("m1", p) for p in self.PAYLOADS} | {("m2", "a"), ("m2", "b")}
+        c = self._cells(seen)
+        self.assertEqual(mod.missing_by_model(c["missing"]), {"m2": 2})
+        self.assertEqual(mod.wholly_absent_models(c, self.PAYLOADS), [])
+
+    def test_missing_exactly_one_cell_is_not_wholly_absent(self):
+        seen = ({("m1", p) for p in self.PAYLOADS}
+                | {("m2", p) for p in self.PAYLOADS if p != "d"})
+        c = self._cells(seen)
+        self.assertEqual(mod.wholly_absent_models(c, self.PAYLOADS), [])
+
+    def test_complete_coverage_has_none_absent(self):
+        seen = {(m, p) for m in self.MODELS for p in self.PAYLOADS}
+        c = self._cells(seen)
+        self.assertEqual(mod.wholly_absent_models(c, self.PAYLOADS), [])
+
+    def test_unknown_expectation_reports_none_rather_than_guessing(self):
+        c = mod.cell_coverage(None, self.MODELS, set())
+        self.assertEqual(mod.wholly_absent_models(c, None), [])
+
+    def test_marker_carries_wholly_absent_so_ci_can_grade(self):
+        seen = {("m1", p) for p in self.PAYLOADS} | {("m2", "a")}
+        c = self._cells(seen)
+        c["wholly_absent"] = mod.wholly_absent_models(c, self.PAYLOADS)
+        marker = mod.cell_marker(c)
+        self.assertIn("wholly_absent=none", marker)
+
+        seen2 = {("m1", p) for p in self.PAYLOADS}
+        c2 = self._cells(seen2)
+        c2["wholly_absent"] = mod.wholly_absent_models(c2, self.PAYLOADS)
+        self.assertIn("wholly_absent=m2", mod.cell_marker(c2))
+
+
+class RenderCellCoverageTest(unittest.TestCase):
+    """The gap has to be IN THE REPORT. render_coverage's own docstring says
+    the report is what gets read; cell coverage previously lived only in a CI
+    marker, so failing the job was the only way to surface it."""
+
+    PAYLOADS = ["a", "b", "c", "d"]
+    MODELS = ["m1", "m2"]
+
+    def test_partial_names_the_model_and_the_count(self):
+        seen = {("m1", p) for p in self.PAYLOADS} | {("m2", "a"), ("m2", "b")}
+        c = mod.cell_coverage(self.PAYLOADS, self.MODELS, seen)
+        out = mod.render_cell_coverage(c, self.PAYLOADS)
+        self.assertIn("PARTIAL", out)
+        self.assertIn("m2", out)
+        self.assertIn("fewer samples", out)
+
+    def test_wholly_absent_is_worded_differently_from_a_partial_gap(self):
+        seen = {("m1", p) for p in self.PAYLOADS}
+        c = mod.cell_coverage(self.PAYLOADS, self.MODELS, seen)
+        out = mod.render_cell_coverage(c, self.PAYLOADS)
+        self.assertIn("absent from ALL", out)
+
+    def test_complete_says_so(self):
+        seen = {(m, p) for m in self.MODELS for p in self.PAYLOADS}
+        c = mod.cell_coverage(self.PAYLOADS, self.MODELS, seen)
+        self.assertIn("Complete", mod.render_cell_coverage(c, self.PAYLOADS))
+
+    def test_unknown_expectation_renders_nothing(self):
+        c = mod.cell_coverage(None, self.MODELS, set())
+        self.assertEqual(mod.render_cell_coverage(c, None), "")
+
+
+
 if __name__ == "__main__":
     unittest.main()
 
