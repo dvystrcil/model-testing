@@ -410,16 +410,44 @@ jobs:
           fi
           echo "$CELLS"
           echo "$CONF"
+          # Graded by whether a model is WHOLLY absent, not by whether
+          # anything is missing (model-testing#94).
+          #
+          # A model missing from EVERY payload is model-testing#82's case
+          # (sweep 31915264873: qwen3.8 absent from all 24 while payload
+          # coverage read 23/24) - the comparison never happened. Fatal.
+          #
+          # A model missing from SOME payloads is almost always a per-call
+          # timeout on a slow model, which is a RESULT worth reading. Run
+          # 33293895544 lost 4 cells of 216 that way - two 5-minute
+          # timeouts on the two slowest models - and failing it discarded a
+          # complete report AND skipped the Claude analysis below, so a
+          # 9.4h sweep produced no paired data at all.
+          #
+          # The partial gap is not swallowed: analyze.py now prints a
+          # "Cell Coverage" section naming every model with missing cells,
+          # so a reader cannot compare an average over fewer samples
+          # without seeing it. That is where the signal belongs - the
+          # report is what gets read, not this log.
           case "$CELLS" in
             *"expected=unknown"*)
-              echo "::error::model coverage UNKNOWN — the expected model set "
+              echo "::error::model coverage UNKNOWN - the expected model set "
               echo "did not reach analyze.py."
               rc=1 ;;
-            *"missing_by_model=none"*) : ;;
+            *"wholly_absent=none"*)
+              case "$CELLS" in
+                *"missing_by_model=none"*) : ;;
+                *)
+                  echo "::warning::${CELLS} - some cells are missing (usually a "
+                  echo "per-call timeout on a slow model). The report ships with a "
+                  echo "Cell Coverage section naming them; affected averages are "
+                  echo "over fewer samples."
+                  ;;
+              esac ;;
             *)
-              echo "::error::${CELLS} — at least one model is missing from at "
-              echo "least one payload, so the side-by-side comparison this "
-              echo "sweep exists for is incomplete."
+              echo "::error::${CELLS} - a model is missing from EVERY payload and "
+              echo "produced no results at all, so the side-by-side comparison this "
+              echo "sweep exists for did not happen."
               rc=1 ;;
           esac
           case "$CONF" in

@@ -107,6 +107,64 @@ def missing_by_model(missing: list[tuple[str, str]]) -> dict[str, int]:
     return out
 
 
+def wholly_absent_models(cells: dict, expected_payloads: list[str] | None) -> list[str]:
+    """Models that produced NOTHING — missing from every expected payload.
+
+    This is the model-testing#82 case (sweep 31915264873: qwen3.8 absent from
+    all 24 payloads while payload coverage read 23/24) and it is categorically
+    different from a model that lost a few cells to per-call timeouts.
+
+    The first means the comparison the sweep was dispatched to make did not
+    happen. The second means a slow model could not answer some payloads inside
+    the budget — which is a RESULT, and one worth reading.
+
+    Grading them the same failed run 33293895544 over 4 timed-out cells of 216,
+    discarding a complete report and skipping the Claude analysis entirely.
+    """
+    if not expected_payloads or not cells.get("known"):
+        return []
+    n = len(expected_payloads)
+    return sorted(m for m, c in missing_by_model(cells["missing"]).items()
+                  if c >= n)
+
+
+def render_cell_coverage(cells: dict, expected_payloads: list[str] | None) -> str:
+    """Cell coverage, in the REPORT.
+
+    render_coverage's docstring already states the principle -- "this has to
+    live in the report, not just in a job log, because the report is what gets
+    read and compared" -- but only PAYLOAD coverage obeyed it. Cell coverage
+    existed solely as a CI marker, so failing the job was the only way to make
+    a partial sweep visible.
+
+    The hazard is a reader comparing a model's average without knowing it was
+    computed over fewer samples. That is fixed by printing the gap, not by
+    refusing to publish the other 212 cells.
+    """
+    if not cells.get("known"):
+        return ""
+    if cells["complete"]:
+        return (f"## Cell Coverage\n\n"
+                f"Complete — {cells['expected']} of {cells['expected']} "
+                f"(model x payload) cells analyzed.\n")
+    miss = missing_by_model(cells["missing"])
+    absent = set(wholly_absent_models(cells, expected_payloads))
+    lines = ["## Cell Coverage\n",
+             f"**PARTIAL** — {cells['analyzed']} of {cells['expected']} "
+             f"(model x payload) cells analyzed.\n",
+             "Averages for these models are computed over fewer samples than "
+             "the others, and are not directly comparable:\n"]
+    for m, n in sorted(miss.items()):
+        if m in absent:
+            lines.append(f"- `{m}` — **absent from ALL {n} payloads**; this "
+                         f"model produced no results at all")
+        else:
+            lines.append(f"- `{m}` — missing {n} payload(s), most commonly a "
+                         f"per-call timeout on a slow model")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
 def parse_expected(raw: str | None) -> list[str] | None:
     """The payload names this sweep was supposed to produce, or None.
 
@@ -181,8 +239,10 @@ def cell_marker(c: dict) -> str:
         return "ANALYZE-CELLS expected=unknown analyzed=%d" % c["analyzed"]
     miss = missing_by_model(c["missing"])
     detail = ",".join(f"{k}:{v}" for k, v in sorted(miss.items())) or "none"
+    absent = ",".join(c.get("wholly_absent") or []) or "none"
     return (f"ANALYZE-CELLS expected={c['expected']} "
-            f"analyzed={c['analyzed']} missing_by_model={detail}")
+            f"analyzed={c['analyzed']} missing_by_model={detail} "
+            f"wholly_absent={absent}")
 
 
 def confabulation_marker(bogus: list[str]) -> str:
@@ -446,6 +506,8 @@ def main():
     seen_cells = {(r["model"], r["payload"]) for r in results + agentic}
     cells = cell_coverage(parse_expected(args.expect),
                           parse_expected(args.expect_models), seen_cells)
+    cells["wholly_absent"] = wholly_absent_models(cells,
+                                                  parse_expected(args.expect))
     print(cell_marker(cells), file=sys.stderr)
     for mdl, n in sorted(missing_by_model(cells["missing"]).items()):
         print(f"::warning::model '{mdl}' is missing from {n} payload(s)",
@@ -492,6 +554,7 @@ def main():
         # the report is partial BEFORE reading results they would otherwise
         # compare against a previous, complete sweep.
         f"{render_coverage(cov)}\n"
+        f"{render_cell_coverage(cells, parse_expected(args.expect))}"
         f"## Results\n\n{table}\n"
         f"{agentic_section}\n"
         f"## AI Analysis\n{warn_block}\n{analysis}\n"
