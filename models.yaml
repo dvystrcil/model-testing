@@ -1,7 +1,88 @@
 models:
+  # --- Overnight tool-calling comparison, 2026-08-30 (homelab#1205) --------
+  # Question this sweep exists to answer: meal-time's tool calls regressed on
+  # ollama 0.33.x and are now pinned back to 0.32.15. qwen3.6:35b still emits
+  # occasional malformed calls; qwen3-coder-next does not but is 3.7x slower
+  # with thinner prose. Is there a better local option than either?
+  #
+  # The agentic_*, schema_adherence and structured_json_* payloads are the
+  # ones that matter here; the rest are carried for regression context.
+
+  # INCUMBENT / BASELINE. Currently drives meal-time. The number to beat.
   - name: qwen3.6:35b
+
+  # Smaller sibling, already in the lineup.
   - name: qwen3.6:27B
-  - name: qwen3.8:27b
+
+  # CONTROL, and the most interesting row. qwen3.5 gets renderer=qwen3.5 AND
+  # parser=qwen3.5 -- a CORRECT match. qwen3.6 has no renderer of its own and
+  # borrows qwen3.5's (its architecture string is qwen35moe). If 3.5 beats 3.6
+  # on the agentic/schema payloads despite being the older model, that is
+  # evidence the borrowed renderer is costing qwen3.6 tool-call fidelity.
+  # Isolates the mismatch hypothesis from raw model quality.
+  - name: qwen3.5:27B
+
+  # TOP CANDIDATE. MoE, ~4B active. Has a dedicated gemma4 renderer AND parser
+  # (verified in max-01's own template-selection logs), unlike qwen3.6. ollama
+  # v0.32.1 -- inside the current pin -- shipped "Improved Gemma 4 tool calling
+  # and multi-turn reasoning". Prior smoke: 53.5 tok/s, identical to
+  # qwen3.6:35b, at 15 GB vs 23 GB and half the cold-load time.
+  #
+  # NOT assumed good: homelab#571/#577 previously caught this exact tag
+  # authoring malformed JSON. That was before the v0.32.1 tool-calling work,
+  # so this sweep is the retest -- structured_json_* is the payload to read.
+  - name: gemma4:26b-a4b-it-qat   # ~15 GB
+
+  # Dense gemma4 for a same-family MoE-vs-dense comparison. The it-qat variant
+  # specifically: plain gemma4:31b had broken vision on ollama 0.30.x.
+  - name: gemma4:31b-it-qat       # ~18 GB
+
+  # The other incumbent: zero tool-call failures across the 1,878-call
+  # baseline, and back to 0 failures after the 0.32.15 rollback. Slow (77s vs
+  # 21s) with thinner answers. Included so "clean but slow" is measured rather
+  # than asserted.
+  - name: qwen3-coder-next:latest # ~51 GB
+
+  # --- Added after pre-flight, 2026-08-30 -------------------------------
+  # All three pulled and smoke-tested on max-01 BEFORE enabling: each
+  # generates on gfx1151 (36s / 8s / warm-instant cold loads) and reports
+  # `tools` in its capabilities. Pre-flighting attended is deliberate — a
+  # first-ever load failing at 3am is how this GPU gets wedged.
+
+  # Correctly matched renderer AND parser (verified live:
+  # renderer=nemotron-3.5-nano parser=nemotron-3.5-nano). 30B MoE with 3B
+  # active, 1M context. Architecture added in ollama v0.32.9 — inside the
+  # current pin.
+  - name: nemotron-3.5-lightning:30b-a3b-q4_K_M  # ~25 GB
+
+  # Correctly matched renderer AND parser (verified live: renderer=glm-4.7
+  # parser=glm-4.7). "Strongest model in the 30B class", 198K context.
+  # ollama v0.32.3 — inside the pin — "Fixed GLM tool calls being silently
+  # dropped at the end of generation".
+  - name: glm-4.7-flash:q4_K_M                   # ~19 GB
+
+  # THIRD CONDITION for the renderer hypothesis. Despite cogito.go existing
+  # in ollama's renderer set, this tag resolves to selected=go_template with
+  # renderer="" parser="" — it uses its OWN GGUF chat template rather than
+  # any ollama renderer.
+  #
+  # That makes the sweep a clean three-way on how tool calls get formatted:
+  #   qwen3.6:35b   BORROWS another model's renderer (qwen3.5)
+  #   qwen3.5:27B   MATCHED renderer + parser
+  #   cogito:32b    OWN template, no ollama renderer
+  # If borrowing is the problem, qwen3.6 should trail both of the others.
+  - name: cogito:32b                             # ~20 GB
+
+  # DELIBERATELY EXCLUDED -- do not re-enable without checking upstream first.
+  # qwen3.8:27b hangs: POST /v1/chat/completions never returns (no content, no
+  # usage, done=False). Reproduced live 2026-08-30 and matches upstream
+  # ollama/ollama#17790, which reports it against 0.32.13 on ROCm -- so it is
+  # NOT the 0.33.x regression and the rollback does not fix it.
+  #
+  # It was active in this list. An unattended sweep would have stalled on it,
+  # and this workflow's own concurrency comment records that killing a sweep
+  # mid-flight has wedged max-01 before. Left commented until #17790 closes.
+  # - name: qwen3.8:27b
   #- name: gemma4:26b
   #- name: gemma4:31b
   # Added 2026-06-08 — homelab#184 — Gemma 4 QAT variant.
