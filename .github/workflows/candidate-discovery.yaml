@@ -1,0 +1,156 @@
+name: candidate discovery
+
+# Weekly: find new candidate LLMs, pre-flight them on max-01, and open a PR
+# adding the ones that work to models.yaml.
+#
+# WHY THIS STOPS AT A PR
+#
+# models.yaml states the hazard directly:
+#
+#   Pre-flighting attended is deliberate -- a first-ever load failing at 3am
+#   is how this GPU gets wedged.
+#
+# qwen3.8:27b is commented out of the roster right now for exactly that: POST
+# /v1/chat/completions never returns (ollama/ollama#17790). An unattended
+# sweep would have stalled on it, and model-sweep.yaml's own concurrency
+# comment records that killing a sweep mid-flight has wedged max-01 before.
+#
+# So this automates everything up to a one-click merge, and the thing a human
+# approves is exactly the thing that has bitten before: an unknown model
+# entering a 13-hour unattended sweep. The pre-flight is bounded, probes all
+# three recorded gfx1151 wedge signatures, and stops the loop the moment one
+# appears.
+#
+# The very first dry run of this proposed hf.co/unsloth/Qwen3.8-27B-GGUF:Q8_0
+# -- the excluded model under a different name. That is why the exclusion
+# check compares MODELS, not tags.
+
+on:
+  schedule:
+    # Sunday 09:00 UTC. Deliberately not overnight: a pre-flight that wedges
+    # the GPU should happen when someone is around, which is the entire
+    # premise of the gate below.
+    - cron: '0 9 * * 0'
+  workflow_dispatch:
+    inputs:
+      max_preflight:
+        description: 'How many candidates to cold-load this run. Each is a multi-GB pull plus a real load.'
+        required: false
+        default: '3'
+      min_gb:
+        description: 'Smallest quant size worth pulling'
+        required: false
+        default: '10'
+      max_gb:
+        description: 'Largest quant size that fits alongside everything else on max-01'
+        required: false
+        default: '45'
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never two of these at once: each holds the GPU for a cold load, and two
+  # concurrent pulls is its own way to find OLLAMA_LOAD_TIMEOUT.
+  group: candidate-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: model-testing-runner
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fetch secrets from Infisical
+        uses: Infisical/secrets-action@v1.0.17
+        with:
+          client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
+          client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+          env-slug: prod
+          project-slug: homelab-bz-gt
+          secret-path: /
+          export-type: env
+          domain: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+
+      - name: Discover and pre-flight candidates
+        id: discover
+        env:
+          OLLAMA_URL: http://ollama.ollama.svc.cluster.local
+        run: |
+          set -o pipefail
+          python bin/discover-candidates.py \
+            --ollama "$OLLAMA_URL" \
+            --max-preflight "${{ github.event.inputs.max_preflight || '3' }}" \
+            --min-gb "${{ github.event.inputs.min_gb || '10' }}" \
+            --max-gb "${{ github.event.inputs.max_gb || '45' }}" \
+            --out /tmp/pr-body.md 2>&1 | tee /tmp/discovery.log
+
+      # Separate step, for the same reason the sweep's assertions are:
+      # failing inside the step above would abort before the PR is opened,
+      # discarding a good candidate because the reporting was noisy.
+      - name: Assert the discovery loop actually completed
+        run: |
+          MARKER=$(grep -m1 '^DISCOVERY-COMPLETE' /tmp/discovery.log || true)
+          if [ -z "$MARKER" ]; then
+            echo "::error::no DISCOVERY-COMPLETE marker — the loop died "
+            echo "partway, so 'found nothing' cannot be distinguished from "
+            echo "'never ran'."
+            exit 1
+          fi
+          echo "$MARKER"
+          case "$MARKER" in
+            *"breaker=yes"*)
+              echo "::warning::pre-flight stopped early — a candidate left "
+              echo "ollama unhealthy. Check 'ollama ps' for a 'Stopping...' "
+              echo "entry; the PR body names the model and the signature."
+              ;;
+          esac
+
+      - name: Check whether anything changed
+        id: changed
+        run: |
+          if git diff --quiet -- models.yaml candidates-ledger.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing new this week."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/create-github-app-token@v3
+        if: steps.changed.outputs.changed == 'true'
+        id: app-token
+        with:
+          client-id: ${{ env.CICD_APP_CLIENT_ID }}
+          private-key: ${{ env.CICD_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: model-testing
+          # Declared so a missing permission fails as an auth error naming
+          # the scope, instead of surfacing later as an empty result.
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Open the PR
+        if: steps.changed.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          BRANCH="candidates/$(date -u +%Y-%m-%d)"
+          git config user.name  "dvystrcil-ci-cd[bot]"
+          git config user.email "dvystrcil-ci-cd[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add models.yaml candidates-ledger.json
+          git commit -m "chore: weekly candidate discovery $(date -u +%Y-%m-%d)"
+          git push -u origin "$BRANCH"
+          gh pr create --repo "${{ github.repository }}" \
+            --base main --head "$BRANCH" \
+            --title "chore: candidate discovery $(date -u +%Y-%m-%d)" \
+            --body-file /tmp/pr-body.md
