@@ -61,17 +61,28 @@ models:
   # dropped at the end of generation".
   - name: glm-4.7-flash:q4_K_M                   # ~19 GB
 
-  # THIRD CONDITION for the renderer hypothesis. Despite cogito.go existing
-  # in ollama's renderer set, this tag resolves to selected=go_template with
-  # renderer="" parser="" — it uses its OWN GGUF chat template rather than
-  # any ollama renderer.
+  # REMOVED 2026-09-02: cogito:32b. It was here as the THIRD CONDITION of the
+  # renderer hypothesis -- it resolves to selected=go_template with
+  # renderer="" parser="", using its OWN GGUF chat template rather than any
+  # ollama renderer, against qwen3.6:35b (BORROWS qwen3.5's renderer) and
+  # qwen3.5:27B (MATCHED renderer + parser). The prediction was that if
+  # borrowing is the problem, qwen3.6 should trail both of the others.
   #
-  # That makes the sweep a clean three-way on how tool calls get formatted:
-  #   qwen3.6:35b   BORROWS another model's renderer (qwen3.5)
-  #   qwen3.5:27B   MATCHED renderer + parser
-  #   cogito:32b    OWN template, no ollama renderer
-  # If borrowing is the problem, qwen3.6 should trail both of the others.
-  - name: cogito:32b                             # ~20 GB
+  # Sweep 33472730762 answered it: all three arms went 6/6 agentic, and the
+  # borrower was the FASTEST to converge (qwen3.6:35b 2.0 avg turns,
+  # cogito:32b 2.0, qwen3.5:27B 2.4). Borrowing a renderer did not cost a
+  # single tool call. The experiment is concluded, so the arm is no longer
+  # load-bearing.
+  #
+  # And on its own merits it was last in the field: 78% facts, 56% family --
+  # both bottom of nine -- at 10.8 TPS. The disqualifier is
+  # family_harmful_request_refusal, where it scored 0% and every other model
+  # scored 100%.
+  #
+  # Note it was never a big time cost: 0.37h of generation across the sweep,
+  # because it writes very little (median 150 tokens/cell). The sweep's real
+  # cost is the dense 27B pair, 4.9h of 9.2h.
+  # - name: cogito:32b                           # ~20 GB
 
   # DELIBERATELY EXCLUDED -- do not re-enable without checking upstream first.
   # qwen3.8:27b hangs: POST /v1/chat/completions never returns (no content, no
