@@ -1,7 +1,26 @@
-# Self-hosted runner labels used by this repo. actionlint validates
-# `runs-on:` against GitHub's hosted labels and cannot know ours, so without
-# this every job reports an unknown-label error and the real findings drown
-# in the noise — which is how a linter gets switched off.
+# actionlint config.
+#
+# actionlint 1.7.12 bundles metadata for actions/create-github-app-token@v3
+# that lists only `app-id`. The action also accepts `client-id` — GitHub added
+# it so an App can be addressed by its OAuth client id — and that is the
+# credential this homelab actually issues: every workflow across the fleet
+# authenticates with CICD_APP_CLIENT_ID + CICD_APP_PRIVATE_KEY, and no
+# CICD_APP_ID exists to switch to.
+#
+# So this is stale linter metadata, not a real finding. Scoped to the one
+# file and the two exact messages rather than disabling the rule, so a
+# genuine typo in any other action input still fails.
+# Creating this file at all makes actionlint start enforcing runner labels,
+# which it silently tolerated while no config existed. Declaring the
+# self-hosted label keeps that from turning a scoped ignore into new failures
+# in files this change never touched -- caught by running CI's exact image
+# locally before pushing.
 self-hosted-runner:
   labels:
     - model-testing-runner
+
+paths:
+  .github/workflows/candidate-discovery.yaml:
+    ignore:
+      - 'input "client-id" is not defined in action "actions/create-github-app-token@v3"'
+      - 'missing input "app-id" which is required by action "actions/create-github-app-token@v3"'
