@@ -434,3 +434,67 @@ class AbbreviationIsNotInventionTest(unittest.TestCase):
         m = mod.confabulation_marker(["qwen3.10:30b"], [], {})
         self.assertIn("invented=qwen3.10:30b", m)
         self.assertNotIn("invented=none", m)
+
+
+class TruncationMustBeVisibleTest(unittest.TestCase):
+    """A capped generation is still a partial answer — it just fails safely.
+
+    Capping tokens (model-testing#98) fixes WHICH runs are lost, but it does
+    not make a long answer complete. If the cap is silent, the same bias the
+    timeout produced simply moves: an average over truncated responses reads
+    exactly like an average over finished ones.
+
+    Ollama already returns `done_reason`. `length` vs `stop` turns truncation
+    into a VALUE in the data instead of an absence, which is the whole
+    difference from the timeout it replaces — a timed-out run left no trace
+    at all.
+    """
+
+    ROWS = [
+        {"model": "qwen3.5:27B", "payload": "stress_constraint_hard",
+         "done_reasons": ["length"]},
+        {"model": "qwen3.5:27B", "payload": "creative_scene_in_voice",
+         "done_reasons": ["length", "stop"]},
+        {"model": "qwen3.5:27B", "payload": "factual_recall",
+         "done_reasons": ["stop"]},
+        {"model": "qwen3.6:35b", "payload": "factual_recall",
+         "done_reasons": ["stop"]},
+    ]
+
+    def test_a_cell_that_hit_the_cap_is_counted(self):
+        self.assertEqual(mod.truncation_summary(self.ROWS),
+                         {"qwen3.5:27B": 2})
+
+    def test_a_cell_where_only_some_runs_hit_the_cap_still_counts(self):
+        """Two of three runs finishing does not make the average clean — it
+        makes it a blend. That is the bias, not an exception to it."""
+        self.assertIn("qwen3.5:27B", mod.truncation_summary(
+            [{"model": "qwen3.5:27B", "payload": "p",
+              "done_reasons": ["stop", "length", "stop"]}]))
+
+    def test_a_clean_sweep_summarises_to_nothing(self):
+        self.assertEqual(mod.truncation_summary(self.ROWS[2:]), {})
+
+    def test_rows_from_before_this_change_do_not_read_as_truncated(self):
+        """Every result file written before #98 has no done_reason at all.
+        Absent must mean unknown, not 'fine' — but it must also not
+        manufacture a finding out of old data."""
+        self.assertEqual(
+            mod.truncation_summary([{"model": "m", "payload": "p"}]), {})
+
+    def test_the_marker_names_the_models_and_counts(self):
+        m = mod.truncation_marker(mod.truncation_summary(self.ROWS))
+        self.assertIn("ANALYZE-TRUNCATION", m)
+        self.assertIn("qwen3.5:27B:2", m)
+
+    def test_the_marker_says_none_when_there_is_none(self):
+        self.assertIn("truncated=none", mod.truncation_marker({}))
+
+    def test_the_report_section_names_the_affected_models(self):
+        section = mod.render_truncation(mod.truncation_summary(self.ROWS))
+        self.assertIn("qwen3.5:27B", section)
+        self.assertIn("2", section)
+
+    def test_a_clean_sweep_renders_no_section(self):
+        """A section that always appears is a section nobody reads."""
+        self.assertEqual(mod.render_truncation({}), "")

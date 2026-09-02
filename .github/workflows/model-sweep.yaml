@@ -477,6 +477,22 @@ jobs:
               echo "labelled; its analysis section is not trustworthy."
               rc=1 ;;
           esac
+          # Truncation is a WARNING, never fatal (model-testing#98). A
+          # capped response is a partial answer, not a lost one -- the cell
+          # is in the table and the report names it. Failing here would
+          # discard a whole sweep for the same reason #94 already rejected.
+          TRUNC=$(grep -m1 '^ANALYZE-TRUNCATION' /tmp/analyze.err 2>/dev/null || true)
+          if [ -n "$TRUNC" ]; then
+            echo "$TRUNC"
+            case "$TRUNC" in
+              *"truncated=none"*) : ;;
+              *)
+                echo "::warning::${TRUNC} - some responses hit the "
+                echo "generation cap. Those averages describe partial "
+                echo "answers; the report names every affected model."
+                ;;
+            esac
+          fi
           case "$CONF" in
             *"abbreviated=none"*) : ;;
             *)

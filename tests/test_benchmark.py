@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "benchmarks"))
+import run_benchmark as rb
 from run_benchmark import (
     grade,
     strip_think,
@@ -346,3 +347,59 @@ def test_an_unknown_facts_mode_raises_rather_than_silently_scoring():
     except ValueError:
         return
     raise AssertionError("unknown facts_mode should raise")
+
+
+# ---------------------------------------------------------------------------
+# Generation limit (model-testing#98).
+#
+# `HTTP_TIMEOUT` was a WALL-CLOCK limit on an UNBOUNDED process, so the real
+# ceiling was throughput-dependent: ~3570 tokens for a dense 27B at 11.9 TPS
+# and ~25000 for an A3B MoE at 83.8. The same prompt therefore had a
+# different budget per model, and the ones that lost were always the same
+# four models.
+#
+# Worse than the missing cells: a timed-out run is dropped and the cell keeps
+# the runs that finished, so for the slow tier every LONG answer was
+# discarded and the short ones kept. The surviving averages were computed
+# over a biased sample, and nothing said so.
+# ---------------------------------------------------------------------------
+
+def test_generation_is_capped_in_tokens():
+    """The cap is what makes the budget identical for every model."""
+    p = {"model": "x", "messages": []}
+    rb.apply_generation_limit(p)
+    assert p["options"]["num_predict"] == rb.NUM_PREDICT
+
+
+def test_a_payload_that_sets_its_own_limit_keeps_it():
+    """A payload deliberately probing long-form output must not be silently
+    clamped to the default."""
+    p = {"model": "x", "messages": [], "options": {"num_predict": 128}}
+    rb.apply_generation_limit(p)
+    assert p["options"]["num_predict"] == 128
+
+
+def test_the_limit_does_not_disturb_other_options():
+    p = {"model": "x", "messages": [], "options": {"num_gpu": -1}}
+    rb.apply_generation_limit(p)
+    assert p["options"]["num_gpu"] == -1
+    assert p["options"]["num_predict"] == rb.NUM_PREDICT
+
+
+def test_the_wall_clock_timeout_outlasts_the_token_cap():
+    """The whole point is that the TOKEN cap binds first. If the wall-clock
+    can still fire before the cap is reached, nothing has changed: the
+    budget goes back to being throughput-dependent and the slow tier goes
+    back to losing cells for where it runs rather than what it wrote.
+
+    10.5 TPS is the slowest median measured across sweeps 33293895544 and
+    33472730762 (gemma4:31b-it-qat).
+    """
+    slowest_tps = 10.5
+    assert rb.NUM_PREDICT / slowest_tps < rb.HTTP_TIMEOUT
+
+
+def test_the_cap_covers_the_overwhelming_majority_of_real_responses():
+    """Sized from 397 observed cells across two sweeps, not guessed:
+    p95=3182, p99=4872, max=5654. 4096 truncates ~2%."""
+    assert rb.NUM_PREDICT >= 4096
