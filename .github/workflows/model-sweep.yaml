@@ -31,6 +31,10 @@ on:
         description: 'Who/what triggered this sweep. Free-form (e.g. "operator", "n8n:sweep-runner", "@user"). Logged in the analyze step and surfaces in the n8n-posted tracking issue.'
         required: false
         default: 'operator'
+      reanalyze_run_id:
+        description: 'Re-analyze an EXISTING sweep instead of running one. Give a previous run id; the sweep matrix is skipped and the analyze job reads that run''s results off the PVC. Recovers a lost Claude summary in ~2min instead of a 13h re-sweep.'
+        required: false
+        default: ''
 
 # Single-sweep mutex: queue subsequent runs instead of cancelling the
 # in-progress one. gfx1151 ollama wedge fear (project_ollama_wedge_mode):
@@ -71,6 +75,10 @@ jobs:
 
   sweep:
     needs: setup
+    # A re-analysis reads results already on the PVC. Running the matrix
+    # again would spend 13h of GPU time to regenerate data that is sitting
+    # on disk -- and would overwrite it with a different sweep's numbers.
+    if: ${{ github.event.inputs.reanalyze_run_id == '' }}
     strategy:
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
       max-parallel: 1   # one payload at a time — Ollama is single-GPU
@@ -254,6 +262,15 @@ jobs:
     runs-on: model-testing-runner
     timeout-minutes: 30
 
+    env:
+      # Which sweep's DATA this job is about -- not necessarily this run.
+      # Resolved once here because a half-applied change (one step reading
+      # the reused run, another writing to the new one) puts the report
+      # where nobody looks, and both halves look correct in isolation.
+      SWEEP_RUN_ID: ${{ github.event.inputs.reanalyze_run_id || github.run_id }}
+      # Empty on a normal sweep. Present = "these results are historical".
+      REANALYZE: ${{ github.event.inputs.reanalyze_run_id }}
+
     steps:
       - uses: actions/checkout@v7
 
@@ -314,13 +331,24 @@ jobs:
           # would report every other model as missing.
           SWEEP_MODEL_OVERRIDE: ${{ github.event.inputs.model }}
         run: |
-          if [ -n "$SWEEP_MODEL_OVERRIDE" ]; then
+          if [ -n "$REANALYZE" ]; then
+            # A historical dataset cannot be validated against today's
+            # roster: models.yaml has already changed (cogito:32b dropped),
+            # so a model would be reported `unexpected` for the crime of
+            # having been removed afterwards. Deriving the expected set from
+            # the data instead would be worse -- coverage becomes
+            # tautologically complete and unable to detect absence, which is
+            # the exact defect ANALYZE-CELLS exists to catch.
+            echo "re-analyzing run ${SWEEP_RUN_ID}: coverage will read UNKNOWN"
+            EXPECTED_MODELS=""
+            EXPECTED_PAYLOADS=""
+          elif [ -n "$SWEEP_MODEL_OVERRIDE" ]; then
             EXPECTED_MODELS="$SWEEP_MODEL_OVERRIDE"
           else
             EXPECTED_MODELS=$(python3 -c "import yaml;print(','.join(m['name'] for m in yaml.safe_load(open('models.yaml'))['models']))")
           fi
           echo "expecting models: $EXPECTED_MODELS"
-          RUN_DIR="${RESULTS_BASE}/run-${{ github.run_id }}"
+          RUN_DIR="${RESULTS_BASE}/run-${SWEEP_RUN_ID}"
           FILES=$(find "$RUN_DIR" -name "*.jsonl" 2>/dev/null | sort | tr '\n' ' ')
           if [ -z "$FILES" ]; then
             echo "No result files found in $RUN_DIR — all sweep jobs may have failed."
@@ -334,7 +362,7 @@ jobs:
           # which sweep this report belongs to.
           {
             echo "<!--"
-            echo "  sweep_id:   ${{ github.run_id }}"
+            echo "  sweep_id:   ${SWEEP_RUN_ID}"
             echo "  model:      ${{ github.event.inputs.model || 'all' }}"
             echo "  payload:    ${{ github.event.inputs.payload || 'all' }}"
             echo "  runs:       ${{ github.event.inputs.runs || '1' }}"
@@ -362,7 +390,14 @@ jobs:
             --out /tmp/analyze.md 2>&1 | tee /tmp/analyze.err
           cat /tmp/analyze.md >> report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
-          cp report.md "${RESULTS_BASE}/run-${{ github.run_id }}/report.md"
+          if [ -n "$REANALYZE" ]; then
+            # Never clobber the original. report.md on the PVC is what that
+            # sweep reported AT THE TIME; a re-analysis runs newer code over
+            # the same data and can legitimately reach a different verdict.
+            cp report.md "${RESULTS_BASE}/run-${SWEEP_RUN_ID}/report-reanalysis-${{ github.run_id }}.md"
+          else
+            cp report.md "${RESULTS_BASE}/run-${SWEEP_RUN_ID}/report.md"
+          fi
 
       # Deliberately a SEPARATE step, after the report has been written and
       # copied to the PVC. Failing inside the step above would abort before
@@ -380,9 +415,19 @@ jobs:
           echo "$MARKER"
           case "$MARKER" in
             *"expected=unknown"*)
-              echo "::error::coverage UNKNOWN — the expected payload set did "
-              echo "not reach analyze.py (check the matrix expression)."
-              exit 1 ;;
+              if [ -n "$REANALYZE" ]; then
+                # Expected here, and stated rather than hidden. The original
+                # run already published its coverage verdict; this mode
+                # exists to recover the Claude summary, not to re-litigate
+                # completeness.
+                echo "::warning::coverage UNKNOWN — re-analysis of run "
+                echo "${SWEEP_RUN_ID} cannot reconstruct what that sweep "
+                echo "expected. See that run's own Coverage section."
+              else
+                echo "::error::coverage UNKNOWN — the expected payload set did "
+                echo "not reach analyze.py (check the matrix expression)."
+                exit 1
+              fi ;;
             *"missing=none"*"unexpected=none"*)
               echo "All requested payloads were analyzed." ;;
             *)
@@ -534,7 +579,7 @@ jobs:
           fi
           {
             echo "<!--"
-            echo "  sweep_id:   ${{ github.run_id }}"
+            echo "  sweep_id:   ${SWEEP_RUN_ID}"
             echo "  summarizer: $CLAUDE_MODEL"
             echo "-->"
             echo
@@ -546,7 +591,7 @@ jobs:
           cat /tmp/analyze-claude.md >> report-claude.md
           echo "## Claude analysis (via OWUI)" >> "$GITHUB_STEP_SUMMARY"
           cat report-claude.md >> "$GITHUB_STEP_SUMMARY"
-          cp report-claude.md "${RESULTS_BASE}/run-${{ github.run_id }}/report-claude.md"
+          cp report-claude.md "${RESULTS_BASE}/run-${SWEEP_RUN_ID}/report-claude.md"
 
       # Upload report.md (local) + report-claude.md (Claude) as workflow
       # artifacts so the n8n sweep-runner can fetch them via the GH API
@@ -616,5 +661,5 @@ jobs:
             "$N8N_WEBHOOK_URL" \
             && rc=0 || rc=$?
           if [ "$rc" -ne 0 ]; then
-            echo "::warning::n8n sweep-complete notification failed (rc=$rc). report.md is still on PVC at ${RESULTS_BASE}/run-${{ github.run_id }}/report.md and as workflow artifact."
+            echo "::warning::n8n sweep-complete notification failed (rc=$rc). report.md is still on PVC at ${RESULTS_BASE}/run-${SWEEP_RUN_ID}/report.md and as workflow artifact."
           fi
