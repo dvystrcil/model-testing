@@ -450,13 +450,40 @@ jobs:
               echo "sweep exists for did not happen."
               rc=1 ;;
           esac
+          # Graded three ways, for the same reason ANALYZE-CELLS is
+          # (model-testing#94): a gate that fails a CORRECT nine-hour run
+          # is a gate somebody deletes.
+          #
+          # Sweep 33472730762 failed on prose that was entirely true. The
+          # summariser wrote `gemma4:26b` for `gemma4:26b-a4b-it-qat` and
+          # quoted its real token count (2401, exactly the table value).
+          # Failing stamped "not trustworthy" on a true statement AND
+          # skipped the Claude summary step below, so a 25-payload,
+          # 9-model sweep produced no paired data at all.
+          #
+          # invented   names nothing real. Sweep 31915264873's
+          #            `qwen3.10:30b` with fabricated metrics. Fatal.
+          # ambiguous  could mean several models that ran, so the claim
+          #            cannot be attributed to any of them. Fatal.
+          # abbreviated resolves to exactly one model that ran, at a
+          #            component boundary. The claim is checkable, the
+          #            report names the expansion. Warning.
           case "$CONF" in
-            *"invented=none"*) : ;;
+            *"invented=none ambiguous=none"*) : ;;
             *)
               echo "::error::${CONF} — the generated analysis names models "
-              echo "that appear in no result row. The report is published and "
+              echo "that appear in no result row, or that could mean more "
+              echo "than one model that ran. The report is published and "
               echo "labelled; its analysis section is not trustworthy."
               rc=1 ;;
+          esac
+          case "$CONF" in
+            *"abbreviated=none"*) : ;;
+            *)
+              echo "::warning::${CONF} - the analysis shortened a model "
+              echo "name. The claims resolve to one model that ran; the "
+              echo "report names each expansion."
+              ;;
           esac
           exit $rc
 

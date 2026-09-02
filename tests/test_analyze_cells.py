@@ -320,3 +320,117 @@ class RunsColumnTest(unittest.TestCase):
         size nobody recorded."""
         r = dict(self.ROW); r.pop("runs")
         self.assertIn("| ? |", mod.build_summary_table([r]))
+
+
+class AbbreviationIsNotInventionTest(unittest.TestCase):
+    """Sweep 33472730762 failed on an analysis that was entirely correct.
+
+    The summariser wrote:
+
+        `qwen3.6:35b` processes `~2207` tokens with zero hallucinations,
+        while `gemma4:26b` requires `~2401` tokens to reach the same
+        fidelity.
+
+    Both numbers are exact matches for the computed table. `2207` is
+    `qwen3.6:35b`'s real value and `2401` is `gemma4:26b-a4b-it-qat`'s. The
+    model did not invent anything -- it dropped the `-a4b-it-qat` suffix.
+
+    The guard failed the run, stamped "its analysis section is not
+    trustworthy" on a true statement, and -- because the Claude summary step
+    runs after this one -- discarded the paired Claude analysis of a 25-
+    payload, 9-model sweep. That is the same cost model-testing#94 already
+    fixed once for partial cells: a gate that fails a correct 9-hour run is
+    a gate somebody deletes.
+
+    So invention and abbreviation are graded apart. The distinction is not
+    "does it look close enough" -- it is whether the short name identifies
+    exactly ONE real model, and whether it stops at a component boundary.
+    Anything else stays fatal.
+    """
+
+    REAL = ["qwen3.6:35b", "gemma4:26b-a4b-it-qat", "gemma4:31b-it-qat"]
+
+    # --------------------------------------------- the run that failed
+    def test_the_real_sentence_from_33472730762_is_not_invention(self):
+        text = ("`qwen3.6:35b` processes `~2207` tokens with zero "
+                "hallucinations, while `gemma4:26b` requires `~2401` tokens "
+                "to reach the same fidelity.")
+        invented, ambiguous, abbrev = mod.classify_named_models(text, self.REAL)
+        self.assertEqual(invented, [])
+        self.assertEqual(ambiguous, [])
+        self.assertEqual(abbrev, {"gemma4:26b": "gemma4:26b-a4b-it-qat"})
+
+    def test_invented_models_no_longer_flags_it(self):
+        """The old entry point keeps working and keeps its meaning."""
+        self.assertEqual(
+            mod.invented_models("`gemma4:26b` was fastest", self.REAL), [])
+
+    # ------------------------------------- what must STILL be fatal
+    def test_the_original_confabulation_is_still_invention(self):
+        """qwen3.10:30b prefixes nothing. This is the case the guard exists
+        for and it must not be softened by any of the above."""
+        invented, _, _ = mod.classify_named_models(
+            "`qwen3.10:30b`: ~97% factual score", ["qwen3.6:35b"])
+        self.assertEqual(invented, ["qwen3.10:30b"])
+
+    def test_an_ambiguous_short_name_is_NOT_an_abbreviation(self):
+        """With two 26b variants, `gemma4:26b` cannot be resolved. Silently
+        attributing the claim to one of them is worse than failing: it reads
+        as a verified statement about a model nobody chose."""
+        known = self.REAL + ["gemma4:26b-instruct"]
+        invented, ambiguous, abbrev = mod.classify_named_models(
+            "`gemma4:26b` led on latency", known)
+        self.assertEqual(abbrev, {})
+        self.assertEqual(ambiguous, ["gemma4:26b"])
+        self.assertEqual(invented, [])
+
+    def test_a_boundary_prefix_matching_several_variants_is_ambiguous(self):
+        """Two variants of the same base tag. The short form stops at a real
+        component boundary, so it is a plausible abbreviation of either --
+        which is exactly why it cannot be resolved."""
+        known = ["qwen3.6:27B-instruct", "qwen3.6:27B-chat"]
+        invented, ambiguous, abbrev = mod.classify_named_models(
+            "`qwen3.6:27B` trails", known)
+        self.assertEqual(abbrev, {})
+        self.assertEqual(invented, [])
+        self.assertEqual(ambiguous, ["qwen3.6:27B"])
+
+    def test_a_mid_token_truncation_is_invention_not_abbreviation(self):
+        """`qwen3.6:3` is a prefix of `qwen3.6:35b`, but it reads as a
+        different size. An abbreviation drops whole suffix COMPONENTS
+        (`-a4b-it-qat`); it never cuts a token in half."""
+        invented, _, abbrev = mod.classify_named_models(
+            "`qwen3.6:3` was slow", ["qwen3.6:35b"])
+        self.assertEqual(abbrev, {})
+        self.assertEqual(invented, ["qwen3.6:3"])
+
+    def test_a_requested_but_absent_model_is_still_invention(self):
+        """Unchanged from the original guard: being in models.yaml must not
+        excuse prose about results that do not exist."""
+        invented, _, _ = mod.classify_named_models(
+            "`qwen3.8:27b` completely fails agentic", self.REAL)
+        self.assertEqual(invented, ["qwen3.8:27b"])
+
+    def test_case_still_does_not_matter(self):
+        _, _, abbrev = mod.classify_named_models("`GEMMA4:26B` won",
+                                                 self.REAL)
+        self.assertEqual(abbrev, {"GEMMA4:26B": "gemma4:26b-a4b-it-qat"})
+
+    # ------------------------------------------------- the marker
+    def test_the_marker_reports_all_three_buckets(self):
+        m = mod.confabulation_marker([], [], {})
+        self.assertIn("invented=none", m)
+        self.assertIn("ambiguous=none", m)
+        self.assertIn("abbreviated=none", m)
+
+    def test_the_marker_names_the_expansion_it_resolved(self):
+        """A reader who sees a warning must be able to tell WHICH model the
+        claim was about without opening the report."""
+        m = mod.confabulation_marker([], [],
+                                     {"gemma4:26b": "gemma4:26b-a4b-it-qat"})
+        self.assertIn("gemma4:26b->gemma4:26b-a4b-it-qat", m)
+
+    def test_the_marker_still_says_invented_when_it_is(self):
+        m = mod.confabulation_marker(["qwen3.10:30b"], [], {})
+        self.assertIn("invented=qwen3.10:30b", m)
+        self.assertNotIn("invented=none", m)

@@ -57,24 +57,63 @@ def models_in_text(text: str) -> set[str]:
     return {m.group(1) for m in MODEL_TOKEN.finditer(text or "")}
 
 
-def invented_models(analysis: str, known: list[str]) -> list[str]:
-    """Models the generated analysis names that no result row contains.
+# An abbreviation drops whole trailing COMPONENTS of a tag
+# (`gemma4:26b-a4b-it-qat` -> `gemma4:26b`); it never cuts a token in half.
+# Requiring the full name to continue with one of these is what keeps
+# `qwen3.6:3` — which reads as a different size — on the fatal side.
+_COMPONENT_SEPARATORS = ("-", "_", ".")
 
-    The generative layer produced `qwen3.10:30b` in sweep 31915264873 —
-    four times, with fabricated metrics ("~97% factual score", "~8.5
-    turns") — for a model that is not in models.yaml, not in ollama, and
-    not in a single result row. The computed table above it was correct
-    the whole time.
 
-    This is the check that makes that structurally catchable: every model
-    the prose names must appear in the data the prose is about. Comparing
-    against the COMPUTED set rather than models.yaml is deliberate — a
-    model that was requested but produced nothing is exactly the case that
-    misleads, so "it is in models.yaml" must not excuse it.
+def classify_named_models(analysis: str, known: list[str]
+                          ) -> tuple[list[str], list[str], dict[str, str]]:
+    """Split the models the prose names into (invented, ambiguous, abbrev).
+
+    The guard exists because sweep 31915264873 produced `qwen3.10:30b` four
+    times with fabricated metrics ("~97% factual score", "~8.5 turns") for a
+    model that is in no result row, under a computed table that was correct
+    the whole time. Every model the prose names must appear in the data the
+    prose is about, and comparing against the COMPUTED set rather than
+    models.yaml is deliberate: a model that was requested but produced
+    nothing is exactly the case that misleads.
+
+    But sweep 33472730762 failed on prose that was entirely TRUE. The
+    summariser wrote `gemma4:26b` for `gemma4:26b-a4b-it-qat` and quoted its
+    real token count. Failing there stamped "not trustworthy" on a correct
+    statement and discarded the paired Claude analysis of a nine-hour sweep
+    — the same cost model-testing#94 already fixed once for partial cells.
+
+    So the three cases are graded apart:
+
+      invented   prefixes nothing real. The original defect. Fatal.
+      ambiguous  prefixes SEVERAL real models, so the claim cannot be
+                 attributed. Fatal, and for a sharper reason than
+                 invention: silently resolving it to one of them would
+                 read as a verified statement about a model nobody chose.
+      abbrev     prefixes exactly one real model, at a component boundary.
+                 The claim is checkable. A warning, and the expansion is
+                 named so nobody has to guess.
     """
-    known_norm = {k.lower() for k in known}
-    return sorted(m for m in models_in_text(analysis)
-                  if m.lower() not in known_norm)
+    known_norm = {k.lower(): k for k in known}
+    invented, ambiguous, abbrev = [], [], {}
+    for m in models_in_text(analysis):
+        low = m.lower()
+        if low in known_norm:
+            continue
+        hits = [full for k, full in known_norm.items()
+                if k.startswith(low)
+                and k[len(low):len(low) + 1] in _COMPONENT_SEPARATORS]
+        if len(hits) == 1:
+            abbrev[m] = hits[0]
+        elif hits:
+            ambiguous.append(m)
+        else:
+            invented.append(m)
+    return sorted(invented), sorted(ambiguous), abbrev
+
+
+def invented_models(analysis: str, known: list[str]) -> list[str]:
+    """Only the names that correspond to no real model at all."""
+    return classify_named_models(analysis, known)[0]
 
 
 def cell_coverage(expected_payloads: list[str] | None,
@@ -245,9 +284,21 @@ def cell_marker(c: dict) -> str:
             f"wholly_absent={absent}")
 
 
-def confabulation_marker(bogus: list[str]) -> str:
+def confabulation_marker(bogus: list[str],
+                         ambiguous: list[str] | None = None,
+                         abbrev: dict[str, str] | None = None) -> str:
+    """One line carrying all three verdicts.
+
+    The expansion is spelled out (`short->full`) so a reader who sees the
+    warning can tell which model the claim was about without opening the
+    report.
+    """
+    pairs = ",".join(f"{k}->{v}" for k, v in sorted((abbrev or {}).items()))
     return ("ANALYZE-CONFABULATION invented="
-            + (",".join(bogus) if bogus else "none"))
+            + (",".join(bogus) if bogus else "none")
+            + " ambiguous="
+            + (",".join(ambiguous) if ambiguous else "none")
+            + " abbreviated=" + (pairs or "none"))
 
 
 def coverage_marker(c: dict) -> str:
@@ -533,18 +584,33 @@ def main():
     # that the summariser is unreliable. They are labelled, and the run is
     # failed, so the report stays readable and untrustworthy rather than
     # unreadable or trusted.
-    bogus = invented_models(analysis, models_seen)
-    print(confabulation_marker(bogus), file=sys.stderr)
+    bogus, ambiguous, abbrev = classify_named_models(analysis, models_seen)
+    print(confabulation_marker(bogus, ambiguous, abbrev), file=sys.stderr)
     warn_block = ""
-    if bogus:
-        for b in bogus:
-            print(f"::error::generated analysis names '{b}', which appears "
-                  f"in no result row", file=sys.stderr)
+    for b in bogus:
+        print(f"::error::generated analysis names '{b}', which appears "
+              f"in no result row", file=sys.stderr)
+    for a in ambiguous:
+        print(f"::error::generated analysis names '{a}', which could mean "
+              f"more than one model that ran", file=sys.stderr)
+    if bogus or ambiguous:
         warn_block = (
             "\n> **This analysis names models that produced no results: "
-            + ", ".join(f"`{b}`" for b in bogus)
+            + ", ".join(f"`{b}`" for b in bogus + ambiguous)
             + ".** Every claim about them is unsupported by the data in this "
               "report. The tables above are computed and unaffected.\n")
+    if abbrev:
+        # Deliberately NOT the same banner. The claims are checkable and the
+        # numbers were right in 33472730762; calling them untrustworthy is
+        # how a reader learns to skip the banner entirely.
+        print("::warning::" + confabulation_marker(bogus, ambiguous, abbrev)
+              + " — the analysis shortened a model name; the claims still "
+                "resolve to one model that ran", file=sys.stderr)
+        warn_block += (
+            "\n> **Shortened model names in this analysis:** "
+            + ", ".join(f"`{k}` = `{v}`" for k, v in sorted(abbrev.items()))
+            + ". The claims are about models that ran, but the names as "
+              "written do not match the tables above.\n")
 
     agentic_section = f"\n## Agentic Results\n\n{build_agentic_table(agentic)}\n" if agentic else ""
     output = (
