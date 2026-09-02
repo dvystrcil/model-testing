@@ -33,7 +33,38 @@ PAYLOADS_DIR = Path(__file__).parent / "payloads"
 RESULTS_DIR = Path(__file__).parent / "results"
 MODELS_FILE = Path(__file__).parent.parent / "models.yaml"
 DEFAULT_OLLAMA = "http://localhost:11434"
-HTTP_TIMEOUT = 300
+# Generation is capped in TOKENS, and the wall-clock is only a hang
+# detector sized to outlast that cap (model-testing#98).
+#
+# Before this, HTTP_TIMEOUT was a wall-clock limit on an UNBOUNDED process,
+# so the real ceiling was throughput-dependent: ~3570 tokens for a dense 27B
+# at 11.9 TPS, ~25000 for an A3B MoE at 83.8. The same prompt had a
+# different budget per model, and the models that lost cells were always the
+# same slow four. Raising the timeout was tried twice (#9, #94) and each
+# bump bought one sweep.
+#
+# 4096 is sized from 397 observed cells across sweeps 33293895544 and
+# 33472730762: p95=3182, p99=4872, max=5654. It truncates ~2% of them, and
+# a truncated response is now recorded rather than lost — see done_reason.
+NUM_PREDICT = 4096
+
+# 4096 / 10.5 TPS (the slowest median measured) = 390s. 600 leaves room for
+# prompt eval and variance while still catching a genuine hang. The token
+# cap must always bind first; a test asserts that relationship so the two
+# numbers cannot drift apart.
+HTTP_TIMEOUT = 600
+
+
+def apply_generation_limit(payload: dict,
+                           num_predict: int = NUM_PREDICT) -> dict:
+    """Cap generation length, unless the payload asked for its own.
+
+    setdefault, not assignment: a payload deliberately probing long-form
+    output would otherwise be silently clamped to the sweep default, which
+    is the same class of invisible distortion this exists to remove.
+    """
+    payload.setdefault("options", {}).setdefault("num_predict", num_predict)
+    return payload
 
 
 def collect_metadata(ollama_url: str) -> dict:
@@ -676,6 +707,7 @@ def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
     payload["model"] = model
     payload["stream"] = False
     payload.setdefault("options", {})["num_gpu"] = -1
+    apply_generation_limit(payload)
 
     try:
         resp = ollama_chat(ollama_url, payload)
@@ -712,6 +744,10 @@ def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
         "pec": resp.get("prompt_eval_count", 0),
         "ped": resp.get("prompt_eval_duration", 0),
         "ec":  resp.get("eval_count", 0),
+        # "length" means the cap stopped it, "stop" means the model did.
+        # Recording it is what keeps a capped answer distinguishable from a
+        # finished one -- the timeout this replaces left no trace at all.
+        "dr":  resp.get("done_reason", ""),
         "ed":  resp.get("eval_duration", 0),
         "td":  resp.get("total_duration", 0),
         "content": content,
@@ -822,6 +858,7 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         "prompt_eval_duration": round(avg_ped),
         "prompt_eval_duration_sd": round(stddev(peds)),
         "eval_count": round(avg_ec),
+        "done_reasons": sorted({r["dr"] for r in raw_results if r.get("dr")}),
         "eval_count_sd": round(stddev(ecs)),
         "eval_duration": round(avg_ed),
         "eval_duration_sd": round(stddev(eds)),

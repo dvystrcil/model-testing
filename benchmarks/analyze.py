@@ -273,6 +273,47 @@ def render_coverage(c: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def truncation_summary(rows: list[dict]) -> dict[str, int]:
+    """Cells per model where at least one run hit the generation cap.
+
+    Capping tokens (model-testing#98) fixed WHICH runs are lost -- the budget
+    is now identical for every model instead of throughput-dependent -- but a
+    capped answer is still a partial one. If the cap were silent, the bias the
+    old wall-clock timeout produced would simply move: an average over
+    truncated responses reads exactly like an average over finished ones.
+
+    "at least one run" is deliberate. Two of three runs finishing does not
+    make the average clean, it makes it a blend, and that IS the bias.
+
+    A row with no `done_reasons` predates this change. Absent must not read as
+    "fine", but it must not manufacture a finding out of old data either, so
+    it is reported as neither -- the coverage markers are what speak to
+    completeness.
+    """
+    out: dict[str, int] = {}
+    for r in rows or []:
+        if "length" in (r.get("done_reasons") or []):
+            out[r["model"]] = out.get(r["model"], 0) + 1
+    return out
+
+
+def truncation_marker(summary: dict[str, int]) -> str:
+    detail = ",".join(f"{m}:{n}" for m, n in sorted(summary.items()))
+    return "ANALYZE-TRUNCATION truncated=" + (detail or "none")
+
+
+def render_truncation(summary: dict[str, int]) -> str:
+    """The report section. Empty when there is nothing to say -- a section
+    that always appears is a section nobody reads."""
+    if not summary:
+        return ""
+    lines = ["## Truncated Responses\n",
+             "These cells hit the generation cap, so the response is cut "
+             "short and its averages describe a partial answer:\n"]
+    lines += [f"- `{m}` — {n} cell(s)" for m, n in sorted(summary.items())]
+    return "\n".join(lines) + "\n"
+
+
 def cell_marker(c: dict) -> str:
     if not c["known"]:
         return "ANALYZE-CELLS expected=unknown analyzed=%d" % c["analyzed"]
@@ -563,6 +604,12 @@ def main():
     for mdl, n in sorted(missing_by_model(cells["missing"]).items()):
         print(f"::warning::model '{mdl}' is missing from {n} payload(s)",
               file=sys.stderr)
+    trunc = truncation_summary(results + agentic)
+    print(truncation_marker(trunc), file=sys.stderr)
+    for mdl, n in sorted(trunc.items()):
+        print(f"::warning::model '{mdl}' hit the generation cap in {n} "
+              f"cell(s); those averages describe a partial answer",
+              file=sys.stderr)
     if meta:
         print(f"[INFO] Environment: ollama={meta.get('ollama_version')}  "
               f"host={meta.get('hostname')}  commit={meta.get('git_commit')}", file=sys.stderr)
@@ -621,6 +668,10 @@ def main():
         # compare against a previous, complete sweep.
         f"{render_coverage(cov)}\n"
         f"{render_cell_coverage(cells, parse_expected(args.expect))}"
+        # Next to coverage, for the same reason: a truncated cell is present
+        # in the table and looks complete, so the caveat has to reach the
+        # reader before the numbers do.
+        f"{render_truncation(trunc)}\n"
         f"## Results\n\n{table}\n"
         f"{agentic_section}\n"
         f"## AI Analysis\n{warn_block}\n{analysis}\n"
