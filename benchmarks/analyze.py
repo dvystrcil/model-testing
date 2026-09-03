@@ -11,6 +11,7 @@ Usage:
 import argparse
 import json
 import re
+import statistics
 import sys
 import urllib.request
 from pathlib import Path
@@ -604,6 +605,12 @@ def main():
     for mdl, n in sorted(missing_by_model(cells["missing"]).items()):
         print(f"::warning::model '{mdl}' is missing from {n} payload(s)",
               file=sys.stderr)
+    terse = terse_cells(results)
+    print(terseness_marker(terse), file=sys.stderr)
+    for mdl, ps in sorted(terse.items()):
+        print(f"::warning::model '{mdl}' answered far below the field's "
+              f"median length on {len(ps)} payload(s); its facts score there "
+              f"was earned on a shorter answer", file=sys.stderr)
     trunc = truncation_summary(results + agentic)
     print(truncation_marker(trunc), file=sys.stderr)
     for mdl, n in sorted(trunc.items()):
@@ -672,6 +679,10 @@ def main():
         # in the table and looks complete, so the caveat has to reach the
         # reader before the numbers do.
         f"{render_truncation(trunc)}\n"
+        # Beside truncation, and for the same reason: a terse cell is present
+        # in the table and looks like any other result, so the caveat has to
+        # reach the reader before the score does.
+        f"{render_terseness(terse)}\n"
         f"## Results\n\n{table}\n"
         f"{agentic_section}\n"
         f"## AI Analysis\n{warn_block}\n{analysis}\n"
@@ -686,3 +697,73 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# A cell is terse when it says far less than the field said on the SAME task.
+# Relative, because an absolute threshold cannot work: triage_one_line_
+# classification wants one line and creative_scene_in_voice wants a scene.
+# Judging against the payload's own median is self-scoping -- on a task where
+# everyone is terse the median is terse and nobody is flagged.
+TERSE_RATIO = 0.4
+# A median over two models is just the other model.
+TERSE_MIN_MODELS = 3
+
+
+def terse_cells(rows: list[dict]) -> dict[str, list[str]]:
+    """Cells whose ANSWER is far shorter than the field's on that payload.
+
+    The ranking is by facts%, which asks "did you mention the required things
+    and avoid the forbidden ones" -- and the cheapest way to win is to say
+    almost nothing, because every extra sentence is another chance to miss.
+    On creative_scene_in_voice the two models that wrote least both scored
+    100%. This is the counterweight: it does not change any score, it makes
+    the length the score was earned at visible next to it.
+
+    Only shortness is flagged. Penalising length would invert the same bias
+    rather than remove it.
+
+    A row with no `answer_words` predates model-testing#104. Absent must not
+    read as zero, or every model on every historical sweep is flagged; a
+    genuine 0 is a real measurement (the think-only response) and IS flagged.
+    """
+    by_payload: dict[str, list[tuple[str, float]]] = {}
+    for r in rows or []:
+        w = r.get("answer_words")
+        if w is None:
+            continue
+        by_payload.setdefault(r["payload"], []).append((r["model"], w))
+
+    out: dict[str, list[str]] = {}
+    for payload, pairs in by_payload.items():
+        if len(pairs) < TERSE_MIN_MODELS:
+            continue
+        med = statistics.median([w for _, w in pairs])
+        if med <= 0:
+            continue
+        for model, w in pairs:
+            if w < TERSE_RATIO * med:
+                out.setdefault(model, []).append(payload)
+    return {m: sorted(ps) for m, ps in out.items()}
+
+
+def terseness_marker(summary: dict[str, list[str]]) -> str:
+    detail = ",".join(f"{m}:{len(ps)}" for m, ps in sorted(summary.items()))
+    return "ANALYZE-TERSENESS terse=" + (detail or "none")
+
+
+def render_terseness(summary: dict[str, list[str]]) -> str:
+    """Empty when there is nothing to say. A section that always appears is a
+    section nobody reads."""
+    if not summary:
+        return ""
+    lines = ["## Answer Length\n",
+             f"These models answered with under {int(TERSE_RATIO * 100)}% of "
+             f"the **median** answer length across models on the same "
+             f"payload. A high facts score earned on a much shorter answer is "
+             f"not the same result as one earned on a full one — the score "
+             f"asks only whether the required points appear, and a shorter "
+             f"answer has fewer chances to miss:\n"]
+    for m, ps in sorted(summary.items()):
+        lines.append(f"- `{m}` — {len(ps)} payload(s): " +
+                     ", ".join(f"`{p}`" for p in ps))
+    return "\n".join(lines) + "\n"

@@ -220,6 +220,22 @@ def ollama_chat(ollama_url: str, payload: dict) -> dict:
         return json.loads(r.read())
 
 
+def answer_words(text: str | None) -> int:
+    """Words in the ANSWER, with reasoning removed (model-testing#104).
+
+    Measured on the same text the grader sees, because the question this
+    answers is "how much did it actually say" and `eval_count` cannot answer
+    it: eval_count includes <think> tokens, so a model that reasons for 3000
+    tokens and replies in two sentences reads as verbose.
+
+    That gap is why the sweep could rank qwen3-coder-next first on facts%
+    while it wrote a median of 212 generated tokens against a field of
+    700-1950 -- there was no recorded measure of answer length to set the
+    score against.
+    """
+    return len(strip_think(text or "").split())
+
+
 def strip_think(text: str) -> str:
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
@@ -870,6 +886,11 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         "quality_misses": all_misses,
         "forbidden_violations": all_violations,
         "schema_violations": all_schema_violations,
+        # Mean across runs, not the last one: a single terse retry would
+        # otherwise misreport a model that is usually expansive.
+        "answer_words": round(
+            sum(answer_words(r["content"]) for r in raw_results)
+            / len(raw_results), 1),
         "response_snippet": raw_results[-1]["content"][:snippet_len] if snippet_len > 0 else "",
         "response_text": raw_results[-1]["content"] if save_responses else None,
     }

@@ -498,3 +498,87 @@ class TruncationMustBeVisibleTest(unittest.TestCase):
     def test_a_clean_sweep_renders_no_section(self):
         """A section that always appears is a section nobody reads."""
         self.assertEqual(mod.render_truncation({}), "")
+
+
+class TersenessIsRelativeToThePayloadTest(unittest.TestCase):
+    """How much a model said, judged against what the task actually needed.
+
+    An absolute word threshold cannot work here. `triage_one_line_
+    classification` wants one line -- flagging every model on it would be
+    noise, and noise is what gets a check switched off. `creative_scene_in_
+    voice` wants a scene, and a 210-word reply to it is not a scene.
+
+    So the reference is the PAYLOAD'S OWN median across models. That is
+    self-scoping: on a task where everyone is terse the median is terse and
+    nobody is flagged, and on a task where the field writes 1500 words a
+    model that writes 200 stands out. No hand-picked bands to invent, and no
+    per-payload config to keep in sync with the payloads.
+    """
+
+    @staticmethod
+    def rows(pairs, payload="creative_scene_in_voice"):
+        return [{"model": m, "payload": payload, "answer_words": w}
+                for m, w in pairs]
+
+    def test_a_model_far_below_its_peers_is_flagged(self):
+        """The creative_scene_in_voice shape: 100% facts on a scene that was
+        never written."""
+        out = mod.terse_cells(self.rows([
+            ("qwen3-coder-next:latest", 180), ("qwen3.6:35b", 1500),
+            ("gemma4:26b-a4b-it-qat", 1400), ("nemotron", 1600)]))
+        self.assertEqual(out, {"qwen3-coder-next:latest":
+                               ["creative_scene_in_voice"]})
+
+    def test_a_payload_where_everyone_is_terse_flags_nobody(self):
+        """triage_one_line_classification. Terse is the CORRECT answer, and a
+        check that scolds correct behaviour gets muted."""
+        out = mod.terse_cells(self.rows(
+            [("a", 8), ("b", 6), ("c", 9), ("d", 7)],
+            payload="triage_one_line_classification"))
+        self.assertEqual(out, {})
+
+    def test_writing_MORE_than_the_field_is_never_flagged(self):
+        """This measures whether the task was done, not whether the model was
+        efficient. Penalising length would just invert the same bias."""
+        out = mod.terse_cells(self.rows([
+            ("verbose", 5000), ("a", 1000), ("b", 1100), ("c", 900)]))
+        self.assertEqual(out, {})
+
+    def test_too_few_models_means_no_verdict(self):
+        """A median over two models is the other model. A single-model sweep
+        would flag whichever one happened to be shorter."""
+        out = mod.terse_cells(self.rows([("a", 100), ("b", 1000)]))
+        self.assertEqual(out, {})
+
+    def test_rows_from_before_this_change_are_exempt(self):
+        """Every result written before #104 has no answer_words. Absent must
+        not read as zero -- that would flag every model on every payload of
+        every historical sweep."""
+        out = mod.terse_cells([
+            {"model": "a", "payload": "p"}, {"model": "b", "payload": "p"},
+            {"model": "c", "payload": "p"}])
+        self.assertEqual(out, {})
+
+    def test_a_genuinely_empty_answer_IS_flagged(self):
+        """Zero words is a real measurement, not a missing one -- the
+        think-only response. It must not be confused with the exempt case."""
+        out = mod.terse_cells(self.rows([
+            ("silent", 0), ("a", 1000), ("b", 1100), ("c", 900)]))
+        self.assertIn("silent", out)
+
+    def test_the_marker_names_the_models_and_counts(self):
+        m = mod.terseness_marker({"qwen3-coder-next:latest": ["a", "b"]})
+        self.assertIn("ANALYZE-TERSENESS", m)
+        self.assertIn("qwen3-coder-next:latest:2", m)
+
+    def test_the_marker_says_none_when_there_is_none(self):
+        self.assertIn("terse=none", mod.terseness_marker({}))
+
+    def test_a_clean_sweep_renders_no_section(self):
+        self.assertEqual(mod.render_terseness({}), "")
+
+    def test_the_section_explains_what_it_measured_against(self):
+        """'terse' without a reference is an accusation, not a finding."""
+        s = mod.render_terseness({"m": ["creative_scene_in_voice"]})
+        self.assertIn("creative_scene_in_voice", s)
+        self.assertIn("median", s.lower())

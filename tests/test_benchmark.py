@@ -403,3 +403,47 @@ def test_the_cap_covers_the_overwhelming_majority_of_real_responses():
     """Sized from 397 observed cells across two sweeps, not guessed:
     p95=3182, p99=4872, max=5654. 4096 truncates ~2%."""
     assert rb.NUM_PREDICT >= 4096
+
+
+# ---------------------------------------------------------------------------
+# Answer length (model-testing#104).
+#
+# The ranking is by facts%, and on creative_scene_in_voice the two models
+# that wrote LEAST both scored 100%:
+#
+#     190 tok  100%  cogito:32b
+#     210 tok  100%  qwen3-coder-next
+#    2192 tok   67%  qwen3.6:35b
+#    4487 tok   78%  nemotron-3.5-lightning
+#
+# facts% asks "did you mention the required things and avoid the forbidden
+# ones". The cheapest way to win is to say almost nothing, because every
+# extra sentence is another chance to miss. qwen3-coder-next's field-leading
+# 94% rests on a median of 212 generated tokens against a field of 700-1950.
+#
+# And `Gen Tok` cannot settle it either way: it is ollama's eval_count, which
+# counts <think> tokens. A model can emit 3000 tokens of reasoning and a
+# two-sentence answer and look verbose. Nothing recorded the length of the
+# ANSWER.
+# ---------------------------------------------------------------------------
+
+def test_answer_length_counts_the_answer_not_the_thinking():
+    """strip_think already runs for grading; the length has to be measured on
+    the same text the grader saw, or it reports reasoning as prose."""
+    text = "<think>" + ("deliberating " * 500) + "</think>Two words."
+    assert rb.answer_words(text) == 2
+
+
+def test_answer_length_of_an_empty_response_is_zero():
+    assert rb.answer_words("") == 0
+    assert rb.answer_words(None) == 0
+
+
+def test_answer_length_ignores_surrounding_whitespace():
+    assert rb.answer_words("  one   two \n three  ") == 3
+
+
+def test_a_think_only_response_has_no_answer():
+    """The failure this makes visible: a model that spent its whole budget
+    reasoning and emitted nothing reads as high Gen Tok today."""
+    assert rb.answer_words("<think>" + ("x " * 100) + "</think>") == 0
