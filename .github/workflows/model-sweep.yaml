@@ -476,9 +476,21 @@ jobs:
           # report is what gets read, not this log.
           case "$CELLS" in
             *"expected=unknown"*)
-              echo "::error::model coverage UNKNOWN - the expected model set "
-              echo "did not reach analyze.py."
-              rc=1 ;;
+              if [ -n "$REANALYZE" ]; then
+                # Same reasoning as the coverage gate above, and missed
+                # there first time: a re-analysis is not TOLD what to
+                # expect, because models.yaml has moved on since the run
+                # being re-read. Run 33697862064 failed here for exactly
+                # this and skipped the Claude summary it existed to
+                # recover.
+                echo "::warning::model coverage UNKNOWN — re-analysis of "
+                echo "run ${SWEEP_RUN_ID} cannot reconstruct that sweep's "
+                echo "roster. See that run's own Cell Coverage section."
+              else
+                echo "::error::model coverage UNKNOWN - the expected model set "
+                echo "did not reach analyze.py."
+                rc=1
+              fi ;;
             *"wholly_absent=none"*)
               case "$CELLS" in
                 *"missing_by_model=none"*) : ;;
