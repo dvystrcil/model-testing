@@ -146,8 +146,30 @@ class TheCoverageGateMustStayHonestTest(unittest.TestCase):
         self.assertIn("exit 1", branch)
         self.assertIn("REANALYZE", branch)
 
-    def test_but_a_reanalysis_is_allowed_to_say_it_does_not_know(self):
-        body = step_named("Assert every requested payload")["run"]
-        self.assertIn("REANALYZE", body,
-                      "the unknown-coverage branch must know which mode it "
-                      "is in, or re-analysis can never pass")
+    def test_EVERY_unknown_branch_knows_which_mode_it_is_in(self):
+        """Run 33697862064 -- the first real re-analysis -- failed because
+        there are TWO unknown-branches and the first version of this only
+        fixed one. ANALYZE-COVERAGE passed; ANALYZE-CELLS still exited 1,
+        and the Claude summary was skipped again for the third sweep running.
+
+        The original test named a single step, so it could not see the one
+        that was missed. Asserting over EVERY step that grades an
+        `expected=unknown` marker is what makes this a class rather than an
+        instance -- a fourth marker added later is covered on arrival.
+        """
+        graded = [s for s in analyze_steps()
+                  if "expected=unknown" in (s.get("run") or "")]
+        self.assertGreaterEqual(len(graded), 2,
+                                "expected both the coverage and cells gates")
+        for s in graded:
+            with self.subTest(step=s.get("name")):
+                body = s["run"]
+                branch = body.split("expected=unknown", 1)[1].split(";;", 1)[0]
+                self.assertIn("REANALYZE", branch,
+                              "unknown must be tolerable in re-analyze mode")
+                # Two fatal forms in this file, both valid: the coverage
+                # gate exits directly, the cells gate accumulates rc and
+                # exits at the end. Accepting only one is what let the
+                # missed branch look covered.
+                self.assertTrue("exit 1" in branch or "rc=1" in branch,
+                                "must stay fatal for a normal sweep")
