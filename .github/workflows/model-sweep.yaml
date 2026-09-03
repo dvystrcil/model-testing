@@ -550,6 +550,21 @@ jobs:
                 ;;
             esac
           fi
+          # Reported, never fatal. This is a measurement about how a score
+          # was earned, not a defect -- and a short answer is sometimes the
+          # right answer (model-testing#104).
+          TERSE=$(grep -m1 '^ANALYZE-TERSENESS' /tmp/analyze.err 2>/dev/null || true)
+          if [ -n "$TERSE" ]; then
+            echo "$TERSE"
+            case "$TERSE" in
+              *"terse=none"*) : ;;
+              *)
+                echo "::warning::${TERSE} - answered well below the field's "
+                echo "median length on those payloads. The facts score there "
+                echo "was earned on a shorter answer; see Answer Length."
+                ;;
+            esac
+          fi
           case "$CONF" in
             *"abbreviated=none"*) : ;;
             *)
