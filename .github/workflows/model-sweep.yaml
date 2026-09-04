@@ -114,6 +114,19 @@ jobs:
         run: |
           PAYLOAD_HASH=$(sha256sum benchmarks/payloads/${{ matrix.payload }}.json | cut -c1-16)
           MODELS_HASH=$(sha256sum models.yaml | cut -c1-16)
+          # The HARNESS, not just its inputs. Sweep 33831285722 ran nine
+          # hours and produced no `answer_words` at all, because #104 changed
+          # what run_benchmark.py RECORDS without touching the payload file,
+          # models.yaml, the runs count or the ollama version -- so the key
+          # was identical and the cache served results from before the
+          # change. Every JSONL carried an mtime inside the same minute and
+          # the truncation counts came back byte-identical to the prior run.
+          #
+          # Same class the ollama version was added for after an 0.24 ->
+          # 0.30.2 upgrade silently hit cache (see test-cache.yaml). Anything
+          # that changes what a run PRODUCES has to be part of what
+          # identifies it.
+          HARNESS_HASH=$(sha256sum benchmarks/run_benchmark.py | cut -c1-16)
           RUNS="${{ github.event.inputs.runs || '1' }}"
           MODEL="${{ github.event.inputs.model || 'all' }}"
           SYSPROMPT_HASH=$(echo -n "${{ github.event.inputs.system_prompt }}" | sha256sum | cut -c1-8)
@@ -125,7 +138,7 @@ jobs:
           # models.yaml anyway. Those entries would keep serving a
           # 2-model answer to a 3-model question forever, and
           # fixing the pull would not dislodge them.
-          KEY="sweep-v2-${{ matrix.payload }}-p${PAYLOAD_HASH}-m${MODELS_HASH}-r${RUNS}-m${MODEL}-s${SYSPROMPT_HASH}-o${OLLAMA_VERSION}"
+          KEY="sweep-v2-${{ matrix.payload }}-p${PAYLOAD_HASH}-m${MODELS_HASH}-r${RUNS}-m${MODEL}-s${SYSPROMPT_HASH}-o${OLLAMA_VERSION}-h${HARNESS_HASH}"
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
           echo "Cache key: $KEY"
 
