@@ -582,3 +582,68 @@ class TersenessIsRelativeToThePayloadTest(unittest.TestCase):
         s = mod.render_terseness({"m": ["creative_scene_in_voice"]})
         self.assertIn("creative_scene_in_voice", s)
         self.assertIn("median", s.lower())
+
+
+class NothingIsDefinedAfterTheEntrypointTest(unittest.TestCase):
+    """Sweep 33831285722 died with `NameError: name 'terse_cells' is not
+    defined`, after 25 payload jobs and ~9 hours of GPU time had already
+    succeeded.
+
+    The terseness functions (model-testing#104) were appended to the END of
+    analyze.py — below `if __name__ == \"__main__\": main()`. Python binds
+    names at call time, so main() ran before they existed.
+
+    THE UNIT TESTS COULD NOT SEE IT. They import the module and call the
+    functions directly; importing never fires the `__main__` guard, so every
+    one of them passed against a file that could not run. Same shape as the
+    n8n credential and the ANALYZE-CELLS gate earlier in this session: green
+    tests, live path unrun.
+
+    A static invariant is the cheap catch. Executing the script for real
+    would need ollama stubbed at subprocess level; asserting that nothing is
+    DEFINED after the entrypoint costs nothing and is impossible to get
+    wrong by accident.
+    """
+
+    @staticmethod
+    def _tree_and_guard():
+        import ast
+        src = (BIN / "analyze.py").read_text()
+        tree = ast.parse(src)
+        guard = None
+        for node in tree.body:
+            if isinstance(node, ast.If) and ast.dump(node.test).count("__name__"):
+                guard = node
+        return tree, guard
+
+    def test_the_entrypoint_guard_exists(self):
+        """Guard the guard: without it the assertion below passes vacuously
+        and stops testing anything."""
+        _, guard = self._tree_and_guard()
+        self.assertIsNotNone(guard, "no `if __name__ == '__main__'` block")
+
+    def test_no_function_or_class_is_defined_after_main_runs(self):
+        import ast
+        tree, guard = self._tree_and_guard()
+        late = [n.name for n in tree.body
+                if isinstance(n, (ast.FunctionDef, ast.ClassDef))
+                and n.lineno > guard.lineno]
+        self.assertEqual(
+            late, [],
+            f"defined after the entrypoint, so main() cannot see them: {late}")
+
+    def test_every_name_main_calls_is_defined_before_the_guard(self):
+        """The sharper form. A helper defined late is only fatal if main()
+        actually calls it — but that is exactly the case that ships looking
+        fine and dies on the first real run."""
+        import ast
+        tree, guard = self._tree_and_guard()
+        defs = {n.name: n.lineno for n in tree.body
+                if isinstance(n, (ast.FunctionDef, ast.ClassDef))}
+        main = next(n for n in tree.body
+                    if isinstance(n, ast.FunctionDef) and n.name == "main")
+        called = {n.func.id for n in ast.walk(main)
+                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+        late = sorted(c for c in called
+                      if c in defs and defs[c] > guard.lineno)
+        self.assertEqual(late, [], f"main() calls these, defined too late: {late}")
