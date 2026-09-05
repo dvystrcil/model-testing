@@ -70,6 +70,17 @@ ANALYSIS_MODELS = ("claude-haiku-4-5", "claude-haiku-4-5-20251001")
 
 
 def _is_model_reference(tok: str) -> bool:
+    """A colon-LESS model name, e.g. `claude-sonnet-4`.
+
+    Colon-forms are MODEL_TOKEN's job, and it requires a digit BEFORE the
+    colon. Handling them here too swept up the report's own vocabulary:
+    re-analysis of run 33890907294 reported `stall:1` as an invented model,
+    which is an agentic outcome tally (`stall:1/pass:2`) that the prose
+    quotes verbatim. A guard that flags the report for describing itself
+    gets muted, and then it protects nothing.
+    """
+    if ":" in tok:
+        return False
     return bool(BARE_MODEL.match(tok)) and (
         "-" in tok or any(c.isdigit() for c in tok))
 

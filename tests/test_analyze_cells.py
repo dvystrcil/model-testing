@@ -799,3 +799,29 @@ class DeclaredModelsAreTheSourceOfTruthTest(unittest.TestCase):
             "`glm-4.7-flash` held up.", self.DECLARED)
         self.assertEqual(inv, [])
         self.assertEqual(abbrev.get("glm-4.7-flash"), "glm-4.7-flash:q4_K_M")
+
+    def test_an_agentic_outcome_code_is_not_a_model(self):
+        """`stall:1` is an outcome tally from the agentic table
+        (`stall:1/pass:2`), and the prose quotes it in backticks:
+        "triggering `stall:1` during `multi_app_rollout`".
+
+        Re-analysis of run 33890907294 reported it as the single invented
+        model. Recognising bare backticked names caught the hosted models it
+        was meant to, and swept up the report's own vocabulary with them —
+        a guard that flags the report for describing itself gets muted.
+
+        Colon-forms belong to MODEL_TOKEN, which already requires a digit
+        BEFORE the colon; `stall` has none. The bare-name rule only has to
+        cover hosted names, which carry no colon at all.
+        """
+        for tok in ("stall:1", "pass:2", "fail:3"):
+            with self.subTest(tok=tok):
+                inv, _, _ = mod.classify_named_models(
+                    f"triggering `{tok}` during the rollout", self.DECLARED)
+                self.assertEqual(inv, [], f"{tok} was read as a model")
+
+    def test_a_tagged_model_with_a_digit_is_still_caught(self):
+        """The separation must not blind the colon path it delegates to."""
+        inv, _, _ = mod.classify_named_models("`glm-4-flash:7b` lost track.",
+                                              self.DECLARED)
+        self.assertIn("glm-4-flash:7b", inv)
