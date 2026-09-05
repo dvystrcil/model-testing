@@ -48,24 +48,30 @@ HTTP_TIMEOUT = 1800
 MODEL_TOKEN = re.compile(
     r"`?\b([a-z][a-z0-9._-]*\d[a-z0-9._-]*:[a-z0-9._-]+)`?", re.I)
 
-# Hosted models have no ollama-style `name:tag`, so MODEL_TOKEN cannot see
-# them -- and they are the names a local summariser is MOST likely to invent,
-# because they saturate its training data. Sweep 33890907294 fabricated a
-# comparative section around claude-sonnet-4 and gpt-4o-mini with invented
-# per-model percentages; the guard named three invented models and passed
-# over those two, plus gemini-pro and a colon-less `glm-4-flash`.
+# A model REFERENCE, without knowing any vendor. Enumerating vendors
+# (claude|gpt|gemini|...) was the first attempt and it rots: a fabricated
+# `jamba-1.5` or `phi-4-mini` walks through, and the list has to be
+# maintained against an industry that keeps naming things.
 #
-# Anchored on a VENDOR word followed by a hyphenated component, not on the
-# vendor word alone: these reports discuss "the paired Claude analysis" in
-# plain English, and a guard that fires on that gets switched off, which
-# costs more than the miss it prevents.
-VENDOR_MODEL = re.compile(
-    r"`?\b((?:claude|gpt|gemini|grok|command|palm|mistral|deepseek|llama|glm"
-    r"|o[1-9])-[a-z0-9][a-z0-9._-]*)`?", re.I)
+# The sweep only ever runs what models.yaml declares, so membership in that
+# file decides legitimacy and this pattern only has to nominate CANDIDATES.
+# It is deliberately shape-based and vendor-blind: an identifier-looking
+# token carrying a hyphen or a digit.
+#
+# The carve-outs matter more than the matches. These reports quote YAML at
+# the model constantly -- `hostNetwork: true`, `cpu: "500m"`,
+# `serviceAccountName: custom-sa` -- and a guard that fires on those would
+# be switched off within a week.
+BARE_MODEL = re.compile(r"^[a-z][a-z0-9._:-]*$", re.I)
 
 # Models that legitimately appear in a report without being CANDIDATES: the
 # sweep's own analysers. Naming them describes how the report was produced.
 ANALYSIS_MODELS = ("claude-haiku-4-5", "claude-haiku-4-5-20251001")
+
+
+def _is_model_reference(tok: str) -> bool:
+    return bool(BARE_MODEL.match(tok)) and (
+        "-" in tok or any(c.isdigit() for c in tok))
 
 
 def models_in_text(text: str) -> set[str]:
@@ -75,8 +81,15 @@ def models_in_text(text: str) -> set[str]:
     false negative lets an invented model through as a finding.
     """
     text = text or ""
-    return ({m.group(1) for m in MODEL_TOKEN.finditer(text)}
-            | {m.group(1) for m in VENDOR_MODEL.finditer(text)})
+    out = {m.group(1) for m in MODEL_TOKEN.finditer(text)}
+    # Bare names are only recognised inside backticks. In running prose
+    # "gemini-pro" is indistinguishable from an ordinary hyphenated phrase;
+    # the reports cite models as code, and requiring that is what keeps
+    # "a best-effort, follow-up check" from becoming a finding.
+    for tok in re.findall(r"`([^`\n]{1,80})`", text):
+        if _is_model_reference(tok):
+            out.add(tok)
+    return out
 
 
 # An abbreviation drops whole trailing COMPONENTS of a tag
@@ -94,7 +107,8 @@ def models_in_text(text: str) -> set[str]:
 _COMPONENT_SEPARATORS = ("-", "_", ".", ":")
 
 
-def classify_named_models(analysis: str, known: list[str]
+def classify_named_models(analysis: str, known: list[str],
+                          computed: list[str] | None = None
                           ) -> tuple[list[str], list[str], dict[str, str]]:
     """Split the models the prose names into (invented, ambiguous, abbrev).
 
@@ -124,10 +138,17 @@ def classify_named_models(analysis: str, known: list[str]
                  named so nobody has to guess.
     """
     known_norm = {k.lower(): k for k in list(known) + list(ANALYSIS_MODELS)}
+    # Declared but produced nothing is fatal too, for a different reason: a
+    # model that was REQUESTED and ran nothing is exactly the case that
+    # misleads, so being in models.yaml is not a licence to claim results.
+    ran = None if computed is None else {c.lower() for c in computed}
     invented, ambiguous, abbrev = [], [], {}
     for m in models_in_text(analysis):
         low = m.lower()
         if low in known_norm:
+            if ran is not None and low not in ran and low not in {
+                    a.lower() for a in ANALYSIS_MODELS}:
+                invented.append(m)
             continue
         hits = [full for k, full in known_norm.items()
                 if k.startswith(low)
@@ -736,7 +757,15 @@ def main():
     # that the summariser is unreliable. They are labelled, and the run is
     # failed, so the report stays readable and untrustworthy rather than
     # unreadable or trusted.
-    bogus, ambiguous, abbrev = classify_named_models(analysis, models_seen)
+    # models.yaml is the run's closed universe (--expect-models); the rows
+    # are what actually produced data. Checking against the DECLARED set is
+    # what makes this vendor-blind: adding a frontier model to models.yaml
+    # makes naming it legitimate, and nothing else does. Without the flag
+    # there is no declared set, so the computed one stands in and the check
+    # degrades to what it was rather than passing everything.
+    declared = parse_expected(args.expect_models) or models_seen
+    bogus, ambiguous, abbrev = classify_named_models(
+        analysis, declared, computed=models_seen)
     print(confabulation_marker(bogus, ambiguous, abbrev), file=sys.stderr)
     warn_block = ""
     for b in bogus:

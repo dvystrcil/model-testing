@@ -729,3 +729,73 @@ class HostedModelConfabulationTest(unittest.TestCase):
         self.assertIn("qwen3.6:3",
                       mod.invented_models("`qwen3.6:3` scored well.",
                                           ["qwen3.6:35b"]))
+
+
+class DeclaredModelsAreTheSourceOfTruthTest(unittest.TestCase):
+    """models.yaml declares what a run may legitimately name.
+
+    The first fix for the hosted-model blind spot enumerated VENDORS
+    (claude|gpt|gemini|...), which is a guess that rots: a fabricated
+    `jamba-1.5` or `phi-4-mini` walks straight through it, and the list has
+    to be maintained against an industry that keeps naming things.
+
+    The sweep only ever runs models declared in models.yaml — 8 active
+    entries and 21 commented out for run 33890907294, and exactly those 8
+    produced rows. That file is already passed in as --expect-models and was
+    simply not used by this guard. Checking membership against it needs no
+    vendor knowledge at all, and a frontier model added to models.yaml
+    becomes legitimate automatically, which is the point.
+    """
+
+    DECLARED = ["qwen3.6:35b", "gemma4:26b-a4b-it-qat", "glm-4.7-flash:q4_K_M"]
+
+    def test_a_model_absent_from_models_yaml_is_invented(self):
+        for name in ("claude-sonnet-4", "gpt-4o-mini", "gemini-pro",
+                     "jamba-1.5-large", "phi-4-mini"):
+            with self.subTest(name=name):
+                inv, _, _ = mod.classify_named_models(
+                    f"`{name}` led the field.", self.DECLARED)
+                self.assertIn(name, inv)
+
+    def test_no_vendor_list_is_consulted(self):
+        """A made-up vendor nobody has heard of must fail the same way."""
+        inv, _, _ = mod.classify_named_models(
+            "`frobnicator-9000` topped the table.", self.DECLARED)
+        self.assertIn("frobnicator-9000", inv)
+
+    def test_a_declared_model_is_never_invented(self):
+        for name in self.DECLARED:
+            with self.subTest(name=name):
+                inv, _, _ = mod.classify_named_models(
+                    f"`{name}` scored 90%.", self.DECLARED)
+                self.assertEqual(inv, [])
+
+    def test_declared_but_produced_nothing_is_still_fatal(self):
+        """The distinction the original docstring was protecting: a model
+        that was REQUESTED but produced no rows is exactly the case that
+        misleads, so being in models.yaml is not a licence to claim results
+        for it. Reported separately from invention — different fact,
+        different fix."""
+        inv, _, _ = mod.classify_named_models(
+            "`gemma4:26b-a4b-it-qat` scored 88%.", self.DECLARED,
+            computed=["qwen3.6:35b"])
+        self.assertIn("gemma4:26b-a4b-it-qat", inv)
+
+    def test_config_fragments_in_backticks_are_not_models(self):
+        """The reports quote YAML at the model constantly. Flagging these
+        would fire on every run and the guard would be switched off."""
+        txt = ("It emitted `hostNetwork: true`, `cpu: \"500m\"`, "
+               "`metadata.labels` and `serviceAccountName: custom-sa`.")
+        inv, _, _ = mod.classify_named_models(txt, self.DECLARED)
+        self.assertEqual(inv, [])
+
+    def test_prose_about_claude_the_assistant_is_not_a_model(self):
+        inv, _, _ = mod.classify_named_models(
+            "The paired Claude analysis agreed.", self.DECLARED)
+        self.assertEqual(inv, [])
+
+    def test_an_untagged_declared_model_is_still_an_abbreviation(self):
+        inv, _, abbrev = mod.classify_named_models(
+            "`glm-4.7-flash` held up.", self.DECLARED)
+        self.assertEqual(inv, [])
+        self.assertEqual(abbrev.get("glm-4.7-flash"), "glm-4.7-flash:q4_K_M")
