@@ -48,6 +48,25 @@ HTTP_TIMEOUT = 1800
 MODEL_TOKEN = re.compile(
     r"`?\b([a-z][a-z0-9._-]*\d[a-z0-9._-]*:[a-z0-9._-]+)`?", re.I)
 
+# Hosted models have no ollama-style `name:tag`, so MODEL_TOKEN cannot see
+# them -- and they are the names a local summariser is MOST likely to invent,
+# because they saturate its training data. Sweep 33890907294 fabricated a
+# comparative section around claude-sonnet-4 and gpt-4o-mini with invented
+# per-model percentages; the guard named three invented models and passed
+# over those two, plus gemini-pro and a colon-less `glm-4-flash`.
+#
+# Anchored on a VENDOR word followed by a hyphenated component, not on the
+# vendor word alone: these reports discuss "the paired Claude analysis" in
+# plain English, and a guard that fires on that gets switched off, which
+# costs more than the miss it prevents.
+VENDOR_MODEL = re.compile(
+    r"`?\b((?:claude|gpt|gemini|grok|command|palm|mistral|deepseek|llama|glm"
+    r"|o[1-9])-[a-z0-9][a-z0-9._-]*)`?", re.I)
+
+# Models that legitimately appear in a report without being CANDIDATES: the
+# sweep's own analysers. Naming them describes how the report was produced.
+ANALYSIS_MODELS = ("claude-haiku-4-5", "claude-haiku-4-5-20251001")
+
 
 def models_in_text(text: str) -> set[str]:
     """Model-like identifiers named anywhere in a block of prose.
@@ -55,14 +74,24 @@ def models_in_text(text: str) -> set[str]:
     Deliberately loose: a false positive here costs one line of review, a
     false negative lets an invented model through as a finding.
     """
-    return {m.group(1) for m in MODEL_TOKEN.finditer(text or "")}
+    text = text or ""
+    return ({m.group(1) for m in MODEL_TOKEN.finditer(text)}
+            | {m.group(1) for m in VENDOR_MODEL.finditer(text)})
 
 
 # An abbreviation drops whole trailing COMPONENTS of a tag
 # (`gemma4:26b-a4b-it-qat` -> `gemma4:26b`); it never cuts a token in half.
 # Requiring the full name to continue with one of these is what keeps
 # `qwen3.6:3` — which reads as a different size — on the fatal side.
-_COMPONENT_SEPARATORS = ("-", "_", ".")
+# ":" joins the NAME to the TAG, so `glm-4.7-flash` is the real
+# `glm-4.7-flash:q4_K_M` written without its tag. It has to be a boundary
+# here, or extending detection to colon-less hosted names turns every
+# untagged mention of a real model into a fabrication -- the exact failure
+# recorded above from sweep 33472730762, arriving from the other direction.
+#
+# `qwen3.6:3` stays fatal: its next character is `5`, not a boundary, and it
+# reads as a different SIZE rather than a shortening.
+_COMPONENT_SEPARATORS = ("-", "_", ".", ":")
 
 
 def classify_named_models(analysis: str, known: list[str]
@@ -94,7 +123,7 @@ def classify_named_models(analysis: str, known: list[str]
                  The claim is checkable. A warning, and the expansion is
                  named so nobody has to guess.
     """
-    known_norm = {k.lower(): k for k in known}
+    known_norm = {k.lower(): k for k in list(known) + list(ANALYSIS_MODELS)}
     invented, ambiguous, abbrev = [], [], {}
     for m in models_in_text(analysis):
         low = m.lower()
