@@ -61,7 +61,14 @@ jobs:
     timeout-minutes: 120
 
     steps:
+      # persist-credentials: false -- checkout otherwise stores an extraheader
+      # with the read-only GITHUB_TOKEN (permissions: contents: read above), and
+      # git sends that header on the push below instead of the App token: every
+      # run since this workflow landed died with "Permission to
+      # dvystrcil/model-testing.git denied to github-actions[bot]" (403).
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v7
         with:
@@ -149,6 +156,8 @@ jobs:
           git checkout -b "$BRANCH"
           git add models.yaml candidates-ledger.json
           git commit -m "chore: weekly candidate discovery $(date -u +%Y-%m-%d)"
+          # Push as the CICD App, not the job's read-only GITHUB_TOKEN.
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
           git push -u origin "$BRANCH"
           gh pr create --repo "${{ github.repository }}" \
             --base main --head "$BRANCH" \
