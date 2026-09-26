@@ -268,19 +268,6 @@ def test_validate_json_non_object_json_still_valid():
     assert validate_json("[1, 2, 3]") == []
 
 
-if __name__ == "__main__":
-    tests = [v for k, v in globals().items() if k.startswith("test_")]
-    passed = failed = 0
-    for t in tests:
-        try:
-            t()
-            print(f"  PASS  {t.__name__}")
-            passed += 1
-        except Exception as e:
-            print(f"  FAIL  {t.__name__}: {e}")
-            failed += 1
-    print(f"\n{passed} passed, {failed} failed")
-    sys.exit(1 if failed else 0)
 
 
 # --- facts_mode (#80) -------------------------------------------------------
@@ -447,3 +434,18 @@ def test_a_think_only_response_has_no_answer():
     """The failure this makes visible: a model that spent its whole budget
     reasoning and emitted nothing reads as high Gen Tok today."""
     assert rb.answer_words("<think>" + ("x " * 100) + "</think>") == 0
+
+
+if __name__ == "__main__":
+    tests = [v for k, v in globals().items() if k.startswith("test_")]
+    passed = failed = 0
+    for t in tests:
+        try:
+            t()
+            print(f"  PASS  {t.__name__}")
+            passed += 1
+        except Exception as e:
+            print(f"  FAIL  {t.__name__}: {e}")
+            failed += 1
+    print(f"\n{passed} passed, {failed} failed")
+    sys.exit(1 if failed else 0)
