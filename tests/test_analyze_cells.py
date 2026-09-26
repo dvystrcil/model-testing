@@ -172,8 +172,6 @@ class RenderCellCoverageTest(unittest.TestCase):
 
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 BENCH = Path(__file__).resolve().parent.parent / "benchmarks"
@@ -825,3 +823,7 @@ class DeclaredModelsAreTheSourceOfTruthTest(unittest.TestCase):
         inv, _, _ = mod.classify_named_models("`glm-4-flash:7b` lost track.",
                                               self.DECLARED)
         self.assertIn("glm-4-flash:7b", inv)
+
+
+if __name__ == "__main__":
+    unittest.main()
