@@ -1,1 +1,14 @@
-{}
+{
+  "hf.co/ornith-ai/Ornith-1.5-9B-GGUF:BF16": {
+    "reason": "done_reason=length",
+    "verdict": "OK"
+  },
+  "hf.co/peculiar-ragdoll/Tiel-Coder-35B-A3B-GGUF-MTP:Q4_K_S": {
+    "reason": "done_reason=length",
+    "verdict": "OK"
+  },
+  "hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0": {
+    "reason": "done_reason=stop",
+    "verdict": "OK"
+  }
+}
