@@ -159,7 +159,19 @@ jobs:
           # Push as the CICD App, not the job's read-only GITHUB_TOKEN.
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
           git push -u origin "$BRANCH"
-          gh pr create --repo "${{ github.repository }}" \
-            --base main --head "$BRANCH" \
-            --title "chore: candidate discovery $(date -u +%Y-%m-%d)" \
-            --body-file /tmp/pr-body.md
+          # REST, not `gh`: model-testing-runner runs the upstream
+          # ghcr.io/actions/actions-runner image, which has no gh CLI. Every
+          # scheduled run from 2026-09-06 to 10-04 pushed its branch and then
+          # died here with "gh: command not found" -- red, unnoticed, no PR.
+          BRANCH="$BRANCH" TITLE="chore: candidate discovery $(date -u +%Y-%m-%d)" python3 - <<'PY'
+          import json, os, urllib.request
+          req = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/pulls",
+              data=json.dumps({"title": os.environ["TITLE"], "head": os.environ["BRANCH"], "base": "main",
+                               "body": open("/tmp/pr-body.md").read()}).encode(),
+              headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                       "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"},
+              method="POST")
+          with urllib.request.urlopen(req, timeout=30) as r:   # raises on 4xx/5xx, failing the step
+              print("opened", json.load(r)["html_url"])
+          PY
