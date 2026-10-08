@@ -84,6 +84,26 @@ models:
   # cost is the dense 27B pair, 4.9h of 9.2h.
   # - name: cogito:32b                           # ~20 GB
 
+  # REMOVED FROM INVENTORY 2026-10-08: gpt-oss:120b (~65 GB). Deleted from
+  # max-01's ollama store, not just from this list -- do not re-pull it for a
+  # sweep without re-reading this.
+  #
+  # Why: ollama 0.40.1 cannot load it at all. Every request fails in 0.2s with
+  # HTTP 500, `read GGUF metadata: unsupported tensor
+  # "blk.0.ffn_down_exps.weight" size overflows`, and /api/tags logs the same
+  # error on every 10s probe. It was the only one of 44 installed models to
+  # fail /api/show. New in 0.40.1: Loki has zero of these before the
+  # 2026-10-08 04:27 UTC upgrade. Upstream ollama/ollama#18869 reports the
+  # same error for gpt-oss on Nvidia, so it is not a gfx1151 quirk.
+  #
+  # Why not keep it until upstream fixes it: it had 0 OWUI chats in the 60
+  # days before removal, no OWUI preset was built on it, and the operator no
+  # longer uses it. 0.40.1 was kept anyway because it fixed what is used:
+  # qwen3.6:35b long-context tool calls went 8/15 -> 15/15 on the fixed
+  # bin/toolcall-regress.py probe (model-testing#113, dvystrcil/ollama#56,
+  # homelab#1205).
+  # - name: gpt-oss:120b                         # ~65 GB
+
   # DELIBERATELY EXCLUDED -- do not re-enable without checking upstream first.
   # qwen3.8:27b hangs: POST /v1/chat/completions never returns (no content, no
   # usage, done=False). Reproduced live 2026-08-30 and matches upstream
