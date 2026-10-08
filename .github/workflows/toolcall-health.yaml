@@ -1,0 +1,78 @@
+name: tool-call health (real use)
+
+# homelab#1205 AC5a-c. Daily, passive, NO GPU: reads Open WebUI's admin chat
+# export and counts every real tool call's outcome over the last 7 days -- the
+# measurement #1205 was built on, when meal-time's tool calls went from 0
+# failures in 1,878 to failing and nothing noticed for four days.
+#
+# The alert is ONE rolling homelab issue (label toolcall-health), opened on a
+# breach and closed when the window is healthy again. A red scheduled run
+# notifies nobody in this homelab, so the issue is the alert; a run that could
+# not read the export is a breach too (a check that saw nothing clears nothing).
+
+on:
+  schedule:
+    - cron: '30 14 * * *'   # 07:30 PT, after the overnight jobs
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Window in days'
+        required: false
+        default: '7'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: model-testing-runner
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fetch secrets from Infisical
+        uses: Infisical/secrets-action@v1.0.18
+        with:
+          client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
+          client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+          env-slug: prod
+          project-slug: homelab-bz-gt
+          secret-path: /
+          export-type: env
+          domain: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+
+      - name: Count tool-call outcomes
+        id: health
+        run: |
+          set +e
+          python3 bin/toolcall-health.py --days "${{ github.event.inputs.days || '7' }}" \
+            --md-out /tmp/body.md --json-out /tmp/health.json 2>&1 | tee /tmp/health.log
+          MARKER=$(grep -m1 -E '^TOOLCALL-HEALTH-(COMPLETE|CANNOT-LOOK)' /tmp/health.log)
+          echo "$MARKER"
+          case "$MARKER" in
+            *COMPLETE*breached=no*)  echo "breached=no"  >> "$GITHUB_OUTPUT"; TITLE="healthy" ;;
+            *COMPLETE*breached=yes*) echo "breached=yes" >> "$GITHUB_OUTPUT"; TITLE="tool-call failure rate over threshold" ;;
+            *)                       echo "breached=yes" >> "$GITHUB_OUTPUT"; TITLE="cannot read the Open WebUI chat export"
+                                     [ -s /tmp/body.md ] || echo "The check died before writing a report. See the run log." > /tmp/body.md ;;
+          esac
+          echo "title=Tool-call health: $TITLE" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          client-id: ${{ env.CICD_APP_CLIENT_ID }}
+          private-key: ${{ env.CICD_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: homelab
+          # Declared so a missing permission fails as an auth error naming the
+          # scope, not as "no issue found".
+          permission-issues: write
+
+      - name: Open, update or close the rolling issue
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 bin/rolling-issue.py --repo dvystrcil/homelab --lane toolcall-health \
+            --title "${{ steps.health.outputs.title }}" --body-file /tmp/body.md \
+            --breached "${{ steps.health.outputs.breached }}"

@@ -1,0 +1,139 @@
+name: tool-call probe on ollama upgrade
+
+# homelab#1205 AC5d-f. The GPU half of the standing check, run ONLY when the
+# ollama version changes -- the moment a tool-call regression can appear
+# (#1205 was 0.32.15 -> 0.33.0) -- never on a timer, so it does not evict the
+# operator's loaded models or stack load on the shared gfx1151 GPU daily.
+#
+#   detect (hourly, no GPU): GET /api/version, compare with the last version
+#                            the probe finished on (PVC). Unchanged -> stop.
+#   probe  (once per version): bin/toolcall-regress.py, in the model-sweep
+#                            concurrency group so it queues behind a sweep
+#                            instead of overlapping it; compare with the
+#                            previous version's result; rolling homelab issue
+#                            (label toolcall-probe) on a regression, closed
+#                            on the next clean version.
+#
+# last-version is written only AFTER a completed probe, so a probe that is
+# cancelled or dies is retried on the next hourly detect.
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Probe even if the version has not changed'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One run of THIS workflow at a time. Without it, the hourly detect during a
+# running probe still sees "changed" (last-version is written only at the
+# end) and queues a second probe into the model-sweep group -- where a newly
+# queued job cancels whatever is PENDING there, which could be a sweep the
+# operator dispatched. With it, at most one probe ever enters that group per
+# version; later hourly runs wait here and then find the version unchanged.
+concurrency:
+  group: toolcall-probe-on-upgrade
+  cancel-in-progress: false
+
+env:
+  OLLAMA_URL: http://ollama.ollama.svc.cluster.local
+  STATE: /mnt/benchmark-results/toolcall-probe
+
+jobs:
+  detect:
+    runs-on: model-testing-runner
+    timeout-minutes: 5
+    outputs:
+      changed: ${{ steps.v.outputs.changed }}
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        run: |
+          VERSION=$(curl -fsS --max-time 10 "$OLLAMA_URL/api/version" | jq -r '.version')
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "::error::could not read the ollama version"; exit 1
+          fi
+          LAST=$(cat "$STATE/last-version" 2>/dev/null || echo none)
+          echo "ollama=$VERSION last-probed=$LAST"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [ "$VERSION" != "$LAST" ] || [ "${{ github.event.inputs.force }}" = "true" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  probe:
+    needs: detect
+    if: needs.detect.outputs.changed == 'true'
+    runs-on: model-testing-runner
+    timeout-minutes: 120
+    # Same group as model-sweep.yaml: never two GPU workloads at once, and
+    # never cancel one mid-flight (that has wedged max-01).
+    concurrency:
+      group: model-sweep
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run the probe
+        id: run
+        run: |
+          mkdir -p "$STATE"
+          V="${{ needs.detect.outputs.version }}"
+          # The version can move again while this job waited in the queue.
+          NOW=$(curl -fsS --max-time 10 "$OLLAMA_URL/api/version" | jq -r '.version')
+          echo "detected=$V serving=$NOW"
+          python3 -u bin/toolcall-regress.py --ollama "$OLLAMA_URL" --runs 3 \
+            --json-out /tmp/cur.json 2>&1 | tee /tmp/probe.log
+          grep -q '^TOOLCALL-PROBE-COMPLETE' /tmp/probe.log || { echo "::error::probe did not complete"; exit 1; }
+          echo "version=$(jq -r .version /tmp/cur.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Compare with the previous version
+        id: cmp
+        run: |
+          python3 bin/toolcall-regress.py --compare "$STATE/latest.json" /tmp/cur.json --md-out /tmp/body.md | tee /tmp/cmp.log
+          N=$(grep -m1 '^TOOLCALL-PROBE-COMPARE' /tmp/cmp.log | sed -E 's/.*regressions=([0-9]+).*/\1/')
+          [ -n "$N" ] || { echo "::error::compare did not complete"; exit 1; }
+          if [ "$N" -gt 0 ]; then echo "breached=yes" >> "$GITHUB_OUTPUT"; else echo "breached=no" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Record this version as the new baseline
+        run: |
+          V="${{ steps.run.outputs.version }}"
+          cp /tmp/cur.json "$STATE/$V.json"
+          cp /tmp/cur.json "$STATE/latest.json"
+          echo "$V" > "$STATE/last-version"
+          ls -la "$STATE"
+
+      - name: Fetch secrets from Infisical
+        uses: Infisical/secrets-action@v1.0.18
+        with:
+          client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
+          client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+          env-slug: prod
+          project-slug: homelab-bz-gt
+          secret-path: /
+          export-type: env
+          domain: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080
+
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          client-id: ${{ env.CICD_APP_CLIENT_ID }}
+          private-key: ${{ env.CICD_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: homelab
+          permission-issues: write
+
+      - name: Open, update or close the rolling issue
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 bin/rolling-issue.py --repo dvystrcil/homelab --lane toolcall-probe \
+            --title "Tool-call probe: regression on ollama ${{ steps.run.outputs.version }}" \
+            --body-file /tmp/body.md --breached "${{ steps.cmp.outputs.breached }}"

@@ -651,7 +651,12 @@ jobs:
       - name: Prune runs older than 30 days
         if: always()
         run: |
-          find "${RESULTS_BASE}" -maxdepth 1 -mindepth 1 -type d -mtime +30 \
+          # Only this workflow's own run-* directories. The PVC also holds
+          # toolcall-probe/ (the per-ollama-version baseline written by
+          # toolcall-probe-on-upgrade.yaml), which is legitimately untouched
+          # for months when ollama doesn't change -- an unfiltered prune
+          # would delete the baseline the next upgrade must compare against.
+          find "${RESULTS_BASE}" -maxdepth 1 -mindepth 1 -type d -name 'run-*' -mtime +30 \
             -exec echo "Pruning: {}" \; -exec rm -rf {} +
 
       # Final step: notify the n8n model_sweep_complete webhook so the

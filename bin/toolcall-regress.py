@@ -17,7 +17,7 @@ classes #1205 recorded, plus a KV-bleed probe (AC4).
   no_call      answered in prose where a tool call was required
   bleed        response mentions the PREVIOUS request's topic  (AC4)
 """
-import argparse, json, time, urllib.request, urllib.error
+import argparse, json, os, time, urllib.request, urllib.error
 
 URL = "http://localhost:11434"
 DEFAULT_MODELS = "qwen3.6:35b,gemma4:26b-a4b-it-qat,qwen3-coder-next:latest"
@@ -81,6 +81,10 @@ def chat(model, messages, tools=None, seed=0, heavy=False):
             return 200, json.load(r), time.time() - t
     except urllib.error.HTTPError as e:
         return e.code, {"error": e.read().decode()[:200]}, time.time() - t
+    except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+        # A hang or a dropped connection is exactly what this probe exists to
+        # catch (qwen3.8 on ollama#17790 never answered): score it, don't crash.
+        return 0, {"error": f"{type(e).__name__}: {e}"[:200]}, time.time() - t
 
 
 def valid(schema, args):
@@ -127,13 +131,68 @@ def classify(code, resp, expected, check):
     return "ok", ""
 
 
+ABSOLUTE = ("http_error", "unknown_tool", "bleed")  # never acceptable, with or without a heavy_ prefix
+OK_KEYS = ("ok", "heavy_ok", "bleed_ok")
+
+
+def regressions(prev, cur):
+    """AC5e: what makes a new ollama version a regression against the last one tested.
+
+    prev/cur are --json-out documents ({"version", "totals": {model: {verdict: n}}}).
+    prev may be None (first run): only the absolute rules apply then."""
+    out = []
+    for model, t in cur["totals"].items():
+        for k, n in t.items():
+            if n and k.removeprefix("heavy_") in ABSOLUTE:
+                out.append(f"{model}: {k}={n}")
+    if prev:
+        for model, p in prev["totals"].items():
+            c = cur["totals"].get(model)
+            if c is None:
+                out.append(f"{model}: missing from this run")
+                continue
+            before, after = sum(p.get(k, 0) for k in OK_KEYS), sum(c.get(k, 0) for k in OK_KEYS)
+            if before - after >= 2:
+                out.append(f"{model}: ok {before} -> {after}")
+    return out
+
+
+def render_compare(prev, cur, regs):
+    lines = [f"Tool-call probe on ollama **{cur['version']}** vs the last version tested "
+             f"(**{prev['version'] if prev else 'none'}**), `bin/toolcall-regress.py` (homelab#1205 AC5).", "",
+             "| Model | " + ("previous | " if prev else "") + "this run |", "|---|" + ("---|" if prev else "") + "---|"]
+    fmt = lambda t: " ".join(f"{k}={v}" for k, v in sorted(t.items())) if t else "-"
+    for model in sorted(set(cur["totals"]) | set(prev["totals"] if prev else [])):
+        row = f"| {model} | " + (f"{fmt(prev['totals'].get(model))} | " if prev else "") + f"{fmt(cur['totals'].get(model))} |"
+        lines.append(row)
+    lines += ["", ("**Regressions:**\n" + "\n".join(f"- {r}" for r in regs)) if regs else "No regressions.",
+              "", "Rules: any `http_error`, `unknown_tool` or `bleed` fails; so does a model's ok count dropping "
+              "by 2 or more, or a model missing from the run."]
+    return "\n".join(lines)
+
+
 def main():
     global URL
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--ollama", default=URL, help="ollama base URL (default %(default)s)")
     ap.add_argument("--runs", type=int, default=3, help="seeded runs per case (default %(default)s)")
     ap.add_argument("--models", default=DEFAULT_MODELS, help="comma-separated (default %(default)s)")
+    ap.add_argument("--json-out", help="write {version, runs, totals} here")
+    ap.add_argument("--compare", nargs=2, metavar=("PREV_JSON", "CUR_JSON"),
+                    help="compare two --json-out files instead of probing; PREV_JSON may be absent")
+    ap.add_argument("--md-out", help="with --compare: write the markdown report here")
     a = ap.parse_args()
+    if a.compare:
+        prev = json.load(open(a.compare[0])) if os.path.exists(a.compare[0]) else None
+        cur = json.load(open(a.compare[1]))
+        regs = regressions(prev, cur)
+        md = render_compare(prev, cur, regs)
+        if a.md_out:
+            open(a.md_out, "w").write(md)
+        print(md)
+        print(f"TOOLCALL-PROBE-COMPARE version={cur['version']} prev={prev['version'] if prev else '-'} "
+              f"regressions={len(regs)}")
+        return
     URL, RUNS = a.ollama.rstrip("/"), a.runs
     ver = json.load(urllib.request.urlopen(URL + "/api/version"))["version"]
     print(f"# ollama {ver}  runs={RUNS}")
@@ -162,6 +221,9 @@ def main():
     print("\n# SUMMARY")
     for m, t in totals.items():
         print(f"{m:28s} " + " ".join(f"{k}={v}" for k, v in sorted(t.items())))
+    if a.json_out:
+        json.dump({"version": ver, "runs": RUNS, "totals": totals}, open(a.json_out, "w"), indent=1)
+    print(f"TOOLCALL-PROBE-COMPLETE version={ver} models={len(totals)}")
 
 
 if __name__ == "__main__":
