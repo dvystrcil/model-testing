@@ -24,3 +24,11 @@ paths:
     ignore:
       - 'input "client-id" is not defined in action "actions/create-github-app-token@v3"'
       - 'missing input "app-id" which is required by action "actions/create-github-app-token@v3"'
+  .github/workflows/toolcall-health.yaml:
+    ignore:
+      - 'input "client-id" is not defined in action "actions/create-github-app-token@v3"'
+      - 'missing input "app-id" which is required by action "actions/create-github-app-token@v3"'
+  .github/workflows/toolcall-probe-on-upgrade.yaml:
+    ignore:
+      - 'input "client-id" is not defined in action "actions/create-github-app-token@v3"'
+      - 'missing input "app-id" which is required by action "actions/create-github-app-token@v3"'

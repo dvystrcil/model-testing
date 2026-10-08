@@ -17,8 +17,11 @@ model-testing/
 │   ├── results/            # JSONL output from each sweep run
 │   ├── run_benchmark.py    # Sweep runner — hits all models × all payloads
 │   └── analyze.py          # AI-powered summary using qwen3.6:35b
-├── tests/
-│   └── test_benchmark.py   # Unit tests for grading logic
+├── bin/
+│   ├── toolcall-regress.py # Fixed tool-call probe for ollama upgrades (homelab#1205)
+│   ├── toolcall-health.py  # Daily real-use tool-call outcomes from Open WebUI
+│   └── rolling-issue.py    # One rolling GitHub issue per alert lane
+├── tests/                  # Unit tests (hermetic: no ollama, no network)
 ├── .github/
 │   └── workflows/
 │       └── model-sweep.yaml  # CI: runs on ARC runner co-located with Ollama
@@ -153,10 +156,15 @@ To compare two sweeps, diff the `ollama_version` and `git_commit` fields first. 
 
 **Stress test results** show the model's breaking point. The `stress_multi_constraint` payload has 10 requirements. Most models hit 8-9/10. The ones they drop reveal their weaknesses: security context fields, topology spread, and resource limits are the most commonly skipped.
 
-## CI workflow
+## CI workflows
 
-The `model-sweep` workflow runs on a lightweight ARC runner (`model-testing-runner`) co-located with Ollama on the homelab cluster, so no egress traffic and no GPU sharing with cloud providers. A new run automatically cancels any in-progress run (concurrency group).
+All run on `model-testing-runner`, an ARC runner co-located with Ollama on the homelab cluster.
 
-Trigger manually from the Actions tab, or it fires automatically on changes to `models.yaml` or any payload file.
+| Workflow | Trigger | GPU | What it does |
+|---|---|---|---|
+| `model-sweep` | manual only | yes, hours | models.yaml × every payload. Runs **queue** (group `model-sweep`) and are never cancelled mid-flight: killing a sweep has wedged max-01. Auto-on-push was removed 2026-05-15. Artifacts kept 30 days; `run-*` dirs on the PVC pruned after 30. |
+| `toolcall-health` | daily 14:30 UTC | **none** | `bin/toolcall-health.py`: real Open WebUI tool-call outcomes over 7 days, classed as unknown tool / bad args / tool-side error. Breach (>10% model-attributable failures, ≥10 calls) or an unreadable export opens one rolling homelab issue (label `toolcall-health`); a healthy window closes it. |
+| `toolcall-probe-on-upgrade` | hourly version check | ~15 min, **only when the ollama version changes** | `bin/toolcall-regress.py` on the new version, compared with the previous version's result (kept in `toolcall-probe/` on the PVC). Shares the `model-sweep` queue. Any parser 500, unknown tool or KV bleed, or a model's ok count dropping by ≥2, opens a rolling homelab issue (label `toolcall-probe`). |
+| `candidate-discovery` | weekly | pre-flight loads | finds new candidate models, opens a PR |
 
-Artifacts (JSONL results + markdown report) are retained for 30 days.
+The two `toolcall-*` workflows are homelab#1205 AC5: the tool-call regression that went 0% → 100% failing on ollama 0.33 for four days with nothing detecting it. A red scheduled run notifies nobody here, so both raise a GitHub issue instead of relying on the run status.

@@ -80,5 +80,39 @@ class FixtureTest(unittest.TestCase):
                          ["web_single", "web_two_items", "mealie_search", "mealie_get", "after_tool_result"])
 
 
+class RegressionsTest(unittest.TestCase):
+    """AC5e: what makes a new ollama version a regression against the last."""
+    PREV = {"version": "0.40.1", "totals": {
+        "qwen3.6:35b": {"ok": 15, "heavy_ok": 15, "bleed_ok": 9},
+        "gemma4": {"ok": 15, "heavy_ok": 14, "heavy_wrong_tool": 1, "bleed_ok": 9}}}
+
+    def cur(self, **models):
+        return {"version": "0.41.0", "totals": models}
+
+    def test_identical_is_clean(self):
+        self.assertEqual(tcr.regressions(self.PREV, self.cur(**self.PREV["totals"])), [])
+
+    def test_any_parser_500_unknown_tool_or_bleed_is_a_regression(self):
+        for bad in ("http_error", "heavy_http_error", "unknown_tool", "heavy_unknown_tool", "bleed"):
+            t = {"qwen3.6:35b": {"ok": 15, "heavy_ok": 15, "bleed_ok": 9, bad: 1}, "gemma4": self.PREV["totals"]["gemma4"]}
+            self.assertEqual(tcr.regressions(self.PREV, self.cur(**t)), [f"qwen3.6:35b: {bad}=1"], bad)
+
+    def test_ok_drop_of_two_is_a_regression_one_is_noise(self):
+        g = self.PREV["totals"]["gemma4"]
+        two = {"qwen3.6:35b": {"ok": 15, "heavy_ok": 13, "heavy_bad_args": 2, "bleed_ok": 9}, "gemma4": g}
+        one = {"qwen3.6:35b": {"ok": 15, "heavy_ok": 14, "heavy_bad_args": 1, "bleed_ok": 9}, "gemma4": g}
+        self.assertEqual(tcr.regressions(self.PREV, self.cur(**two)), ["qwen3.6:35b: ok 39 -> 37"])
+        self.assertEqual(tcr.regressions(self.PREV, self.cur(**one)), [])
+
+    def test_first_run_has_nothing_to_compare_but_absolutes_still_apply(self):
+        self.assertEqual(tcr.regressions(None, self.cur(**self.PREV["totals"])), [])
+        self.assertTrue(tcr.regressions(None, self.cur(m={"ok": 5, "bleed": 1})))
+
+    def test_model_missing_from_new_run_is_a_regression(self):
+        # A model that stopped answering entirely must not read as clean.
+        self.assertEqual(tcr.regressions(self.PREV, self.cur(**{"qwen3.6:35b": self.PREV["totals"]["qwen3.6:35b"]})),
+                         ["gemma4: missing from this run"])
+
+
 if __name__ == "__main__":
     unittest.main()
