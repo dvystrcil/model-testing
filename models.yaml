@@ -104,16 +104,25 @@ models:
   # homelab#1205).
   # - name: gpt-oss:120b                         # ~65 GB
 
-  # DELIBERATELY EXCLUDED -- do not re-enable without checking upstream first.
-  # qwen3.8:27b hangs: POST /v1/chat/completions never returns (no content, no
-  # usage, done=False). Reproduced live 2026-08-30 and matches upstream
-  # ollama/ollama#17790, which reports it against 0.32.13 on ROCm -- so it is
-  # NOT the 0.33.x regression and the rollback does not fix it.
+  # RE-ENABLED 2026-10-08 on ollama 0.40.1.
   #
-  # It was active in this list. An unattended sweep would have stalled on it,
-  # and this workflow's own concurrency comment records that killing a sweep
-  # mid-flight has wedged max-01 before. Left commented until #17790 closes.
-  # - name: qwen3.8:27b
+  # History: excluded 2026-08-30 because POST /v1/chat/completions never
+  # returned (no content, no usage, done=False), reproduced live and matching
+  # upstream ollama/ollama#17790. An unattended sweep would have stalled on
+  # it, and killing a sweep mid-flight has wedged max-01 before.
+  #
+  # What changed: #17790 closed upstream 2026-09-05, and max-01 moved from
+  # the 0.32.15 pin to 0.40.1 (dvystrcil/ollama#56). Re-checked attended on
+  # 0.40.1 before re-enabling:
+  #   bin/preflight-candidate.py  PREFLIGHT-COMPLETE generated=True tools=True
+  #                               healthy_before/after=True (Q4_K_M, 27.3B)
+  #   /v1/chat/completions        200 in 1.2s thinking on, 6.6s
+  #                               reasoning_effort=none; finish=stop both
+  #   bin/toolcall-regress.py     13/13 ok incl. 5/5 heavy (~28k-token
+  #                               prompt, 28 tools), 0/3 KV bleed
+  # It is also live in OWUI (12 chats in the 60 days to 2026-10-08), so the
+  # sweep should measure it. Tag spelled as installed on max-01 (27B).
+  - name: qwen3.8:27B                            # ~17 GB
   #- name: gemma4:26b
   #- name: gemma4:31b
   # Added 2026-06-08 — homelab#184 — Gemma 4 QAT variant.
