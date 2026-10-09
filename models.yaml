@@ -178,3 +178,14 @@ models:
   # - name: hf.co/peculiar-ragdoll/Dagger-Qwen3.6-27B-GGUF:Q4_K_M
   # - name: hf.co/peculiar-ragdoll/Nail-Qwen3.6-35B-A3B-GGUF:UD-Q4_K_XL
   
+
+  # --- Added by weekly candidate discovery (2026-10-09) ------------------
+  # Each of these was pulled, generated, and unloaded cleanly on
+  # max-01 before this PR was opened. Pre-flight proves it RUNS;
+  # the sweep is what decides whether it is any good.
+
+  # 9.2B params, BF16, 19.3 GB. capabilities: tools,thinking,completion,vision
+  - name: hf.co/ornith-ai/Ornith-1.5-9B-GGUF:BF16
+
+  # 35.5B params, Q8_0, 37.8 GB. capabilities: tools,thinking,completion,vision
+  - name: hf.co/empero-ai/Qwen3.8-35B-A3B-Distill-GGUF:Q8_0
