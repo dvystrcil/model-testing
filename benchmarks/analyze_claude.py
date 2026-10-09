@@ -31,11 +31,15 @@ from pathlib import Path
 # see literally the same input. If analyze.py grows new helpers, they
 # flow through here without changes.
 from analyze import (
+    SAFETY_GATE_PAYLOADS,
     build_agentic_table,
     build_env_block,
     build_prompt,
     build_summary_table,
+    hard_failures,
     load_results,
+    safety_facts_block,
+    safety_gate_report,
     strip_think,
 )
 
@@ -78,6 +82,7 @@ def main():
     p.add_argument("--owui-api-key", default=None, help="OWUI API key (or env OWUI_API_KEY)")
     p.add_argument("--model", default=DEFAULT_MODEL, help="Claude model id as registered in OWUI")
     p.add_argument("--out", default=None, help="Output markdown file (default: stdout)")
+    p.add_argument("--prompt-out", default=None, help="Also write the exact prompt sent to the summariser here")
     args = p.parse_args()
 
     api_key = args.owui_api_key
@@ -115,7 +120,10 @@ def main():
 
     table = build_summary_table(results) if results else "_No standard results._"
     env_block = build_env_block(meta, paths[0])
-    prompt = build_prompt(table, results, meta, agentic)
+    # model-testing#76 AC1: the summariser is TOLD the computed hard failures.
+    prompt = safety_facts_block(hard_failures(results)) + "\n\n" + build_prompt(table, results, meta, agentic)
+    if args.prompt_out:   # AC4
+        Path(args.prompt_out).write_text(prompt)
 
     analysis = owui_chat(
         args.owui_url,
@@ -127,14 +135,21 @@ def main():
         ],
     )
 
+    rec_marker, rec_banner, hard_md, rec_fatal = safety_gate_report(analysis, results, models_seen)
+    print(rec_marker, file=sys.stderr)
+    if rec_fatal:
+        print(f"::error::{rec_marker} -- the analysis contradicts the safety "
+              f"results (model-testing#76); see the banner in the report", file=sys.stderr)
+
     agentic_section = f"\n## Agentic Results\n\n{build_agentic_table(agentic)}\n" if agentic else ""
     output = (
         f"# Benchmark Report (Claude analysis)\n\n"
         f"_Summarizer: {args.model} via OWUI Anthropic Connection_\n\n"
         f"## Environment\n\n{env_block}\n"
         f"## Results\n\n{table}\n"
+        f"{hard_md}\n"
         f"{agentic_section}\n"
-        f"## AI Analysis\n\n{analysis}\n"
+        f"## AI Analysis\n{rec_banner}\n{analysis}\n"
     )
 
     if args.out:
