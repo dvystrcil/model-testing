@@ -60,6 +60,31 @@ def _get(url: str, timeout: int) -> dict:
         return json.loads(r.read().decode("utf-8", "replace"))
 
 
+def _delete(url: str, body: dict, timeout: int) -> dict:
+    req = urllib.request.Request(
+        url, data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"}, method="DELETE")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        raw = r.read().decode("utf-8", "replace")
+        return json.loads(raw) if raw.strip() else {}
+
+
+def _canonical(name: str) -> str:
+    """ollama lists an untagged model as `name:latest`."""
+    return name if ":" in name.rsplit("/", 1)[-1] else f"{name}:latest"
+
+
+def remove_model(base: str, model: str) -> str:
+    """Delete a model pre-flight pulled and rejected. Returns a note; never
+    raises -- the verdict is already decided and ledgered, and a failed
+    cleanup must not kill the run before its PR is opened."""
+    try:
+        _delete(f"{base}/api/delete", {"model": model}, timeout=120)
+        return f"removed from ollama (rejected, and this pre-flight pulled it)"
+    except Exception as e:
+        return f"remove failed: {e}"
+
+
 def healthy(base: str) -> tuple[bool, str]:
     """Is ollama in a state where pulling an unknown model is safe?
 
@@ -88,7 +113,7 @@ def resident(base: str) -> set[str]:
 
 
 def preflight(base: str, model: str) -> dict:
-    out = {"model": model, "healthy_before": None, "pulled": False,
+    out = {"model": model, "healthy_before": None, "preexisting": None, "pulled": False,
            "generated": False, "tools": None, "healthy_after": None,
            "notes": []}
 
@@ -100,6 +125,17 @@ def preflight(base: str, model: str) -> dict:
         # already needs a human.
         out["notes"].append(f"ollama unhealthy BEFORE pull: {why}")
         return out
+
+    # Was it on disk BEFORE this pull? Decides whether a REJECT may delete
+    # it afterwards (benchmarks/candidates.should_remove_after). None when
+    # the listing fails, which means "keep it".
+    try:
+        names = {_canonical(m.get("name", ""))
+                 for m in _get(f"{base}/api/tags", 15).get("models") or []}
+        out["preexisting"] = _canonical(model) in names
+    except Exception as e:
+        out["preexisting"] = None
+        out["notes"].append(f"could not list models before pull: {e}")
 
     try:
         _post(f"{base}/api/pull", {"model": model, "stream": False},

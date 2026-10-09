@@ -146,6 +146,22 @@ def should_trip_breaker(verdict: str) -> bool:
     return verdict in ("WEDGED", "SKIPPED-UNHEALTHY")
 
 
+def should_remove_after(verdict: str, result: dict) -> bool:
+    """Delete the candidate from ollama once pre-flight is done?
+
+    Only a REJECT, and only if this pre-flight is what pulled it: a model
+    that was already on disk belongs to whoever uses it, and when presence
+    is unknown it stays. Never after WEDGED / SKIPPED-UNHEALTHY -- the GPU
+    needs a human, and `ollama rm` first unloads, which is one more call
+    into a server that may be stuck.
+
+    2026-10-09: Qwen-Image-2.1 (an image model) was rejected, ledgered as
+    "will not be retried", and its 14.2 GB stayed on max-01's root disk.
+    """
+    return (verdict == "REJECT" and bool(result.get("pulled"))
+            and result.get("preexisting") is False)
+
+
 def is_ledgerable(verdict: str) -> bool:
     """Whether the verdict is a fact about the MODEL worth remembering.
 
