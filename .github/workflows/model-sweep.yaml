@@ -400,6 +400,7 @@ jobs:
             --ollama "$OLLAMA_URL" \
             --expect "$EXPECTED_PAYLOADS" \
             --expect-models "$EXPECTED_MODELS" \
+            --prompt-out prompt-local.txt \
             --out /tmp/analyze.md 2>&1 | tee /tmp/analyze.err
           cat /tmp/analyze.md >> report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
@@ -547,6 +548,25 @@ jobs:
               echo "labelled; its analysis section is not trustworthy."
               rc=1 ;;
           esac
+          # model-testing#76: the analysis may not RECOMMEND a model its own
+          # rows show failing the safety gate (refusal_boundary,
+          # family_harmful_request_refusal). Run 31529368759 ranked such a
+          # model #1 "for safety". The claim is labelled in report.md; the run
+          # fails here, because a green run is read as a usable recommendation.
+          REC=$(grep -m1 '^ANALYZE-RECOMMENDATION' /tmp/analyze.err 2>/dev/null || true)
+          if [ -z "$REC" ]; then
+            echo "::error::analyze.py emitted no ANALYZE-RECOMMENDATION marker — the safety gate was not evaluated."
+            rc=1
+          else
+            echo "$REC"
+            case "$REC" in
+              *contradiction=*|*ineligible_pick=*)
+                echo "::error::${REC} — the analysis credits safety its own rows refute, or picks a gate-failing model over one that passed; see the banner in report.md."
+                rc=1 ;;
+              *warn=*) echo "::warning::${REC} — no model passed the safety gate; the recommendation is labelled conditional." ;;
+              *) : ;;
+            esac
+          fi
           # Truncation is a WARNING, never fatal (model-testing#98). A
           # capped response is a partial answer, not a lost one -- the cell
           # is in the table and the report names it. Failing here would
@@ -627,11 +647,25 @@ jobs:
           python benchmarks/analyze_claude.py $FILES \
             --owui-url "$OWUI_URL" \
             --model "$CLAUDE_MODEL" \
-            --out /tmp/analyze-claude.md
+            --prompt-out prompt-claude.txt \
+            --out /tmp/analyze-claude.md 2> /tmp/analyze-claude.err
+          cat /tmp/analyze-claude.err >&2   # synchronous: the gate below greps this file
           cat /tmp/analyze-claude.md >> report-claude.md
           echo "## Claude analysis (via OWUI)" >> "$GITHUB_STEP_SUMMARY"
           cat report-claude.md >> "$GITHUB_STEP_SUMMARY"
           cp report-claude.md "${RESULTS_BASE}/run-${SWEEP_RUN_ID}/report-claude.md"
+          # Same safety gate as the local analysis (model-testing#76) -- the
+          # 31529368759 contradiction was in THIS report. Checked after the
+          # report is saved, so a failing run still keeps it.
+          CREC=$(grep -m1 '^ANALYZE-RECOMMENDATION' /tmp/analyze-claude.err 2>/dev/null || true)
+          echo "${CREC:-no ANALYZE-RECOMMENDATION marker}"
+          case "$CREC" in
+            "") echo "::error::analyze_claude.py emitted no ANALYZE-RECOMMENDATION marker"; exit 1 ;;
+            *contradiction=*|*ineligible_pick=*)
+              echo "::error::${CREC} — the Claude analysis contradicts the safety results; see the banner in report-claude.md"; exit 1 ;;
+            *warn=*) echo "::warning::${CREC} — no model passed the safety gate" ;;
+            *) : ;;
+          esac
 
       # Upload report.md (local) + report-claude.md (Claude) as workflow
       # artifacts so the n8n sweep-runner can fetch them via the GH API
@@ -645,6 +679,8 @@ jobs:
           path: |
             report.md
             report-claude.md
+            prompt-local.txt
+            prompt-claude.txt
           retention-days: 30
           if-no-files-found: warn
 
