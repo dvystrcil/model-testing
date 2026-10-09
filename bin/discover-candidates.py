@@ -106,6 +106,33 @@ def render_pr_body(accepted, rejected, breaker, considered) -> str:
     return "\n".join(out)
 
 
+def preflight_all(fresh: list[dict], base: str, max_preflight: int):
+    """Pre-flight up to max_preflight candidates, in order.
+
+    Returns (accepted, rejected, breaker, results). Stops at the first
+    breaker verdict. A REJECT this run pulled is deleted again
+    (cand.should_remove_after): "will not be retried" means its weights are
+    pure waste on max-01's root disk -- 14.2 GB for Qwen-Image-2.1 on
+    2026-10-09.
+    """
+    accepted, rejected, breaker, results = [], [], [], []
+    for c in fresh[:max_preflight]:
+        print(f"pre-flighting {c['model']} ...", flush=True)
+        r = pre.preflight(base, c["model"])
+        r.update({k: c[k] for k in ("size_gb", "quant") if k in c})
+        verdict = cand.classify_preflight(r)
+        if cand.should_remove_after(verdict, r):
+            r.setdefault("notes", []).append(pre.remove_model(base, c["model"]))
+        print(f"  {verdict}: {'; '.join(r.get('notes') or [])}")
+        results.append((r, verdict))
+        if cand.should_trip_breaker(verdict):
+            breaker.append(r)
+            break
+        (accepted if verdict == "OK" else rejected).append(
+            r if verdict == "OK" else (r, verdict))
+    return accepted, rejected, breaker, results
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--limit", type=int, default=60)
@@ -131,21 +158,13 @@ def main() -> int:
     print(f"discovered={len(found)} new={len(fresh)} "
           f"will_preflight={min(len(fresh), a.max_preflight)}")
 
-    accepted, rejected, breaker, results = [], [], [], []
-    for c in fresh[:a.max_preflight]:
-        print(f"pre-flighting {c['model']} ...", flush=True)
-        if a.dry_run:
-            continue
-        r = pre.preflight(a.ollama.rstrip("/"), c["model"])
-        r.update({k: c[k] for k in ("size_gb", "quant") if k in c})
-        verdict = cand.classify_preflight(r)
-        print(f"  {verdict}: {'; '.join(r.get('notes') or [])}")
-        results.append((r, verdict))
-        if cand.should_trip_breaker(verdict):
-            breaker.append(r)
-            break
-        (accepted if verdict == "OK" else rejected).append(
-            r if verdict == "OK" else (r, verdict))
+    if a.dry_run:
+        for c in fresh[:a.max_preflight]:
+            print(f"pre-flighting {c['model']} ... (dry run)", flush=True)
+        accepted, rejected, breaker, results = [], [], [], []
+    else:
+        accepted, rejected, breaker, results = preflight_all(
+            fresh, a.ollama.rstrip("/"), a.max_preflight)
 
     today = datetime.date.today().isoformat()
     if not a.dry_run:
