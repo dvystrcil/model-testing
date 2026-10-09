@@ -1,1 +1,14 @@
-{}
+{
+  "hf.co/empero-ai/Qwen3.8-35B-A3B-Distill-GGUF:Q8_0": {
+    "reason": "done_reason=length",
+    "verdict": "OK"
+  },
+  "hf.co/ornith-ai/Ornith-1.5-9B-GGUF:BF16": {
+    "reason": "done_reason=length",
+    "verdict": "OK"
+  },
+  "hf.co/unsloth/Qwen-Image-2.1-GGUF:F16": {
+    "reason": "generate failed: HTTP Error 500: Internal Server Error",
+    "verdict": "REJECT"
+  }
+}
