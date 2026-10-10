@@ -710,6 +710,7 @@ jobs:
       # PVC + as a 30-day artifact regardless, so a missed notification
       # doesn't lose data — operator fetches by run_id manually.
       - name: Notify n8n sweep-complete webhook
+        id: notify
         if: always()
         env:
           N8N_WEBHOOK_URL: http://n8n.n8n-workflow.svc.cluster.local/webhook/model-sweep-complete
@@ -739,8 +740,48 @@ jobs:
           curl -sS --max-time 60 -X POST \
             -H 'Content-Type: application/json' \
             -d "$BODY" \
+            -o /tmp/n8n-reply.json \
             "$N8N_WEBHOOK_URL" \
             && rc=0 || rc=$?
           if [ "$rc" -ne 0 ]; then
             echo "::warning::n8n sweep-complete notification failed (rc=$rc). report.md is still on PVC at ${RESULTS_BASE}/run-${SWEEP_RUN_ID}/report.md and as workflow artifact."
           fi
+          # model-testing#77: READ the reply. `completed_orphan` (no tracking
+          # issue, e.g. a manual dispatch) used to end here green with the
+          # analysis delivered nowhere. The outcome goes on the run page and
+          # drives the fallback below; only issue_commented:true is delivery.
+          OUT=$(python3 benchmarks/sweep_delivery.py classify --rc "$rc" --response /tmp/n8n-reply.json)
+          echo "$OUT"
+          echo "outcome=${OUT##*outcome=}" >> "$GITHUB_OUTPUT"
+
+      # The analysis reached no tracking issue: open one that carries it, so
+      # it reaches a human rather than a 30-day artifact. If THIS fails the
+      # job fails -- a sweep whose analysis reached nobody is not green.
+      - name: App token for undelivered-sweep issue
+        id: deliver-token
+        if: always() && steps.notify.outputs.outcome != 'delivered'
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ env.CICD_APP_CLIENT_ID }}
+          private-key: ${{ env.CICD_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: model-testing
+          # Declared so a missing permission fails as an auth error naming the
+          # scope, not as a silent non-delivery.
+          permission-issues: write
+
+      - name: Deliver an undelivered sweep as an issue
+        if: always() && steps.notify.outputs.outcome != 'delivered'
+        env:
+          GH_TOKEN: ${{ steps.deliver-token.outputs.token }}
+          OUTCOME: ${{ steps.notify.outputs.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 benchmarks/sweep_delivery.py body --run-id "${SWEEP_RUN_ID}" --run-url "$RUN_URL" \
+            --outcome "${OUTCOME:-webhook_failed}" --report report.md --report-claude report-claude.md > /tmp/undelivered.md
+          URL=$(gh issue create --repo "${{ github.repository }}" \
+            --title "Sweep ${SWEEP_RUN_ID}: analysis not delivered to a tracking issue (${OUTCOME:-webhook_failed})" \
+            --body-file /tmp/undelivered.md) || { echo "::error::the analysis reached no tracking issue AND the fallback issue could not be opened"; exit 1; }
+          echo "Delivered as $URL"
+          echo "Delivered instead as ${URL}" >> "$GITHUB_STEP_SUMMARY"
