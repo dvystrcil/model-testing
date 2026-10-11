@@ -1,4 +1,8 @@
 {
+  "hf.co/SulphurAI/Sulphur-2-base:Q8_0": {
+    "reason": "done_reason=length",
+    "verdict": "OK"
+  },
   "hf.co/empero-ai/Qwen3.8-35B-A3B-Distill-GGUF:Q8_0": {
     "reason": "done_reason=length",
     "verdict": "OK"
@@ -7,8 +11,16 @@
     "reason": "done_reason=length",
     "verdict": "OK"
   },
+  "hf.co/peculiar-ragdoll/Cyber-Tiel-Coder-35B-A3B-GGUF-MTP:Q4_K_M": {
+    "reason": "pull failed: HTTP Error 500: Internal Server Error",
+    "verdict": "REJECT"
+  },
   "hf.co/unsloth/Qwen-Image-2.1-GGUF:F16": {
     "reason": "generate failed: HTTP Error 500: Internal Server Error",
     "verdict": "REJECT"
+  },
+  "hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0": {
+    "reason": "done_reason=stop",
+    "verdict": "OK"
   }
 }
