@@ -189,3 +189,14 @@ models:
 
   # 35.5B params, Q8_0, 37.8 GB. capabilities: tools,thinking,completion,vision
   - name: hf.co/empero-ai/Qwen3.8-35B-A3B-Distill-GGUF:Q8_0
+
+  # --- Added by weekly candidate discovery (2026-10-11) ------------------
+  # Each of these was pulled, generated, and unloaded cleanly on
+  # max-01 before this PR was opened. Pre-flight proves it RUNS;
+  # the sweep is what decides whether it is any good.
+
+  # 30.5B params, Q8_0, 32.5 GB. capabilities: completion,tools
+  - name: hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0
+
+  # 9.2B params, Q8_0, 19.3 GB. capabilities: tools,thinking,completion,vision
+  - name: hf.co/SulphurAI/Sulphur-2-base:Q8_0
