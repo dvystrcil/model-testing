@@ -156,7 +156,7 @@ jobs:
       - uses: actions/setup-python@v7
         if: steps.cache-restore.outputs.cache-hit != 'true'
         with:
-          python-version: '3.14'
+          python-version: '3.15'
 
       # Retried because one Fastly edge node in PyPI's rotation is serving
       # `502 I/O error`, and it took four families out of run 31905169831.
@@ -289,7 +289,7 @@ jobs:
 
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.14'
+          python-version: '3.15'
 
       # Same flaky-PyPI-edge retry as the sweep job above. This one matters
       # more, not less: a failure here loses the report for every family that
