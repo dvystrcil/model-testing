@@ -16,6 +16,7 @@ Tests run the shipped benchmarks/sweep_delivery.py and the shipped workflow.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -121,6 +122,52 @@ def idx(fragment):
     raise AssertionError(f"no step named *{fragment}*")
 
 
+class TestDeliver(unittest.TestCase):
+    """The issue is opened over the REST API from Python: no gh CLI needed."""
+
+    def _opener(self, status=201, body=None, seen=None):
+        class R:
+            def __init__(self):
+                self.status = status
+            def read(self):
+                return json.dumps(body or {"html_url": "https://github.com/o/r/issues/9"}).encode()
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                pass
+        def opener(req, timeout):
+            if seen is not None:
+                seen.append(req)
+            if status >= 400:
+                import urllib.error
+                raise urllib.error.HTTPError(req.full_url, status, "x", {}, None)
+            return R()
+        return opener
+
+    def test_posts_the_issue_and_returns_its_url(self):
+        seen = []
+        url = sd.create_issue("o/r", "T", "B", "tok", opener=self._opener(seen=seen))
+        self.assertEqual(url, "https://github.com/o/r/issues/9")
+        req = seen[0]
+        self.assertEqual(req.full_url, "https://api.github.com/repos/o/r/issues")
+        self.assertEqual(req.get_method(), "POST")
+        self.assertEqual(json.loads(req.data), {"title": "T", "body": "B"})
+        self.assertEqual(req.get_header("Authorization"), "Bearer tok")
+
+    def test_an_api_failure_raises(self):
+        with self.assertRaises(Exception):
+            sd.create_issue("o/r", "T", "B", "tok", opener=self._opener(status=403))
+
+    def test_cli_deliver_prints_the_url_and_fails_without_a_token(self):
+        import io
+        from contextlib import redirect_stdout
+        os.environ.pop("GH_TOKEN", None)
+        with redirect_stdout(io.StringIO()):
+            rc = sd.main(["deliver", "--repo", "o/r", "--title", "T", "--run-id", "1",
+                          "--run-url", "u", "--outcome", "orphan",
+                          "--report", "/nonexistent", "--report-claude", "/nonexistent"])
+        self.assertEqual(rc, 1)
+
 class TestWiring(unittest.TestCase):
     def test_notify_classifies_the_reply_and_exports_the_outcome(self):
         _, s = idx("Notify n8n sweep-complete webhook")
@@ -138,8 +185,17 @@ class TestWiring(unittest.TestCase):
             self.assertIn("steps.notify.outputs.outcome != 'delivered'", s.get("if", ""))
             self.assertIn("always()", s.get("if", ""))
         self.assertEqual(tok["with"].get("permission-issues"), "write")
-        self.assertIn("gh issue create", fb["run"])
-        self.assertIn("sweep_delivery.py body", fb["run"])
+        self.assertIn("sweep_delivery.py deliver", fb["run"])
+
+    def test_no_analyze_step_needs_the_gh_cli(self):
+        """model-testing-runner has no `gh`. Re-analyze 38845110115 (2026-10-16)
+        reached the fallback and died on `gh: command not found`, so the
+        analysis still reached nobody. This test used to ASSERT `gh issue
+        create` -- it encoded the same wrong assumption as the workflow."""
+        import re
+        for s in WF["jobs"]["analyze"]["steps"]:
+            code = "\n".join(l for l in s.get("run", "").splitlines() if not l.lstrip().startswith("#"))
+            self.assertNotRegex(code, r"(^|[\s;|&(])gh\s", s.get("name"))
 
     def test_if_the_fallback_cannot_deliver_the_run_fails(self):
         """AC1: never green when the analysis reached nobody."""
