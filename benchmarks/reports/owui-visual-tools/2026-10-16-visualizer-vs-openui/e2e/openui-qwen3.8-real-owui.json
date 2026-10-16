@@ -1,0 +1,16 @@
+{
+ "model": "qwen3.8:27B",
+ "done": true,
+ "secs": 146,
+ "chatUrl": "(deleted after the run)",
+ "iframes": 1,
+ "frames": [
+  {
+   "url": "about:srcdoc",
+   "text": "Monthly Grocery Costs\nCost\n0\n40\n80\n120\n160\nJan\nFeb\nMar\nApr\nMonth\nGrocery Cost\nRelated Queries\nShow me this as a line chart instead\nAdd my May grocery cost\nMar"
+  }
+ ],
+ "toolBlocks": 0,
+ "msgText": "Use the render_openui tool to show me a bar chart of my monthly grocery costs: Jan 120, Feb 95, Mar 150, Apr 70.\nChat Conversation\n\nUse the render_openui tool to show me a bar chart of my monthly grocery costs: Jan 120, Feb 95, Mar 150, Apr 70.\n\nOct 16, 8:55 AM\nqwen3.8:27B\nRendered \"Monthly Grocery Costs\"\nExplored render_openui\n\nHere's your bar chart of monthly grocery costs. It shows each month from January through April with the corresponding cost \u2014 January ($120), February ($95), March ($150, your highest), and April ($70, your lowest).\n\nYou can also see two follow-up options below:\n\nSwitch",
+ "consoleErrors": []
+}

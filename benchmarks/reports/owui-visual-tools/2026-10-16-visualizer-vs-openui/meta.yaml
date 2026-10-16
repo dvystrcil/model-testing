@@ -1,0 +1,52 @@
+topic: owui-visual-tools
+date: 2026-10-16
+slug: visualizer-vs-openui
+title: Inline Visualizer 2.2.3 vs OpenUI 0.5.0 on the four most-used local models
+trigger: >-
+  homelab#981 — inline_visualizer_v2 had been deleted while 5 presets still bound it; decide restore-or-remove,
+  and whether OpenUI covers the same need.
+method: >-
+  bin/owui-visual-tools-eval.py (tiers 1-2: OWUI native tool loop over the ollama API, then each tool's own
+  rendering code screenshotted with chrome-headless-shell), plus e2e/chat.js (tier 3: the real OWUI 0.12.2 chat
+  UI in a browser).
+hardware: max-01 (ollama 0.40.5)
+models:
+  - qwen3.6:35b
+  - nemotron-3.5-lightning:30b-a3b-q4_K_M
+  - qwen3.8:27B
+  - qwen3-coder-next:latest
+payloads:
+  - owui-visual-tools/cases.json (diagram, chart, negative, dashboard)
+tools:
+  visualizer: Inline Visualizer 2.2.3 @ Classic298/open-webui-plugins 13490d6
+  openui: OpenUI - Generative UI 0.5.0 @ thesysdev/openwebui-plugin 670511f, bundle @openuidev/browser-bundle 0.2.1
+outcome:
+  winner: >-
+    Neither replaces the other. OpenUI is the default visual tool (charts, tables, status). The visualizer is kept
+    only for diagrams and one-offs, on qwen3.8:27B.
+  evidence:
+    - "Human-reviewed clean passes, original run: visualizer 5/12 (+2 flawed), OpenUI 5/12 (+5 flawed); non-visual question 8/8"
+    - "Rerun of the committed harness: 24/32 mechanical; 7/12 visualizer and 4/12 OpenUI positive cells changed verdict, so single cells are observations, not rates"
+    - "Held across both runs: qwen3.8:27B + visualizer 8/8; qwen3.6:35b NO_CALL 3 of 6; OpenUI 0/8 real diagrams, 3/24 silent blank renders, DOWN amber; OpenUI over-triggered on 2/8 non-visual prompts, the visualizer 0/8"
+    - OpenUI charts 4/4 with correct values in the original run (3/4 in the rerun, one silent blank); built from data, so bars cannot be out of scale
+    - OpenUI cannot draw diagrams; it substitutes step lists, or misleading ASCII art (nemotron)
+    - OpenUI 0.5.0 error callouts render amber (DOWN looks degraded); invalid OpenUI Lang fails silently (title only)
+    - Visualizer qwen3.8:27B clean on every prompt in both runs (8/8), best output of the run, but slow (72-619 s)
+    - Visualizer qwen3.6:35b (most-used) skipped the tool call on 2 of 3 visual prompts, which shows raw HTML in chat
+    - Visualizer qwen3-coder-next skipped the skill, drew out-of-scale bars, and looped visualize() x5 with no content
+    - OpenUI renders in the real OWUI 0.12.2 chat (tier 3); unprompted, qwen3.8 chose the code interpreter instead
+  action_taken:
+    - "homelab#981: restore the visualizer on chat-visualizer (qwen3.8:27B) only, remove it from the other presets, update OpenUI to 0.5.0 with a pinned bundle"
+raw_artifacts:
+  - original-run/results.jsonl
+  - original-run/shots/
+  - raw/results.jsonl
+  - shots/
+  - summary.md
+  - e2e/openui-qwen3.8-real-owui.json
+links:
+  related_issues:
+    - https://github.com/dvystrcil/model-testing/issues/126
+    - https://github.com/dvystrcil/homelab/issues/981
+  related_artifacts:
+    - https://claude.ai/artifact/BkAM3k3JQtFgH5HR9GCTna
