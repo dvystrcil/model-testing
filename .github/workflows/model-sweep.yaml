@@ -778,10 +778,11 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          python3 benchmarks/sweep_delivery.py body --run-id "${SWEEP_RUN_ID}" --run-url "$RUN_URL" \
-            --outcome "${OUTCOME:-webhook_failed}" --report report.md --report-claude report-claude.md > /tmp/undelivered.md
-          URL=$(gh issue create --repo "${{ github.repository }}" \
+          # stdlib REST call, not `gh`: model-testing-runner has no gh CLI
+          # (re-analyze 38845110115 died here on `gh: command not found`).
+          URL=$(python3 benchmarks/sweep_delivery.py deliver --repo "${{ github.repository }}" \
             --title "Sweep ${SWEEP_RUN_ID}: analysis not delivered to a tracking issue (${OUTCOME:-webhook_failed})" \
-            --body-file /tmp/undelivered.md) || { echo "::error::the analysis reached no tracking issue AND the fallback issue could not be opened"; exit 1; }
+            --run-id "${SWEEP_RUN_ID}" --run-url "$RUN_URL" --outcome "${OUTCOME:-webhook_failed}" \
+            --report report.md --report-claude report-claude.md) || { echo "::error::the analysis reached no tracking issue AND the fallback issue could not be opened"; exit 1; }
           echo "Delivered as $URL"
           echo "Delivered instead as ${URL}" >> "$GITHUB_STEP_SUMMARY"

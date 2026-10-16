@@ -17,6 +17,11 @@ reached nobody, open an issue that carries it.
     sweep_delivery.py body --run-id ID --run-url URL --outcome O
                            --report F --report-claude F
         prints an issue body holding both reports, within GitHub's limit
+    sweep_delivery.py deliver --repo O/R --title T --run-id ID --run-url URL
+                              --outcome O --report F --report-claude F
+        opens that issue via the REST API with $GH_TOKEN and prints its URL;
+        exit 1 if it could not. stdlib only: model-testing-runner has no `gh`
+        (re-analyze 38845110115 died on `gh: command not found`).
 
 Only an explicit `issue_commented: true` counts as delivered: no evidence of
 delivery is not delivery.
@@ -27,6 +32,7 @@ import argparse
 import json
 import os
 import sys
+import urllib.request
 from pathlib import Path
 
 MARK = "SWEEP-DELIVERY"
@@ -90,6 +96,20 @@ def issue_body(run_id: str, run_url: str, outcome: str, report: Path, report_cla
     return "".join(out)[:GITHUB_BODY_LIMIT]
 
 
+def create_issue(repo: str, title: str, body: str, token: str,
+                 opener=urllib.request.urlopen) -> str:
+    """Open an issue; return its html_url. Raises on any API failure."""
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{repo}/issues",
+        data=json.dumps({"title": title, "body": body}).encode(),
+        method="POST",
+        headers={"Authorization": f"Bearer {token}",
+                 "Accept": "application/vnd.github+json",
+                 "Content-Type": "application/json"})
+    with opener(req, timeout=60) as r:
+        return json.loads(r.read())["html_url"]
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -101,7 +121,25 @@ def main(argv=None) -> int:
         b.add_argument(a, required=True)
     b.add_argument("--report", type=Path, required=True)
     b.add_argument("--report-claude", type=Path, required=True)
+    d = sub.add_parser("deliver")
+    for a in ("--repo", "--title", "--run-id", "--run-url", "--outcome"):
+        d.add_argument(a, required=True)
+    d.add_argument("--report", type=Path, required=True)
+    d.add_argument("--report-claude", type=Path, required=True)
     a = p.parse_args(argv)
+    if a.cmd == "deliver":
+        token = os.environ.get("GH_TOKEN", "")
+        if not token:
+            print("::error::GH_TOKEN is empty: the undelivered analysis cannot be opened as an issue")
+            return 1
+        body = issue_body(a.run_id, a.run_url, a.outcome, a.report, a.report_claude)
+        try:
+            url = create_issue(a.repo, a.title, body, token)
+        except Exception as e:  # noqa: BLE001 -- any failure means not delivered
+            print(f"::error::could not open the undelivered-sweep issue: {type(e).__name__}: {e}")
+            return 1
+        print(url)
+        return 0
     if a.cmd == "classify":
         text = a.response.read_text() if a.response.exists() else ""
         outcome = classify(a.rc, text)
