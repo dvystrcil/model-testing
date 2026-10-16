@@ -3,6 +3,16 @@
 Auto-curated catalog of all evaluation reports in this directory.
 Newest first within each topic.
 
+## owui-visual-tools
+
+OWUI in-chat rendering tools (Inline Visualizer, OpenUI) × local models. Harness: `bin/owui-visual-tools-eval.py`; see `benchmarks/owui-visual-tools/README.md`.
+
+- [2026-10-16 — visualizer-vs-openui](owui-visual-tools/2026-10-16-visualizer-vs-openui/README.md)
+  Inline Visualizer 2.2.3 vs OpenUI 0.5.0 on qwen3.6:35b, nemotron-3.5-lightning, qwen3.8:27B and
+  qwen3-coder-next, two runs plus a real-OWUI check → **neither replaces the other**: OpenUI is the default
+  for charts and tables (it can't draw diagrams, and it fails silently); the visualizer is kept for diagrams
+  on **qwen3.8:27B**, the only pairing clean in both runs (8/8). (homelab#981, model-testing#126)
+
 ## task-model
 
 Picks for OWUI's `TASK_MODEL` env (handles follow-up suggestions, title

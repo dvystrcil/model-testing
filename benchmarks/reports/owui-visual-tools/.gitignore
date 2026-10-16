@@ -1,0 +1,2 @@
+# Render pages are rebuilt from raw/results.jsonl; the visualizer wrapper makes each ~160 KB.
+**/shots/*.html

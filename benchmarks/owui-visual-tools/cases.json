@@ -1,0 +1,17 @@
+{
+  "_comment": "Prompts are verbatim from the 2026-10-16 run so later runs stay comparable. Add cases; don't edit these. expect = strings that must appear (case-insensitive) in what the user would see.",
+  "cases": [
+    {"name": "diagram", "positive": true,
+     "prompt": "Draw me a diagram of how a Kubernetes Service routes traffic to three pods.",
+     "expect": ["Service"]},
+    {"name": "chart", "positive": true,
+     "prompt": "Make a bar chart of these monthly costs: Jan 12, Feb 9, Mar 15, Apr 7.",
+     "expect": ["Jan", "Feb", "Mar", "Apr"]},
+    {"name": "negative", "positive": false,
+     "prompt": "What is the difference between a Deployment and a StatefulSet? Two sentences.",
+     "expect": []},
+    {"name": "dashboard", "positive": true,
+     "prompt": "Build me a status dashboard for these services: n8n healthy 99.9% uptime, immich degraded 97.2%, harbor healthy 99.5%, ollama down 88.0%. Make each one's status obvious at a glance.",
+     "expect": ["n8n", "immich", "harbor", "ollama", "97.2", "88"]}
+  ]
+}
