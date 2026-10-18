@@ -1,10 +1,22 @@
 {
+  "hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:BF16": {
+    "reason": "done_reason=length",
+    "verdict": "OK"
+  },
   "hf.co/SulphurAI/Sulphur-2-base:Q8_0": {
     "reason": "done_reason=length",
     "verdict": "OK"
   },
   "hf.co/empero-ai/Qwen3.8-35B-A3B-Distill-GGUF:Q8_0": {
     "reason": "done_reason=length",
+    "verdict": "OK"
+  },
+  "hf.co/empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF:BF16": {
+    "reason": "done_reason=length",
+    "verdict": "OK"
+  },
+  "hf.co/openbmb/MiniCPM-V-4.7-35B-A3B-gguf:Q8_0": {
+    "reason": "done_reason=stop",
     "verdict": "OK"
   },
   "hf.co/ornith-ai/Ornith-1.5-9B-GGUF:BF16": {
