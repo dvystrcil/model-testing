@@ -200,3 +200,17 @@ models:
 
   # 9.2B params, Q8_0, 19.3 GB. capabilities: tools,thinking,completion,vision
   - name: hf.co/SulphurAI/Sulphur-2-base:Q8_0
+
+  # --- Added by weekly candidate discovery (2026-10-18) ------------------
+  # Each of these was pulled, generated, and unloaded cleanly on
+  # max-01 before this PR was opened. Pre-flight proves it RUNS;
+  # the sweep is what decides whether it is any good.
+
+  # 8.95B params, BF16, 36.3 GB. capabilities: tools,thinking,completion,vision
+  - name: hf.co/empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF:BF16
+
+  # 34.7B params, Q8_0, 36.9 GB. capabilities: tools,thinking,completion,vision
+  - name: hf.co/openbmb/MiniCPM-V-4.7-35B-A3B-gguf:Q8_0
+
+  # 12.1B params, BF16, 24.3 GB. capabilities: completion,tools,thinking
+  - name: hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:BF16
