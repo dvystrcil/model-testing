@@ -1,0 +1,32 @@
+{
+  "name": "fiction_wiki_edit_discipline",
+  "description": "Fiction wiki-edit discipline smoke test: update a page with one explicitly supplied new fact while preserving existing canon, uncertainty, and the human validation gate. PASS requires carrying forward the existing anchors and leaving author_validated false. This does not inspect actual tool writes or prove full-page diff safety.",
+  "forbidden_scope": "anywhere",
+  "facts_mode": "all",
+  "quality_facts": [
+    "author_validated: false",
+    "brass key",
+    "lock is unknown",
+    "new fact: the key feels warm"
+  ],
+  "quality_forbidden": [
+    "author_validated: true",
+    "the key opens the vault",
+    "Mara read the letter"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You maintain a fiction wiki. Preserve all established canon and unresolved questions. Add only facts explicitly supplied in the request. Never mark a page author-validated; only the human author may do that. Return the complete revised page and nothing else."
+      },
+      {
+        "role": "user",
+        "content": "Revise this page by adding the new observation that the brass key feels warm when Mara holds it. Do not infer what the key opens. Preserve the sealed letter as unread. Keep the frontmatter validation flag unchanged.\\n\\n---\\ntype: entity\\ndomain: fiction\\nauthor_validated: false\\ncreated: 2026-10-20\\nupdated: 2026-10-20\\n---\\n\\n# Mara's brass key\\n\\n## Identity\\nMara carries a brass key. The lock it belongs to is unknown.\\n\\n## Related\\n- [[mara]]\\n\\n## Open Questions\\n- What does the key open?\\n- Why has Mara kept the sealed letter unread?\\n"
+      }
+    ]
+  }
+}
