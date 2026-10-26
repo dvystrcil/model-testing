@@ -1,0 +1,31 @@
+{
+  "name": "fiction_continuity_audit",
+  "description": "Fiction continuity-audit smoke test: compare a canon note with a new passage and distinguish a direct contradiction from an added detail. PASS requires identifying the hand-use conflict with evidence and not misclassifying the new coat detail as a contradiction. String grading is only a regression signal; semantic review is still required.",
+  "forbidden_scope": "anywhere",
+  "facts_mode": "all",
+  "quality_facts": [
+    "contradiction",
+    "right hand",
+    "left-handed",
+    "new information"
+  ],
+  "quality_forbidden": [
+    "no contradictions",
+    "both are consistent"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a careful fiction continuity editor. Compare only the supplied canon and passage. Separate direct contradictions from compatible new information. Quote or precisely identify the evidence on both sides. Do not invent explanations to reconcile conflicts. Return concise headings: Contradictions, Compatible new information, Unresolved ambiguities."
+      },
+      {
+        "role": "user",
+        "content": "Canon note: Ilyan is left-handed and always writes with his left hand. The story has not established what coat he wears.\\n\\nNew passage: Ilyan signed the treaty with his right hand. He wore a dark green coat.\\n\\nAudit this passage against canon. Identify the contradiction and classify the coat detail appropriately. Do not rewrite either source."
+      }
+    ]
+  }
+}

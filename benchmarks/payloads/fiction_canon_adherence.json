@@ -1,0 +1,33 @@
+{
+  "name": "fiction_canon_adherence",
+  "description": "Fiction-writing smoke test: write a short scene while respecting explicit canon constraints. PASS requires the scene to retain the named canon anchors and avoid explicit contradictions. This grades only checkable anchors/phrases; it does not claim to score literary quality or detect every paraphrased contradiction.",
+  "forbidden_scope": "anywhere",
+  "facts_mode": "all",
+  "quality_facts": [
+    "Mara",
+    "brass key",
+    "left hand",
+    "sealed letter"
+  ],
+  "quality_forbidden": [
+    "right hand",
+    "opened the letter",
+    "swam across the river",
+    "she could swim"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.6,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a fiction writer working from a story bible. Canon constraints are binding. Do not invent a resolution to an unresolved mystery or silently change established facts. Return only the scene, without commentary."
+      },
+      {
+        "role": "user",
+        "content": "Write a short scene of about 180 words in third-person past tense. Canon: Mara is left-handed; she cannot swim; she carries a brass key whose lock has not yet been identified; she has carried a sealed letter for three days and has not read it. Include the brass key and sealed letter naturally. Do not resolve what the key opens or why the letter matters. Return only the scene."
+      }
+    ]
+  }
+}
