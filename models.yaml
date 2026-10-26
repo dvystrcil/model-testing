@@ -124,7 +124,8 @@ models:
   # sweep should measure it. Tag spelled as installed on max-01 (27B).
   - name: qwen3.8:27B                            # ~17 GB
   #- name: gemma4:26b
-  #- name: gemma4:31b
+  # Enabled for text-only fiction-writing comparison; compare with the QAT tag above.
+  - name: gemma4:31b
   # Added 2026-06-08 — homelab#184 — Gemma 4 QAT variant.
   # The plain `gemma4:31b` tag had broken vision (empty response,
   # done_reason=length) on ollama 0.30.x; the it-qat variant ships
