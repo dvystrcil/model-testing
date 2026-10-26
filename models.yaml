@@ -53,13 +53,13 @@ models:
   # renderer=nemotron-3.5-nano parser=nemotron-3.5-nano). 30B MoE with 3B
   # active, 1M context. Architecture added in ollama v0.32.9 — inside the
   # current pin.
-  - name: nemotron-3.5-lightning:30b-a3b-q4_K_M  # ~25 GB
+  #- name: nemotron-3.5-lightning:30b-a3b-q4_K_M  # ~25 GB
 
   # Correctly matched renderer AND parser (verified live: renderer=glm-4.7
   # parser=glm-4.7). "Strongest model in the 30B class", 198K context.
   # ollama v0.32.3 — inside the pin — "Fixed GLM tool calls being silently
   # dropped at the end of generation".
-  - name: glm-4.7-flash:q4_K_M                   # ~19 GB
+  #- name: glm-4.7-flash:q4_K_M                   # ~19 GB
 
   # REMOVED 2026-09-02: cogito:32b. It was here as the THIRD CONDITION of the
   # renderer hypothesis -- it resolves to selected=go_template with
@@ -124,7 +124,8 @@ models:
   # sweep should measure it. Tag spelled as installed on max-01 (27B).
   - name: qwen3.8:27B                            # ~17 GB
   #- name: gemma4:26b
-  #- name: gemma4:31b
+  # Enabled for text-only fiction-writing comparison; compare with the QAT tag above.
+  - name: gemma4:31b
   # Added 2026-06-08 — homelab#184 — Gemma 4 QAT variant.
   # The plain `gemma4:31b` tag had broken vision (empty response,
   # done_reason=length) on ollama 0.30.x; the it-qat variant ships
@@ -185,10 +186,10 @@ models:
   # the sweep is what decides whether it is any good.
 
   # 9.2B params, BF16, 19.3 GB. capabilities: tools,thinking,completion,vision
-  - name: hf.co/ornith-ai/Ornith-1.5-9B-GGUF:BF16
+  #- name: hf.co/ornith-ai/Ornith-1.5-9B-GGUF:BF16
 
   # 35.5B params, Q8_0, 37.8 GB. capabilities: tools,thinking,completion,vision
-  - name: hf.co/empero-ai/Qwen3.8-35B-A3B-Distill-GGUF:Q8_0
+  #- name: hf.co/empero-ai/Qwen3.8-35B-A3B-Distill-GGUF:Q8_0
 
   # --- Added by weekly candidate discovery (2026-10-11) ------------------
   # Each of these was pulled, generated, and unloaded cleanly on
@@ -196,10 +197,10 @@ models:
   # the sweep is what decides whether it is any good.
 
   # 30.5B params, Q8_0, 32.5 GB. capabilities: completion,tools
-  - name: hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0
+  #- name: hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0
 
   # 9.2B params, Q8_0, 19.3 GB. capabilities: tools,thinking,completion,vision
-  - name: hf.co/SulphurAI/Sulphur-2-base:Q8_0
+  #- name: hf.co/SulphurAI/Sulphur-2-base:Q8_0
 
   # --- Added by weekly candidate discovery (2026-10-18) ------------------
   # Each of these was pulled, generated, and unloaded cleanly on
@@ -207,10 +208,10 @@ models:
   # the sweep is what decides whether it is any good.
 
   # 8.95B params, BF16, 36.3 GB. capabilities: tools,thinking,completion,vision
-  - name: hf.co/empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF:BF16
+  #- name: hf.co/empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF:BF16
 
   # 34.7B params, Q8_0, 36.9 GB. capabilities: tools,thinking,completion,vision
-  - name: hf.co/openbmb/MiniCPM-V-4.7-35B-A3B-gguf:Q8_0
+  #- name: hf.co/openbmb/MiniCPM-V-4.7-35B-A3B-gguf:Q8_0
 
   # 12.1B params, BF16, 24.3 GB. capabilities: completion,tools,thinking
-  - name: hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:BF16
+  #- name: hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:BF16
