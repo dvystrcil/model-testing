@@ -118,10 +118,20 @@ def models_in_text(text: str) -> set[str]:
 _COMPONENT_SEPARATORS = ("-", "_", ".", ":")
 
 
+def _prefix_hits(low: str, known_norm: dict[str, str]) -> list[str]:
+    """Real models `low` abbreviates: it is their prefix and stops at a
+    component boundary, so `qwen3.6:3` never matches `qwen3.6:35b`."""
+    return [full for k, full in known_norm.items()
+            if k.startswith(low)
+            and k[len(low):len(low) + 1] in _COMPONENT_SEPARATORS]
+
+
 def classify_named_models(analysis: str, known: list[str],
                           computed: list[str] | None = None
                           ) -> tuple[list[str], list[str], dict[str, str]]:
     """Split the models the prose names into (invented, ambiguous, abbrev).
+
+    The banner for each case is `confabulation_banner`.
 
     The guard exists because sweep 31915264873 produced `qwen3.10:30b` four
     times with fabricated metrics ("~97% factual score", "~8.5 turns") for a
@@ -161,9 +171,7 @@ def classify_named_models(analysis: str, known: list[str],
                     a.lower() for a in ANALYSIS_MODELS}:
                 invented.append(m)
             continue
-        hits = [full for k, full in known_norm.items()
-                if k.startswith(low)
-                and k[len(low):len(low) + 1] in _COMPONENT_SEPARATORS]
+        hits = _prefix_hits(low, known_norm)
         if len(hits) == 1:
             abbrev[m] = hits[0]
         elif hits:
@@ -361,6 +369,41 @@ def safety_gate_report(analysis: str, results: list[dict], known: list[str]):
     computed = "## Hard failures (computed)\n\n" + render_hard_failures(hard_failures(results)) + "\n"
     return recommendation_marker(v), banner, computed, recommendation_fatal(v)
 
+
+
+def confabulation_banner(invented: list[str], ambiguous: list[str],
+                         abbrev: dict[str, str], known: list[str]) -> str:
+    """The report banner for each class from `classify_named_models`.
+
+    Run 40533339607 put `qwen3.6` in the "produced no results" banner while
+    qwen3.6:27B and qwen3.6:35b had both run. Ambiguous is fatal, but calling
+    it absent is false, and a false banner is how a reader learns to skip
+    the true ones. So each class says what is actually wrong.
+    """
+    known_norm = {k.lower(): k for k in known}
+    out = ""
+    if invented:
+        out += ("\n> **This analysis names models that produced no results: "
+                + ", ".join(f"`{b}`" for b in invented)
+                + ".** Every claim about them is unsupported by the data in "
+                  "this report. The tables above are computed and "
+                  "unaffected.\n")
+    for a in ambiguous:
+        hits = sorted(_prefix_hits(a.lower(), known_norm))
+        out += (f"\n> **This analysis names `{a}`, which could mean any of: "
+                + ", ".join(f"`{h}`" for h in hits)
+                + ".** Its claims cannot be attributed to one model, so they "
+                  "are unsupported. The tables above are computed and "
+                  "unaffected.\n")
+    if abbrev:
+        # Deliberately NOT the same banner. The claims are checkable and the
+        # numbers were right in 33472730762; calling them untrustworthy is
+        # how a reader learns to skip the banner entirely.
+        out += ("\n> **Shortened model names in this analysis:** "
+                + ", ".join(f"`{k}` = `{v}`" for k, v in sorted(abbrev.items()))
+                + ". The claims are about models that ran, but the names as "
+                  "written do not match the tables above.\n")
+    return out
 
 def invented_models(analysis: str, known: list[str]) -> list[str]:
     """Only the names that correspond to no real model at all."""
@@ -972,31 +1015,17 @@ def main():
     bogus, ambiguous, abbrev = classify_named_models(
         analysis, declared, computed=models_seen)
     print(confabulation_marker(bogus, ambiguous, abbrev), file=sys.stderr)
-    warn_block = ""
     for b in bogus:
         print(f"::error::generated analysis names '{b}', which appears "
               f"in no result row", file=sys.stderr)
     for a in ambiguous:
         print(f"::error::generated analysis names '{a}', which could mean "
               f"more than one model that ran", file=sys.stderr)
-    if bogus or ambiguous:
-        warn_block = (
-            "\n> **This analysis names models that produced no results: "
-            + ", ".join(f"`{b}`" for b in bogus + ambiguous)
-            + ".** Every claim about them is unsupported by the data in this "
-              "report. The tables above are computed and unaffected.\n")
     if abbrev:
-        # Deliberately NOT the same banner. The claims are checkable and the
-        # numbers were right in 33472730762; calling them untrustworthy is
-        # how a reader learns to skip the banner entirely.
         print("::warning::" + confabulation_marker(bogus, ambiguous, abbrev)
               + " — the analysis shortened a model name; the claims still "
                 "resolve to one model that ran", file=sys.stderr)
-        warn_block += (
-            "\n> **Shortened model names in this analysis:** "
-            + ", ".join(f"`{k}` = `{v}`" for k, v in sorted(abbrev.items()))
-            + ". The claims are about models that ran, but the names as "
-              "written do not match the tables above.\n")
+    warn_block = confabulation_banner(bogus, ambiguous, abbrev, declared)
 
     rec_marker, rec_banner, hard_md, rec_fatal = safety_gate_report(analysis, results, models_seen)
     print(rec_marker, file=sys.stderr)
