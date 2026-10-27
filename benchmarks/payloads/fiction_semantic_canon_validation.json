@@ -1,0 +1,34 @@
+{
+  "name": "fiction_semantic_canon_validation",
+  "description": "Fiction canon-validation smoke test: distinguish paraphrase from a true canon contradiction. The prompt requests explicit classifications and evidence; automated scoring remains phrase-based and is a regression signal, not a semantic judge.",
+  "forbidden_scope": "anywhere",
+  "facts_mode": "all",
+  "quality_facts": [
+    "Mara",
+    "cannot swim",
+    "brass key",
+    "lock remains unknown",
+    "sealed letter remains unread",
+    "no contradiction"
+  ],
+  "quality_forbidden": [
+    "Mara swam across the river",
+    "the key opens the cellar",
+    "Mara read the letter"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a careful fiction continuity editor. Treat supplied canon as binding. Distinguish paraphrase from contradiction, and do not infer answers to unresolved questions. Return concise headings: Canon preserved, Contradictions, Unresolved facts. Quote evidence from the passage."
+      },
+      {
+        "role": "user",
+        "content": "Canon: Mara is left-handed; she cannot swim; she carries a brass key, but its lock is unknown; she has carried a sealed letter for three days without reading it.\n\nPassage: Mara tucked the key into her left palm. The river rose between her and the far bank, so she stayed where she was and searched for another route. The letter remained sealed in her coat. She wondered whether the brass key might fit the cellar door, but she had never tried it.\n\nAudit the passage. Identify whether it contradicts canon, and explicitly preserve the unknown key/lock relationship and unread letter status."
+      }
+    ]
+  }
+}
