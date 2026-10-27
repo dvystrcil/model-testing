@@ -1,0 +1,35 @@
+{
+  "name": "fiction_prose_quality_consistency",
+  "description": "Longer fiction-writing smoke test for canon adherence and sustained prose: produce a 500-700 word mystery scene. Automated checks cover a few anchors and hard violations only; voice, pacing, coherence, originality, and run-to-run consistency require separate review.",
+  "forbidden_scope": "anywhere",
+  "facts_mode": "all",
+  "quality_facts": [
+    "Mara",
+    "brass key",
+    "cellar door",
+    "sealed letter"
+  ],
+  "quality_forbidden": [
+    "Mara opened the letter",
+    "the key unlocked the cellar",
+    "Mara swam across the river"
+  ],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.7,
+    "options": {
+      "num_predict": 2048
+    },
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a literary mystery writer. Honor every canon constraint. Show emotion through action and sensory detail rather than explaining it. Do not resolve a mystery that the prompt leaves open. Return only the scene."
+      },
+      {
+        "role": "user",
+        "content": "Write a 500-700 word scene in third-person past tense. Mara discovers that the brass key becomes warm when she approaches a locked cellar door. She has not established what the key opens. She cannot swim, and she has carried a sealed letter for three days without reading it. Keep the key's purpose unresolved and do not open or read the letter. Use a restrained, tense voice; show Mara's fear through what she does rather than naming the emotion. Build a coherent scene with specific sensory details and a meaningful ending beat, but do not reveal the mystery's answer. Return only the scene."
+      }
+    ]
+  }
+}
