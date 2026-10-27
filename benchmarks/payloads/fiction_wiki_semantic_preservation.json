@@ -1,6 +1,7 @@
 {
   "name": "fiction_wiki_semantic_preservation",
   "description": "Fiction wiki-edit preservation smoke test: PASS requires one additive observation while preserving existing facts, unknowns, unrelated fields, and author validation state. Current harness checks phrases, not a parsed before/after diff; this is not proof of semantic preservation.",
+  "role": "fiction-writing and story-wiki assistant (canon, continuity, wiki edits)",
   "forbidden_scope": "anywhere",
   "facts_mode": "all",
   "quality_facts": ["author_validated: false", "The lock it belongs to is unknown", "The key feels warm in Mara's hand", "The key makes a faint metallic click near the cellar door", "the sealed letter remains unread", "What does the key open?"],

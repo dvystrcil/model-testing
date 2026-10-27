@@ -1,6 +1,7 @@
 {
   "name": "fiction_continuity_audit",
   "description": "Fiction continuity-audit smoke test: compare a canon note with a new passage and distinguish a direct contradiction from an added detail. PASS requires identifying the hand-use conflict with evidence and not misclassifying the new coat detail as a contradiction. String grading is only a regression signal; semantic review is still required.",
+  "role": "fiction-writing and story-wiki assistant (canon, continuity, wiki edits)",
   "forbidden_scope": "anywhere",
   "facts_mode": "all",
   "quality_facts": [

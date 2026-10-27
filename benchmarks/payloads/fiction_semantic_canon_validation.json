@@ -1,6 +1,7 @@
 {
   "name": "fiction_semantic_canon_validation",
   "description": "Fiction canon-validation smoke test: PASS requires distinguishing paraphrase from a true canon contradiction. The prompt requests explicit classifications and evidence; automated scoring remains phrase-based and is a regression signal, not a semantic judge.",
+  "role": "fiction-writing and story-wiki assistant (canon, continuity, wiki edits)",
   "forbidden_scope": "anywhere",
   "facts_mode": "all",
   "quality_facts": ["Mara", "cannot swim", "brass key", "lock remains unknown", "sealed letter remains unread", "no contradiction"],

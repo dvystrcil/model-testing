@@ -1,6 +1,7 @@
 {
   "name": "structured_json_triage_summary",
   "description": "Mirrors Log Analysis Agent's OWUI Triage role (n8n, homelab#574 grounding): summarize a batch of raw Loki error/warning lines into structured JSON with per-error triage, overall severity, and an executive summary. Tests JSON-schema discipline and validity under multi-item summarization, not just single-field enum classification -- a distinct corner of the topology from the bare one-line triage payload.",
+  "role": "n8n ops-automation model (alert triage and fix proposals in strict formats)",
   "quality_facts": [
     "\"overall_severity\"",
     "\"executive_summary\"",

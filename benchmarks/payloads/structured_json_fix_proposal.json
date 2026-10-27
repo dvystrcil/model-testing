@@ -1,6 +1,7 @@
 {
   "name": "structured_json_fix_proposal",
   "description": "Mirrors Health Event Fix Proposal's OWUI Fix Proposal node exactly (n8n-workflow#116, homelab#571) -- same prompt template, using a scenario (OOMKilled + a plausible resource-limit fix) likely to invite a markdown code block inside the issue_body JSON string field. This is the exact shape that broke json.loads() in production this session (a stray escaped backslash before the closing quote of issue_body). validate:json_parse is the whole point of this payload -- facts/forbidden only check gross shape.",
+  "role": "n8n ops-automation model (alert triage and fix proposals in strict formats)",
   "quality_facts": [
     "\"issue_title\"",
     "\"issue_body\"",
