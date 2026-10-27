@@ -433,6 +433,50 @@ class AbbreviationIsNotInventionTest(unittest.TestCase):
         self.assertIn("invented=qwen3.10:30b", m)
         self.assertNotIn("invented=none", m)
 
+    # ------------------------------------------------- the banner
+    # Run 40533339607: the prose said `qwen3.6`, and BOTH qwen3.6:27B and
+    # qwen3.6:35b ran. The banner told the reader `qwen3.6` "produced no
+    # results" -- false, and the kind of false that teaches a reader to skip
+    # banners. Ambiguous is fatal, but it is not invention.
+    RAN_40533339607 = ["qwen3.6:27B", "qwen3.6:35b", "gemma4:26b-a4b-it-qat"]
+
+    def test_an_ambiguous_name_is_not_called_absent(self):
+        b = mod.confabulation_banner([], ["qwen3.6"], {},
+                                     self.RAN_40533339607)
+        self.assertNotIn("produced no results", b)
+        self.assertIn("`qwen3.6`", b)
+
+    def test_the_ambiguous_banner_names_every_model_it_could_mean(self):
+        b = mod.confabulation_banner([], ["qwen3.6"], {},
+                                     self.RAN_40533339607)
+        self.assertIn("`qwen3.6:27B`", b)
+        self.assertIn("`qwen3.6:35b`", b)
+        self.assertNotIn("gemma4", b)
+
+    def test_an_invented_name_still_gets_the_absent_banner(self):
+        b = mod.confabulation_banner(["qwen3.10:30b"], [], {},
+                                     self.RAN_40533339607)
+        self.assertIn("produced no results", b)
+        self.assertIn("`qwen3.10:30b`", b)
+
+    def test_both_kinds_are_reported_separately(self):
+        b = mod.confabulation_banner(["qwen3.10:30b"], ["qwen3.6"], {},
+                                     self.RAN_40533339607)
+        absent = [l for l in b.splitlines() if "produced no results" in l]
+        self.assertEqual(len(absent), 1)
+        self.assertNotIn("qwen3.6`", absent[0])
+
+    def test_abbreviations_keep_their_own_milder_banner(self):
+        b = mod.confabulation_banner(
+            [], [], {"gemma4:26b": "gemma4:26b-a4b-it-qat"},
+            self.RAN_40533339607)
+        self.assertIn("`gemma4:26b` = `gemma4:26b-a4b-it-qat`", b)
+        self.assertNotIn("unsupported", b)
+
+    def test_nothing_named_wrong_means_no_banner(self):
+        self.assertEqual(
+            mod.confabulation_banner([], [], {}, self.RAN_40533339607), "")
+
 
 class TruncationMustBeVisibleTest(unittest.TestCase):
     """A capped generation is still a partial answer — it just fails safely.
