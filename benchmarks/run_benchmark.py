@@ -186,11 +186,17 @@ def load_models(path: Path) -> list[str]:
 def load_payloads(name: str) -> list[dict]:
     if name == "all":
         files = sorted(PAYLOADS_DIR.glob("*.json"))
+    elif name == "fiction":
+        # Focused suite: existing fiction regressions plus new fiction cases.
+        files = sorted(PAYLOADS_DIR.glob("fiction_*.json"))
     else:
         files = list(PAYLOADS_DIR.glob(f"{name}.json"))
         if not files:
             print(f"ERROR: No payload file matching '{name}' in {PAYLOADS_DIR}", file=sys.stderr)
             sys.exit(1)
+    if not files:
+        print(f"ERROR: No payloads selected for '{name}' in {PAYLOADS_DIR}", file=sys.stderr)
+        sys.exit(1)
     return [json.loads(f.read_text()) for f in files]
 
 

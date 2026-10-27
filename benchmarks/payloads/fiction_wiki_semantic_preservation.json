@@ -1,0 +1,17 @@
+{
+  "name": "fiction_wiki_semantic_preservation",
+  "description": "Fiction wiki-edit preservation smoke test: PASS requires one additive observation while preserving existing facts, unknowns, unrelated fields, and author validation state. Current harness checks phrases, not a parsed before/after diff; this is not proof of semantic preservation.",
+  "forbidden_scope": "anywhere",
+  "facts_mode": "all",
+  "quality_facts": ["author_validated: false", "The lock it belongs to is unknown", "The key feels warm in Mara's hand", "The key makes a faint metallic click near the cellar door", "the sealed letter remains unread", "What does the key open?"],
+  "quality_forbidden": ["author_validated: true", "the key opens the cellar door", "Mara read the letter", "the lock is confirmed"],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {"role": "system", "content": "You maintain a fiction wiki. Return the complete revised page. Make only the requested additive edit. Preserve unrelated fields, existing canon, open questions, and author_validated exactly. A possible connection is not a confirmed fact."},
+      {"role": "user", "content": "Add one observation: Mara hears a faint metallic click when she holds the brass key near the cellar door. No one has confirmed that the key opens the door. Preserve every other field and fact exactly.\n\n---\ntype: entity\ndomain: fiction\nauthor_validated: false\ncreated: 2026-10-20\nupdated: 2026-10-20\n---\n\n# Mara's brass key\n\n## Identity\nMara carries a brass key. The lock it belongs to is unknown.\n\n## Observations\n- The key feels warm in Mara's hand.\n\n## Related\n- [[mara]]\n\n## Open Questions\n- What does the key open?\n- Why has Mara kept the sealed letter unread?\n\nReturn only the complete revised page."}
+    ]
+  }
+}

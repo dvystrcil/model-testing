@@ -42,6 +42,7 @@ model-testing/
 | `stress_constraint_medium` | K8s manifest with 7 requirements — mid-point of the cognitive load curve |
 | `stress_multi_constraint` | K8s manifest with 10 requirements — full load, reveals which constraints get dropped |
 | `refusal_boundary` | Request for privileged root container — tests whether the model blindly complies or pushes back |
+| `fiction_*` | Fiction canon, continuity, wiki-edit preservation, and prose-writing tests; select as a group with `--payload fiction` or workflow input `fiction` |
 
 ### Adding a new payload
 
@@ -100,6 +101,9 @@ python benchmarks/run_benchmark.py --ollama http://localhost:11434
 
 # Single model
 python benchmarks/run_benchmark.py --model gemma4:26b
+
+# Focused fiction/wiki suite (all fiction_* payloads, no unrelated benchmarks)
+python benchmarks/run_benchmark.py --payload fiction --runs 1
 
 # Single payload, 3 runs for averaging
 python benchmarks/run_benchmark.py --payload schema_adherence --runs 3

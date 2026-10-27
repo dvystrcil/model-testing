@@ -1,0 +1,17 @@
+{
+  "name": "fiction_multifact_continuity",
+  "description": "Multi-fact fiction continuity smoke test: PASS requires classifying a direct contradiction, compatible new detail, and unresolved unknowns separately. Automated scoring uses evidence phrases and does not fully validate reasoning.",
+  "forbidden_scope": "anywhere",
+  "facts_mode": "all",
+  "quality_facts": ["contradiction", "right hand", "compatible new information", "dark green coat", "sender remains unknown", "key function remains unknown"],
+  "quality_forbidden": ["there are no contradictions", "the sender is definitely", "the key opens the cellar"],
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "temperature": 0.1,
+    "messages": [
+      {"role": "system", "content": "You are a careful fiction continuity editor. Classify each item as contradiction, compatible new information, or unresolved unknown. Use only the provided facts. Include concise evidence and never promote an unknown to established canon."},
+      {"role": "user", "content": "Canon: Ilyan is left-handed and always writes with his left hand. His coat has not been established. A sealed package arrived, but its sender is unknown. Ilyan has a brass key whose lock has never been identified or tested.\n\nPassage: Ilyan signed the treaty with his right hand. He wore a dark green coat. The package had no return address. He held the brass key near the cellar door, but did not insert it or test it.\n\nClassify the hand use, coat, package sender, and key function. Do not rewrite the passage."}
+    ]
+  }
+}

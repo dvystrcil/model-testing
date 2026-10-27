@@ -12,7 +12,7 @@ on:
         required: false
         default: ''
       payload:
-        description: 'Payload name or "all"'
+        description: 'Payload name, "fiction" subset, or "all"'
         required: false
         default: 'all'
       runs:
@@ -59,12 +59,19 @@ jobs:
       - id: set-matrix
         run: |
           INPUT="${{ github.event.inputs.payload || 'all' }}"
-          if [ "$INPUT" = "all" ]; then
+          if [ "$INPUT" = "all" ] || [ "$INPUT" = "fiction" ]; then
             # `find -printf` rather than parsing `ls` (SC2011). `sort` is not
             # cosmetic: this list becomes the matrix AND the expected-payload
             # set the coverage check compares against, so a stable order keeps
-            # two sweeps diffable.
-            PAYLOADS=$(find benchmarks/payloads -maxdepth 1 -name '*.json' -printf '%f\n' \
+            # two sweeps diffable. The fiction subset deliberately expands to
+            # concrete payload names so cache keys, result filenames, and the
+            # coverage assertion continue to describe each actual test.
+            if [ "$INPUT" = "fiction" ]; then
+              PATTERN='fiction_*.json'
+            else
+              PATTERN='*.json'
+            fi
+            PAYLOADS=$(find benchmarks/payloads -maxdepth 1 -name "$PATTERN" -printf '%f\n' \
               | sed 's/\.json$//' \
               | sort \
               | jq -R -s -c 'split("\n") | map(select(length > 0))')
