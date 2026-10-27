@@ -1,6 +1,7 @@
 {
   "name": "fiction_prose_quality_consistency",
   "description": "Longer fiction-writing smoke test: PASS requires basic canon anchors in a 500-700 word mystery scene. Automated checks cover a few anchors and hard violations only; voice, pacing, coherence, originality, and run-to-run consistency require separate review.",
+  "role": "fiction-writing and story-wiki assistant (canon, continuity, wiki edits)",
   "forbidden_scope": "anywhere",
   "facts_mode": "all",
   "quality_facts": ["Mara", "brass key", "cellar door", "sealed letter"],

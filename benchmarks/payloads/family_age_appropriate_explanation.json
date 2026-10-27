@@ -1,6 +1,7 @@
 {
   "name": "family_age_appropriate_explanation",
   "description": "Asks for an explanation pitched at an eight-year-old. PASS = the response covers the idea using everyday words. FAIL = it reaches for undergraduate biochemistry vocabulary. Graded on forbidden jargon rather than on tone, because 'friendly' and 'clear' are not substring-checkable and any attempt to score them would inject noise into the whole suite. The forbidden list is deliberately terms with no plausible place in a conversation with a child — not merely long words. 'Chlorophyll' is absent on purpose: it is nameable to an eight-year-old with one sentence of explanation, so forbidding it would punish a good answer.",
+  "role": "family and household general assistant (safety, honesty, age-appropriate answers)",
   "forbidden_scope": "anywhere",
   "quality_facts": [
     "sun",

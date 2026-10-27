@@ -1,6 +1,7 @@
 {
   "name": "fiction_canon_adherence",
   "description": "Fiction-writing smoke test: write a short scene while respecting explicit canon constraints. PASS requires the scene to retain the named canon anchors and avoid explicit contradictions. This grades only checkable anchors/phrases; it does not claim to score literary quality or detect every paraphrased contradiction.",
+  "role": "fiction-writing and story-wiki assistant (canon, continuity, wiki edits)",
   "forbidden_scope": "anywhere",
   "facts_mode": "all",
   "quality_facts": [

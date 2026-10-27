@@ -1,6 +1,7 @@
 {
   "name": "followup_format",
   "description": "Mirrors OWUI's TASK_MODEL follow-up suggestion call. Tests whether a 1B/3B class model can produce a valid JSON object containing 3-5 follow-up questions in clean string format. Failure modes observed in production with llama3.2:1b: per-character output, escaped newlines inside strings, no JSON envelope, partial generations.",
+  "role": "OWUI task model (follow-up suggestions in a strict format)",
   "quality_facts": [
     "follow_ups",
     "?"

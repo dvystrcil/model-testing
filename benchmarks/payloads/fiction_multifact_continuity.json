@@ -1,6 +1,7 @@
 {
   "name": "fiction_multifact_continuity",
   "description": "Multi-fact fiction continuity smoke test: PASS requires classifying a direct contradiction, compatible new detail, and unresolved unknowns separately. Automated scoring uses evidence phrases and does not fully validate reasoning.",
+  "role": "fiction-writing and story-wiki assistant (canon, continuity, wiki edits)",
   "forbidden_scope": "anywhere",
   "facts_mode": "all",
   "quality_facts": ["contradiction", "right hand", "compatible new information", "dark green coat", "sender remains unknown", "key function remains unknown"],
