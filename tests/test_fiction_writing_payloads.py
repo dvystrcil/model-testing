@@ -23,6 +23,10 @@ NAMES = (
     "fiction_canon_adherence",
     "fiction_continuity_audit",
     "fiction_wiki_edit_discipline",
+    "fiction_semantic_canon_validation",
+    "fiction_multifact_continuity",
+    "fiction_wiki_semantic_preservation",
+    "fiction_prose_quality_consistency",
 )
 
 
