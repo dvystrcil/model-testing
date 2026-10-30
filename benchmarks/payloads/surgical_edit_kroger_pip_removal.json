@@ -9,6 +9,7 @@
   "payload": {
     "model": "REPLACED_BY_RUNNER",
     "stream": false,
+    "options": {"num_predict": 12288},
     "temperature": 0.1,
     "messages": [
       {
