@@ -1,0 +1,880 @@
+[
+ {
+  "payload": "surgical_edit_homelab_pip_removal",
+  "model": "gemma4:26b-a4b-it-qat",
+  "n": 3,
+  "clean": 0,
+  "per_run": [
+   [
+    "code_blocks=0"
+   ],
+   [
+    "code_blocks=0"
+   ],
+   [
+    "changes beyond"
+   ]
+  ],
+  "gen": [
+   96.61,
+   94.48,
+   93.99
+  ],
+  "td_mean": 95.4,
+  "ed_mean": 95.0,
+  "ed_sd": 1.4,
+  "ec": 4096,
+  "ec_sd": 0,
+  "dr": [
+   "length"
+  ],
+  "tps": 43.1,
+  "truncated_est": [
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "payload": "surgical_edit_homelab_pip_removal",
+  "model": "gemma4:31b",
+  "n": 3,
+  "clean": 3,
+  "per_run": [
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ]
+  ],
+  "gen": [
+   353.79,
+   358.96,
+   347.34
+  ],
+  "td_mean": 355.4,
+  "ed_mean": 353.4,
+  "ed_sd": 5.8,
+  "ec": 3119,
+  "ec_sd": 55,
+  "dr": [
+   "stop"
+  ],
+  "tps": 8.8,
+  "truncated_est": [
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "payload": "surgical_edit_homelab_pip_removal",
+  "model": "gemma4:31b-it-qat",
+  "n": 3,
+  "clean": 3,
+  "per_run": [
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ]
+  ],
+  "gen": [
+   192.74,
+   324.3,
+   216.91
+  ],
+  "td_mean": 246.5,
+  "ed_mean": 244.7,
+  "ed_sd": 70.0,
+  "ec": 2300,
+  "ec_sd": 664,
+  "dr": [
+   "stop"
+  ],
+  "tps": 9.4,
+  "truncated_est": [
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "payload": "surgical_edit_homelab_pip_removal",
+  "model": "qwen3-coder-next:latest",
+  "n": 3,
+  "clean": 3,
+  "per_run": [
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ]
+  ],
+  "gen": [
+   25.99,
+   25.99,
+   25.96
+  ],
+  "td_mean": 26.5,
+  "ed_mean": 26.0,
+  "ed_sd": 0.0,
+  "ec": 1192,
+  "ec_sd": 0,
+  "dr": [
+   "stop"
+  ],
+  "tps": 45.9,
+  "truncated_est": [
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "payload": "surgical_edit_homelab_pip_removal",
+  "model": "qwen3.5:27B",
+  "n": 3,
+  "clean": 2,
+  "per_run": [
+   [
+    "code_blocks=0"
+   ],
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ]
+  ],
+  "gen": [
+   348.34,
+   186.64,
+   225.42
+  ],
+  "td_mean": 255.1,
+  "ed_mean": 253.5,
+  "ed_sd": 84.4,
+  "ec": 2999,
+  "ec_sd": 978,
+  "dr": [
+   "length",
+   "stop"
+  ],
+  "tps": 11.8,
+  "truncated_est": [
+   true,
+   false,
+   false
+  ]
+ },
+ {
+  "payload": "surgical_edit_homelab_pip_removal",
+  "model": "qwen3.6:27B",
+  "n": 3,
+  "clean": 1,
+  "per_run": [
+   [
+    "changes beyond"
+   ],
+   [
+    "clean"
+   ],
+   [
+    "code_blocks=0"
+   ]
+  ],
+  "gen": [
+   351.01,
+   203.6,
+   348.86
+  ],
+  "td_mean": 302.8,
+  "ed_mean": 301.2,
+  "ed_sd": 84.5,
+  "ec": 3536,
+  "ec_sd": 971,
+  "dr": [
+   "length",
+   "stop"
+  ],
+  "tps": 11.7,
+  "truncated_est": [
+   true,
+   false,
+   true
+  ]
+ },
+ {
+  "payload": "surgical_edit_homelab_pip_removal",
+  "model": "qwen3.6:35b",
+  "n": 3,
+  "clean": 0,
+  "per_run": [
+   [
+    "code_blocks=0"
+   ],
+   [
+    "changes beyond"
+   ],
+   [
+    "changes beyond"
+   ]
+  ],
+  "gen": [
+   77.55,
+   77.86,
+   77.82
+  ],
+  "td_mean": 78.2,
+  "ed_mean": 77.7,
+  "ed_sd": 0.2,
+  "ec": 4096,
+  "ec_sd": 0,
+  "dr": [
+   "length"
+  ],
+  "tps": 52.7,
+  "truncated_est": [
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "payload": "surgical_edit_homelab_pip_removal",
+  "model": "qwen3.8:27B",
+  "n": 3,
+  "clean": 3,
+  "per_run": [
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ]
+  ],
+  "gen": [
+   69.87,
+   55.97,
+   56.25
+  ],
+  "td_mean": 62.4,
+  "ed_mean": 60.7,
+  "ed_sd": 7.9,
+  "ec": 2002,
+  "ec_sd": 268,
+  "dr": [
+   "stop"
+  ],
+  "tps": 33.0,
+  "truncated_est": [
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "payload": "surgical_edit_kroger_pip_removal",
+  "model": "gemma4:26b-a4b-it-qat",
+  "n": 3,
+  "clean": 1,
+  "per_run": [
+   [
+    "changes beyond"
+   ],
+   [
+    "clean"
+   ],
+   [
+    "code_blocks=0"
+   ]
+  ],
+  "gen": [
+   96.82,
+   88.24,
+   95.27
+  ],
+  "td_mean": 93.8,
+  "ed_mean": 93.4,
+  "ed_sd": 4.6,
+  "ec": 3999,
+  "ec_sd": 167,
+  "dr": [
+   "length",
+   "stop"
+  ],
+  "tps": 42.8,
+  "truncated_est": [
+   true,
+   false,
+   true
+  ]
+ },
+ {
+  "payload": "surgical_edit_kroger_pip_removal",
+  "model": "gemma4:31b",
+  "n": 3,
+  "clean": 3,
+  "per_run": [
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ]
+  ],
+  "gen": [
+   278.54,
+   175.79,
+   154.21
+  ],
+  "td_mean": 204.4,
+  "ed_mean": 202.8,
+  "ed_sd": 66.4,
+  "ec": 1827,
+  "ec_sd": 548,
+  "dr": [
+   "stop"
+  ],
+  "tps": 9.0,
+  "truncated_est": [
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "payload": "surgical_edit_kroger_pip_removal",
+  "model": "gemma4:31b-it-qat",
+  "n": 3,
+  "clean": 3,
+  "per_run": [
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ]
+  ],
+  "gen": [
+   230.86,
+   173.36,
+   161.44
+  ],
+  "td_mean": 190.1,
+  "ed_mean": 188.6,
+  "ed_sd": 37.1,
+  "ec": 1784,
+  "ec_sd": 327,
+  "dr": [
+   "stop"
+  ],
+  "tps": 9.5,
+  "truncated_est": [
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "payload": "surgical_edit_kroger_pip_removal",
+  "model": "qwen3-coder-next:latest",
+  "n": 3,
+  "clean": 2,
+  "per_run": [
+   [
+    "clean"
+   ],
+   [
+    "code_blocks=2",
+    "text_outside_block"
+   ],
+   [
+    "clean"
+   ]
+  ],
+  "gen": [
+   18.54,
+   21.34,
+   18.53
+  ],
+  "td_mean": 19.9,
+  "ed_mean": 19.5,
+  "ed_sd": 1.6,
+  "ec": 897,
+  "ec_sd": 77,
+  "dr": [
+   "stop"
+  ],
+  "tps": 46.1,
+  "truncated_est": [
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "payload": "surgical_edit_kroger_pip_removal",
+  "model": "qwen3.5:27B",
+  "n": 3,
+  "clean": 0,
+  "per_run": [
+   [
+    "code_blocks=0"
+   ],
+   [
+    "code_blocks=0"
+   ],
+   [
+    "code_blocks=0"
+   ]
+  ],
+  "gen": [
+   350.11,
+   349.67,
+   349.71
+  ],
+  "td_mean": 351.2,
+  "ed_mean": 349.8,
+  "ed_sd": 0.2,
+  "ec": 4096,
+  "ec_sd": 0,
+  "dr": [
+   "length"
+  ],
+  "tps": 11.7,
+  "truncated_est": [
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "payload": "surgical_edit_kroger_pip_removal",
+  "model": "qwen3.6:27B",
+  "n": 3,
+  "clean": 1,
+  "per_run": [
+   [
+    "clean"
+   ],
+   [
+    "changes beyond"
+   ],
+   [
+    "code_blocks=0"
+   ]
+  ],
+  "gen": [
+   243.53,
+   347.78,
+   346.61
+  ],
+  "td_mean": 314.0,
+  "ed_mean": 312.6,
+  "ed_sd": 59.9,
+  "ec": 3689,
+  "ec_sd": 706,
+  "dr": [
+   "length",
+   "stop"
+  ],
+  "tps": 11.8,
+  "truncated_est": [
+   false,
+   true,
+   true
+  ]
+ },
+ {
+  "payload": "surgical_edit_kroger_pip_removal",
+  "model": "qwen3.6:35b",
+  "n": 3,
+  "clean": 1,
+  "per_run": [
+   [
+    "clean"
+   ],
+   [
+    "changes beyond"
+   ],
+   [
+    "code_blocks=0"
+   ]
+  ],
+  "gen": [
+   69.47,
+   76.68,
+   76.85
+  ],
+  "td_mean": 74.7,
+  "ed_mean": 74.3,
+  "ed_sd": 4.2,
+  "ec": 3969,
+  "ec_sd": 221,
+  "dr": [
+   "length",
+   "stop"
+  ],
+  "tps": 53.4,
+  "truncated_est": [
+   false,
+   true,
+   true
+  ]
+ },
+ {
+  "payload": "surgical_edit_kroger_pip_removal",
+  "model": "qwen3.8:27B",
+  "n": 3,
+  "clean": 3,
+  "per_run": [
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ]
+  ],
+  "gen": [
+   35.62,
+   35.18,
+   34.83
+  ],
+  "td_mean": 36.7,
+  "ed_mean": 35.2,
+  "ed_sd": 0.4,
+  "ec": 1182,
+  "ec_sd": 17,
+  "dr": [
+   "stop"
+  ],
+  "tps": 33.6,
+  "truncated_est": [
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "payload": "surgical_edit_open_terminal_constraint",
+  "model": "gemma4:26b-a4b-it-qat",
+  "n": 3,
+  "clean": 0,
+  "per_run": [
+   [
+    "code_blocks=0"
+   ],
+   [
+    "changes beyond",
+    "missing sigstore>=4.1.1"
+   ],
+   [
+    "code_blocks=0"
+   ]
+  ],
+  "gen": [
+   101.98,
+   99.47,
+   96.71
+  ],
+  "td_mean": 100.2,
+  "ed_mean": 99.4,
+  "ed_sd": 2.6,
+  "ec": 4096,
+  "ec_sd": 0,
+  "dr": [
+   "length"
+  ],
+  "tps": 41.2,
+  "truncated_est": [
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "payload": "surgical_edit_open_terminal_constraint",
+  "model": "gemma4:31b",
+  "n": 3,
+  "clean": 1,
+  "per_run": [
+   [
+    "changes beyond"
+   ],
+   [
+    "clean"
+   ],
+   [
+    "changes beyond"
+   ]
+  ],
+  "gen": [
+   495.36,
+   470.79,
+   483.17
+  ],
+  "td_mean": 487.1,
+  "ed_mean": 483.1,
+  "ed_sd": 12.3,
+  "ec": 4063,
+  "ec_sd": 57,
+  "dr": [
+   "length",
+   "stop"
+  ],
+  "tps": 8.4,
+  "truncated_est": [
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "payload": "surgical_edit_open_terminal_constraint",
+  "model": "gemma4:31b-it-qat",
+  "n": 3,
+  "clean": 1,
+  "per_run": [
+   [
+    "changes beyond"
+   ],
+   [
+    "clean"
+   ],
+   [
+    "changes beyond"
+   ]
+  ],
+  "gen": [
+   476.51,
+   444.02,
+   466.45
+  ],
+  "td_mean": 466.1,
+  "ed_mean": 462.3,
+  "ed_sd": 16.6,
+  "ec": 4039,
+  "ec_sd": 99,
+  "dr": [
+   "length",
+   "stop"
+  ],
+  "tps": 8.7,
+  "truncated_est": [
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "payload": "surgical_edit_open_terminal_constraint",
+  "model": "qwen3-coder-next:latest",
+  "n": 3,
+  "clean": 3,
+  "per_run": [
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ]
+  ],
+  "gen": [
+   60.26,
+   60.26,
+   60.67
+  ],
+  "td_mean": 61.5,
+  "ed_mean": 60.4,
+  "ed_sd": 0.2,
+  "ec": 2596,
+  "ec_sd": 1,
+  "dr": [
+   "stop"
+  ],
+  "tps": 43.0,
+  "truncated_est": [
+   false,
+   false,
+   false
+  ]
+ },
+ {
+  "payload": "surgical_edit_open_terminal_constraint",
+  "model": "qwen3.5:27B",
+  "n": 3,
+  "clean": 1,
+  "per_run": [
+   [
+    "clean"
+   ],
+   [
+    "code_blocks=0"
+   ],
+   [
+    "changes beyond",
+    "missing sigstore>=4.1.1"
+   ]
+  ],
+  "gen": [
+   285.99,
+   358.32,
+   360.02
+  ],
+  "td_mean": 337.7,
+  "ed_mean": 334.8,
+  "ed_sd": 42.3,
+  "ec": 3814,
+  "ec_sd": 488,
+  "dr": [
+   "length",
+   "stop"
+  ],
+  "tps": 11.4,
+  "truncated_est": [
+   false,
+   true,
+   true
+  ]
+ },
+ {
+  "payload": "surgical_edit_open_terminal_constraint",
+  "model": "qwen3.6:27B",
+  "n": 3,
+  "clean": 0,
+  "per_run": [
+   [
+    "code_blocks=0"
+   ],
+   [
+    "changes beyond",
+    "missing sigstore>=4.1.1"
+   ],
+   [
+    "changes beyond",
+    "missing sigstore>=4.1.1"
+   ]
+  ],
+  "gen": [
+   360.13,
+   361.07,
+   360.23
+  ],
+  "td_mean": 363.3,
+  "ed_mean": 360.5,
+  "ed_sd": 0.5,
+  "ec": 4096,
+  "ec_sd": 0,
+  "dr": [
+   "length"
+  ],
+  "tps": 11.4,
+  "truncated_est": [
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "payload": "surgical_edit_open_terminal_constraint",
+  "model": "qwen3.6:35b",
+  "n": 3,
+  "clean": 0,
+  "per_run": [
+   [
+    "changes beyond"
+   ],
+   [
+    "changes beyond",
+    "missing sigstore>=4.1.1"
+   ],
+   [
+    "changes beyond"
+   ]
+  ],
+  "gen": [
+   82.63,
+   83.14,
+   81.5
+  ],
+  "td_mean": 83.2,
+  "ed_mean": 82.4,
+  "ed_sd": 0.8,
+  "ec": 4096,
+  "ec_sd": 0,
+  "dr": [
+   "length"
+  ],
+  "tps": 49.7,
+  "truncated_est": [
+   true,
+   true,
+   true
+  ]
+ },
+ {
+  "payload": "surgical_edit_open_terminal_constraint",
+  "model": "qwen3.8:27B",
+  "n": 3,
+  "clean": 3,
+  "per_run": [
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ],
+   [
+    "clean"
+   ]
+  ],
+  "gen": [
+   104.91,
+   108.26,
+   108.05
+  ],
+  "td_mean": 110.2,
+  "ed_mean": 107.1,
+  "ed_sd": 1.9,
+  "ec": 3460,
+  "ec_sd": 46,
+  "dr": [
+   "stop"
+  ],
+  "tps": 32.3,
+  "truncated_est": [
+   false,
+   false,
+   false
+  ]
+ }
+]

@@ -1,0 +1,38 @@
+topic: coder-models
+date: 2026-10-30
+slug: surgical-edit
+title: "Surgical whole-file edits: coder candidates × the three dmf CVE payloads"
+trigger: |
+  model-testing#139 AC4: homelab D-029 picked coder-tool-free (qwen3-coder-next)
+  over automation-tool-free (qwen3.6:35b) for dmf Dockerfile edits on an n=1 A/B.
+  This is the controlled sweep it lacked.
+method: |
+  model-sweep.yaml, payload=surgical_edit, runs=3, warm loads, surgical_edit
+  scorer from #140. Run 1: all models.yaml at num_predict=4096. Run 2:
+  qwen3.6:35b only at num_predict=12288, because run 1 truncated 8/9 of its runs
+  and the production OWUI path has no such cap. Per-run outcomes are rebuilt from
+  the job logs, because the JSONL stores the union across runs.
+hardware: gfx1151 (Strix Halo)
+ollama_version: "0.40.13"
+payloads:
+  - surgical_edit_homelab_pip_removal
+  - surgical_edit_kroger_pip_removal
+  - surgical_edit_open_terminal_constraint
+outcome:
+  d029: confirmed
+  clean_runs:
+    qwen3-coder-next: "8/9 (kroger 2/3: preamble + 2 blocks, a format slip)"
+    qwen3.6:35b_uncapped: "6/9 (open-terminal 0/3: rewrote /etc/apt/sources.list.d every run)"
+    qwen3.8:27B: "9/9 at the 4096 cap"
+  primary_recommendation: |
+    Keep DMF_MODEL = coder-tool-free. qwen3.8:27B is a follow-up candidate.
+gha_runs:
+  - 40985588529   # all models, num_predict 4096, main @ fbedecf
+  - 41076227331   # qwen3.6:35b, num_predict 12288, measure/139-qwen36-uncapped @ 3b00039 (analyze job red: its confabulation gate flagged "coder-next" in a single-model summary; sweep data unaffected)
+links:
+  related_issues:
+    - dvystrcil/model-testing#139
+    - dvystrcil/model-testing#140
+    - dvystrcil/homelab#1694
+  decision: dvystrcil/homelab architecture/ways-of-working.md D-029
+  raw_artifacts: raw/ (copied from benchmark-results PVC run-40985588529, run-41076227331)
