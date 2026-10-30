@@ -1,0 +1,18 @@
+2026-10-30T14:58:00.3907746Z [INFO 14:58:00] warming up qwen3.6:35b (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T14:58:09.2908481Z [INFO 14:58:09] warmup done  cold_load=8893ms
+2026-10-30T14:58:09.2909061Z [INFO 14:58:09] payload=surgical_edit_homelab_pip_removal  model=qwen3.6:35b  msgs=1  ~1337 tokens  runs=3  +surgical_edit-validate
+2026-10-30T14:59:40.3505613Z [INFO 14:59:40] run 1/3  done  P-eval=1.06s  gen=89.96s  Q=100%
+2026-10-30T15:01:04.1875564Z [INFO 15:01:04] run 2/3  done  P-eval=0.05s  gen=83.72s  Q=100%
+2026-10-30T15:02:37.8270434Z [INFO 15:02:37] run 3/3  done  P-eval=0.05s  gen=93.53s  Q=100%
+2026-10-30T15:09:21.2814146Z [INFO 15:09:21] warming up qwen3.6:35b (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T15:09:31.1619138Z [INFO 15:09:31] warmup done  cold_load=9861ms
+2026-10-30T15:09:31.1619699Z [INFO 15:09:31] payload=surgical_edit_open_terminal_constraint  model=qwen3.6:35b  msgs=1  ~2565 tokens  runs=3  +surgical_edit-validate
+2026-10-30T15:11:09.1610538Z [INFO 15:11:09] run 1/3  done  P-eval=1.92s  gen=96.00s  Q=100%  SCHEMA=['changes beyond the requested edit: -&& pip install --no-cache-dir . \\ | +&& pip install --no-cache-dir .  \\ | -| tee /etc/apt/sources.list.d/kubernetes.list \\ | +| tee /etc/sources.list.d/kubernetes.list \\']
+2026-10-30T15:12:59.0799453Z [INFO 15:12:59] run 2/3  done  P-eval=0.05s  gen=109.80s  Q=100%  SCHEMA=['changes beyond the requested edit: -python-docx python-pptx pypdf csvkit | +python-docx python-pptx pypdf csvkit \\ | -| tee /etc/apt/sources.list.d/kubernetes.list \\ | +| tee /etc/sources.list.d/kubernetes.list \\']
+2026-10-30T15:15:08.2065786Z [INFO 15:15:08] run 3/3  done  P-eval=0.05s  gen=129.00s  Q=100%  SCHEMA=['changes beyond the requested edit: -| tee /etc/apt/sources.list.d/kubernetes.list \\ | +| tee /etc/sources.list.d/kubernetes.list \\']
+2026-10-30T15:03:57.9988490Z [INFO 15:03:57] warming up qwen3.6:35b (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T15:04:08.4158681Z [INFO 15:04:08] warmup done  cold_load=10410ms
+2026-10-30T15:04:08.4159264Z [INFO 15:04:08] payload=surgical_edit_kroger_pip_removal  model=qwen3.6:35b  msgs=1  ~956 tokens  runs=3  +surgical_edit-validate
+2026-10-30T15:05:08.9672996Z [INFO 15:05:08] run 1/3  done  P-eval=0.81s  gen=59.70s  Q=100%
+2026-10-30T15:06:31.0514239Z [INFO 15:06:31] run 2/3  done  P-eval=0.05s  gen=81.99s  Q=100%
+2026-10-30T15:07:56.9297827Z [INFO 15:07:56] run 3/3  done  P-eval=0.05s  gen=85.77s  Q=100%

@@ -1,0 +1,144 @@
+2026-10-30T03:46:46.4316378Z [INFO 03:46:46] warming up qwen3.6:35b (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T03:46:56.1941089Z [INFO 03:46:56] warmup done  cold_load=9756ms
+2026-10-30T03:46:56.1941937Z [INFO 03:46:56] payload=surgical_edit_open_terminal_constraint  model=qwen3.6:35b  msgs=1  ~2565 tokens  runs=3  +surgical_edit-validate
+2026-10-30T03:48:20.8784662Z [INFO 03:48:20] run 1/3  done  P-eval=1.97s  gen=82.63s  Q=100%  SCHEMA=['changes beyond the requested edit: -&& pip install --no-cache-dir . \\ | +&& pip install --no-cache-dir .  \\ | -| tee /etc/apt/sources.list.d/kubernetes.list \\ | +| tee /etc/sources.list.d/kubernetes.list \\ | -| tee /etc/apt/sources.list.d/github-cli.sources \\ | +| tee /etc/sources.list.d/github-cli.sources \\']
+2026-10-30T03:49:44.1649108Z [INFO 03:49:44] run 2/3  done  P-eval=0.05s  gen=83.14s  Q=100%  SCHEMA=['missing sigstore>=4.1.1', 'changes beyond the requested edit: -&& apt-get install -y --no-install-recommends nodejs \\ | -&& rm -rf /var/lib/apt/lists/* | -RUN curl -fsSL https://get.docker.com | sh | -WORKDIR /app | -RUN pip install --no-cache-dir \\ | -numpy pandas scipy scikit-learn \\']
+2026-10-30T03:51:05.8098080Z [INFO 03:51:05] run 3/3  done  P-eval=0.05s  gen=81.50s  Q=100%  SCHEMA=['changes beyond the requested edit: -&& pip install --no-cache-dir . \\ | +&& pip install --no-cache-dir .  \\ | -| tee /etc/apt/sources.list.d/kubernetes.list \\ | +| tee /etc/sources.list.d/kubernetes.list \\ | -RUN pip3 install --no-cache-dir PyJWT cryptography --break-system-packages | -# ACT — run GitHub Actions workflows locally']
+2026-10-30T03:51:05.9297499Z [INFO 03:51:05] warming up qwen3.6:27B (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T03:51:36.3581788Z [INFO 03:51:36] warmup done  cold_load=30409ms
+2026-10-30T03:51:36.3583293Z [INFO 03:51:36] payload=surgical_edit_open_terminal_constraint  model=qwen3.6:27B  msgs=1  ~2565 tokens  runs=3  +surgical_edit-validate
+2026-10-30T03:57:44.4887126Z [INFO 03:57:44] run 1/3  done  P-eval=7.89s  gen=360.13s  Q=100%  SCHEMA=['code_blocks=0']
+2026-10-30T04:03:45.8880613Z [INFO 04:03:45] run 2/3  done  P-eval=0.15s  gen=361.07s  Q=100%  SCHEMA=['missing sigstore>=4.1.1', 'changes beyond the requested edit: -#   - open-webui/open-terminal#151 -- insert_after/append_to_section/ | -#     append endpoints + a defensive replace_file_content check | -# Plus one homelab-specific commit NOT submitted upstream (GH_TOKEN | -# refresh from disk before every subprocess spawn -- ties into our own | -# entrypoint.sh token-rotation convention, not something upstream has | -# any hook for).']
+2026-10-30T04:09:46.4409007Z [INFO 04:09:46] run 3/3  done  P-eval=0.15s  gen=360.23s  Q=100%  SCHEMA=['missing sigstore>=4.1.1', 'changes beyond the requested edit: -RUN apt-get update && apt-get install -y --no-install-recommends \\ | -coreutils findutils grep sed gawk diffutils patch \\ | -less file tree bc man-db \\ | -curl wget net-tools iputils-ping dnsutils netcat-openbsd socat telnet \\ | -openssh-client rsync \\ | -vim nano \\']
+2026-10-30T04:09:46.5958088Z [INFO 04:09:46] warming up qwen3.5:27B (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T04:10:45.8624184Z [INFO 04:10:45] warmup done  cold_load=59257ms
+2026-10-30T04:10:45.8625161Z [INFO 04:10:45] payload=surgical_edit_open_terminal_constraint  model=qwen3.5:27B  msgs=1  ~2565 tokens  runs=3  +surgical_edit-validate
+2026-10-30T04:15:39.9637595Z [INFO 04:15:39] run 1/3  done  P-eval=7.99s  gen=285.99s  Q=100%
+2026-10-30T04:21:38.6120535Z [INFO 04:21:38] run 2/3  done  P-eval=0.16s  gen=358.32s  Q=100%  SCHEMA=['code_blocks=0']
+2026-10-30T04:27:38.9633559Z [INFO 04:27:38] run 3/3  done  P-eval=0.15s  gen=360.02s  Q=100%  SCHEMA=['missing sigstore>=4.1.1', 'changes beyond the requested edit: -#   - open-webui/open-terminal#151 -- insert_after/append_to_section/ | -#     append endpoints + a defensive replace_file_content check | -# Plus one homelab-specific commit NOT submitted upstream (GH_TOKEN | -# refresh from disk before every subprocess spawn -- ties into our own | -# entrypoint.sh token-rotation convention, not something upstream has | -# any hook for).']
+2026-10-30T04:27:39.1153690Z [INFO 04:27:39] warming up gemma4:26b-a4b-it-qat (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T04:27:45.5638618Z [INFO 04:27:45] warmup done  cold_load=6441ms
+2026-10-30T04:27:45.5639238Z [INFO 04:27:45] payload=surgical_edit_open_terminal_constraint  model=gemma4:26b-a4b-it-qat  msgs=1  ~2565 tokens  runs=3  +surgical_edit-validate
+2026-10-30T04:29:29.6000851Z [INFO 04:29:29] run 1/3  done  P-eval=2.03s  gen=101.98s  Q=100%  SCHEMA=['code_blocks=0']
+2026-10-30T04:31:09.2323083Z [INFO 04:31:09] run 2/3  done  P-eval=0.08s  gen=99.47s  Q=100%  SCHEMA=['missing sigstore>=4.1.1', 'changes beyond the requested edit: -RUN echo "Building open-terminal-app-fork ref=${FORK_REF} sha=${FORK_SHA:-unpinned}" \\ | -&& git clone --branch "${FORK_REF}" --depth 1 \\ | -https://github.com/dvystrcil/open-terminal-app-fork.git /build \\ | -&& cd /build \\ | -&& pip install --no-cache-dir . \\ | -&& cp "$(readlink -f "$(which python3)")" /usr/local/bin/python3-ot \\']
+2026-10-30T04:32:46.1250487Z [INFO 04:32:46] run 3/3  done  P-eval=0.08s  gen=96.71s  Q=100%  SCHEMA=['code_blocks=0']
+2026-10-30T04:32:46.3012122Z [INFO 04:32:46] warming up gemma4:31b-it-qat (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T04:33:00.7767925Z [INFO 04:33:00] warmup done  cold_load=14460ms
+2026-10-30T04:33:00.7772103Z [INFO 04:33:00] payload=surgical_edit_open_terminal_constraint  model=gemma4:31b-it-qat  msgs=1  ~2565 tokens  runs=3  +surgical_edit-validate
+2026-10-30T04:41:07.5532961Z [INFO 04:41:07] run 1/3  done  P-eval=10.22s  gen=476.51s  Q=100%  SCHEMA=['changes beyond the requested edit: -&& pip install --no-cache-dir . \\ | +&& pip install --no-cache-dir .  \\ | -# restating them here stage 2 (FROM fork-build) would silently lose | +# restating them stage 2 (FROM fork-build) would silently lose | -name: in-cluster | -contexts:']
+2026-10-30T04:48:32.1360963Z [INFO 04:48:32] run 2/3  done  P-eval=0.31s  gen=444.02s  Q=100%
+2026-10-30T04:56:19.1600519Z [INFO 04:56:19] run 3/3  done  P-eval=0.30s  gen=466.45s  Q=100%  SCHEMA=['changes beyond the requested edit: -&& pip install --no-cache-dir . \\ | +&& pip install --no-cache-dir .  \\ | -# RUN ARCH=$(dpkg --print-architecture) \\ | -#     && VERSION=$(curl -fsSL https://api.github.com/repos/helm/helm/releases/latest | grep \'"tag_name"\' | cut -d\'"\' -f4) \\ | -#     && curl -fsSL "https://get.helm.sh/helm-${VERSION}-linux-${ARCH}.tar.gz" | tar -xz \\ | -#     && install -m 555 "linux-${ARCH}/helm" /usr/local/bin/helm \\']
+2026-10-30T04:56:19.3236708Z [INFO 04:56:19] warming up qwen3-coder-next:latest (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T04:56:30.9510338Z [INFO 04:56:30] warmup done  cold_load=11619ms
+2026-10-30T04:56:30.9510987Z [INFO 04:56:30] payload=surgical_edit_open_terminal_constraint  model=qwen3-coder-next:latest  msgs=1  ~2565 tokens  runs=3  +surgical_edit-validate
+2026-10-30T04:57:34.2394469Z [INFO 04:57:34] run 1/3  done  P-eval=2.95s  gen=60.26s  Q=100%
+2026-10-30T04:58:34.6255575Z [INFO 04:58:34] run 2/3  done  P-eval=0.07s  gen=60.26s  Q=100%
+2026-10-30T04:59:35.3973026Z [INFO 04:59:35] run 3/3  done  P-eval=0.06s  gen=60.67s  Q=100%
+2026-10-30T04:59:35.4937986Z [INFO 04:59:35] warming up qwen3.8:27B (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T04:59:43.6841805Z [INFO 04:59:43] warmup done  cold_load=8181ms
+2026-10-30T04:59:43.6842497Z [INFO 04:59:43] payload=surgical_edit_open_terminal_constraint  model=qwen3.8:27B  msgs=1  ~2565 tokens  runs=3  +surgical_edit-validate
+2026-10-30T05:01:37.2618130Z [INFO 05:01:37] run 1/3  done  P-eval=8.57s  gen=104.91s  Q=100%
+2026-10-30T05:03:25.8572176Z [INFO 05:03:25] run 2/3  done  P-eval=0.17s  gen=108.26s  Q=100%
+2026-10-30T05:05:14.2373818Z [INFO 05:05:14] run 3/3  done  P-eval=0.16s  gen=108.05s  Q=100%
+2026-10-30T05:05:14.4103794Z [INFO 05:05:14] warming up gemma4:31b (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T05:05:33.6396449Z [INFO 05:05:33] warmup done  cold_load=19220ms
+2026-10-30T05:05:33.6397789Z [INFO 05:05:33] payload=surgical_edit_open_terminal_constraint  model=gemma4:31b  msgs=1  ~2565 tokens  runs=3  +surgical_edit-validate
+2026-10-30T05:13:59.7906594Z [INFO 05:13:59] run 1/3  done  P-eval=10.74s  gen=495.36s  Q=100%  SCHEMA=['changes beyond the requested edit: -&& pip install --no-cache-dir . \\ | +&& pip install --no-cache-dir .  \\ | -jq \\ | -redis-tools \\ | -postgresql-client \\ | -ansible \\']
+2026-10-30T05:21:51.1455401Z [INFO 05:21:51] run 2/3  done  P-eval=0.34s  gen=470.79s  Q=100%
+2026-10-30T05:29:54.9268259Z [INFO 05:29:54] run 3/3  done  P-eval=0.33s  gen=483.17s  Q=100%  SCHEMA=["changes beyond the requested edit: -&& rm -rf /var/lib/apt/lists/* | -RUN pip3 install --no-cache-dir PyJWT cryptography --break-system-packages | -# ACT — run GitHub Actions workflows locally | -RUN curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/nektos/act/master/install.sh | bash -s -- -b /usr/local/bin | -# ArgoCD CLI | -RUN ARCH=$(dpkg --print-architecture) \\"]
+2026-10-30T02:39:05.9268684Z [INFO 02:39:05] warming up qwen3.6:35b (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T02:39:15.3294455Z [INFO 02:39:15] warmup done  cold_load=9395ms
+2026-10-30T02:39:15.3295145Z [INFO 02:39:15] payload=surgical_edit_kroger_pip_removal  model=qwen3.6:35b  msgs=1  ~956 tokens  runs=3  +surgical_edit-validate
+2026-10-30T02:40:25.6737813Z [INFO 02:40:25] run 1/3  done  P-eval=0.81s  gen=69.47s  Q=100%
+2026-10-30T02:41:42.4651872Z [INFO 02:41:42] run 2/3  done  P-eval=0.05s  gen=76.68s  Q=100%  SCHEMA=['changes beyond the requested edit: -try: urllib.request.urlopen(\'http://127.0.0.1:${MCP_PORT}/mcp\', timeout=3); sys.exit(0); \\ | -except urllib.error.HTTPError as e: sys.exit(0 if e.code in (405,406,400,406) else 1); \\ | -except: sys.exit(1)" || exit 1 | - | -ENTRYPOINT ["python3", "/app/wrapper.py"] | +try: urllib.request.urlopen(\'http://127.0.0.1:${MCP']
+2026-10-30T02:42:59.4303354Z [INFO 02:42:59] run 3/3  done  P-eval=0.05s  gen=76.85s  Q=100%  SCHEMA=['code_blocks=0']
+2026-10-30T02:42:59.5225034Z [INFO 02:42:59] warming up qwen3.6:27B (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T02:43:16.2352087Z [INFO 02:43:16] warmup done  cold_load=16707ms
+2026-10-30T02:43:16.2352628Z [INFO 02:43:16] payload=surgical_edit_kroger_pip_removal  model=qwen3.6:27B  msgs=1  ~956 tokens  runs=3  +surgical_edit-validate
+2026-10-30T02:47:23.1920141Z [INFO 02:47:23] run 1/3  done  P-eval=3.33s  gen=243.53s  Q=100%
+2026-10-30T02:53:11.2908440Z [INFO 02:53:11] run 2/3  done  P-eval=0.15s  gen=347.78s  Q=100%  SCHEMA=["changes beyond the requested edit: -# streamable-http transport instead of stdio. Same family of fixes as | -# mealie-mcp but for jlowin's fastmcp 2.x API. | -COPY src/server.py /app/wrapper.py | - | -# KROGER_TOKEN_DIR is where kroger-mcp 0.3.0+ persists ALL local state (OAuth | -# tokens + kroger_cart.json + kroger_order_history.json) — it replaced the old"]
+2026-10-30T02:58:58.2110245Z [INFO 02:58:58] run 3/3  done  P-eval=0.15s  gen=346.61s  Q=100%  SCHEMA=['code_blocks=0']
+2026-10-30T02:58:58.3634242Z [INFO 02:58:58] warming up qwen3.5:27B (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T02:59:29.0472538Z [INFO 02:59:29] warmup done  cold_load=30672ms
+2026-10-30T02:59:29.0474891Z [INFO 02:59:29] payload=surgical_edit_kroger_pip_removal  model=qwen3.5:27B  msgs=1  ~956 tokens  runs=3  +surgical_edit-validate
+2026-10-30T03:05:22.7149969Z [INFO 03:05:22] run 1/3  done  P-eval=3.43s  gen=350.11s  Q=100%  SCHEMA=['code_blocks=0']
+2026-10-30T03:11:12.7012343Z [INFO 03:11:12] run 2/3  done  P-eval=0.15s  gen=349.67s  Q=100%  SCHEMA=['code_blocks=0']
+2026-10-30T03:17:02.7215651Z [INFO 03:17:02] run 3/3  done  P-eval=0.15s  gen=349.71s  Q=100%  SCHEMA=['code_blocks=0']
+2026-10-30T03:17:02.8837933Z [INFO 03:17:02] warming up gemma4:26b-a4b-it-qat (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T03:17:10.0068727Z [INFO 03:17:10] warmup done  cold_load=7113ms
+2026-10-30T03:17:10.0069289Z [INFO 03:17:10] payload=surgical_edit_kroger_pip_removal  model=gemma4:26b-a4b-it-qat  msgs=1  ~956 tokens  runs=3  +surgical_edit-validate
+2026-10-30T03:18:47.5666450Z [INFO 03:18:47] run 1/3  done  P-eval=0.71s  gen=96.82s  Q=100%  SCHEMA=['changes beyond the requested edit: -except urllib.error.HTTPError as e: sys.exit(0 if e.code in (405,406,400,406) else 1); \\ | -except: sys.exit(1)" || exit 1 | - | -ENTRYPOINT ["python3", "/app/wrapper.py"]']
+2026-10-30T03:20:15.9550496Z [INFO 03:20:15] run 2/3  done  P-eval=0.07s  gen=88.24s  Q=100%
+2026-10-30T03:21:51.3986865Z [INFO 03:21:51] run 3/3  done  P-eval=0.08s  gen=95.27s  Q=100%  SCHEMA=['code_blocks=0']
+2026-10-30T03:21:51.4874934Z [INFO 03:21:51] warming up gemma4:31b-it-qat (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T03:22:11.6408224Z [INFO 03:22:11] warmup done  cold_load=20145ms
+2026-10-30T03:22:11.6409414Z [INFO 03:22:11] payload=surgical_edit_kroger_pip_removal  model=gemma4:31b-it-qat  msgs=1  ~956 tokens  runs=3  +surgical_edit-validate
+2026-10-30T03:26:06.2509139Z [INFO 03:26:06] run 1/3  done  P-eval=3.71s  gen=230.86s  Q=100%
+2026-10-30T03:29:00.0633709Z [INFO 03:29:00] run 2/3  done  P-eval=0.30s  gen=173.36s  Q=100%
+2026-10-30T03:31:41.8466396Z [INFO 03:31:41] run 3/3  done  P-eval=0.15s  gen=161.44s  Q=100%
+2026-10-30T03:31:41.9918246Z [INFO 03:31:41] warming up qwen3-coder-next:latest (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T03:31:53.3453044Z [INFO 03:31:53] warmup done  cold_load=11343ms
+2026-10-30T03:31:53.3453815Z [INFO 03:31:53] payload=surgical_edit_kroger_pip_removal  model=qwen3-coder-next:latest  msgs=1  ~956 tokens  runs=3  +surgical_edit-validate
+2026-10-30T03:32:13.1669917Z [INFO 03:32:13] run 1/3  done  P-eval=1.22s  gen=18.54s  Q=100%
+2026-10-30T03:32:34.5957983Z [INFO 03:32:34] run 2/3  done  P-eval=0.06s  gen=21.34s  Q=100%  SCHEMA=['code_blocks=2', 'text_outside_block']
+2026-10-30T03:32:53.2416473Z [INFO 03:32:53] run 3/3  done  P-eval=0.07s  gen=18.53s  Q=100%
+2026-10-30T03:32:53.2569505Z [INFO 03:32:53] warming up qwen3.8:27B (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T03:33:01.0582659Z [INFO 03:33:01] warmup done  cold_load=7790ms
+2026-10-30T03:33:01.0583304Z [INFO 03:33:01] payload=surgical_edit_kroger_pip_removal  model=qwen3.8:27B  msgs=1  ~956 tokens  runs=3  +surgical_edit-validate
+2026-10-30T03:33:40.5057215Z [INFO 03:33:40] run 1/3  done  P-eval=3.73s  gen=35.62s  Q=100%
+2026-10-30T03:34:15.9886426Z [INFO 03:34:15] run 2/3  done  P-eval=0.16s  gen=35.18s  Q=100%
+2026-10-30T03:34:51.1143820Z [INFO 03:34:51] run 3/3  done  P-eval=0.16s  gen=34.83s  Q=100%
+2026-10-30T03:34:51.2976359Z [INFO 03:34:51] warming up gemma4:31b (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T03:35:04.9387964Z [INFO 03:35:04] warmup done  cold_load=13630ms
+2026-10-30T03:35:04.9389428Z [INFO 03:35:04] payload=surgical_edit_kroger_pip_removal  model=gemma4:31b  msgs=1  ~956 tokens  runs=3  +surgical_edit-validate
+2026-10-30T03:39:47.4561252Z [INFO 03:39:47] run 1/3  done  P-eval=3.95s  gen=278.54s  Q=100%
+2026-10-30T03:42:43.7495490Z [INFO 03:42:43] run 2/3  done  P-eval=0.33s  gen=175.79s  Q=100%
+2026-10-30T03:45:18.3149564Z [INFO 03:45:18] run 3/3  done  P-eval=0.16s  gen=154.21s  Q=100%
+2026-10-30T01:24:22.6507545Z [INFO 01:24:22] warming up qwen3.6:35b (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T01:24:33.0536475Z [INFO 01:24:33] warmup done  cold_load=10382ms
+2026-10-30T01:24:33.0537081Z [INFO 01:24:33] payload=surgical_edit_homelab_pip_removal  model=qwen3.6:35b  msgs=1  ~1337 tokens  runs=3  +surgical_edit-validate
+2026-10-30T01:25:51.7447364Z [INFO 01:25:51] run 1/3  done  P-eval=1.09s  gen=77.55s  Q=100%  SCHEMA=['code_blocks=0']
+2026-10-30T01:27:09.7082933Z [INFO 01:27:09] run 2/3  done  P-eval=0.05s  gen=77.86s  Q=100%  SCHEMA=['changes beyond the requested edit: -# upgrade. v1.34.0 was two minors behind and carried Go 1.24 stdlib CVEs incl. | -# a critical; v1.36.6 is built with go1.26.10, the fixed stdlib (homelab#1697). | -# renovate: datasource=github-releases depName=kubernetes/kubernetes | -ARG KUBECTL_VERSION=v1.36.6 | - | -# bash: several scripts are shell, and a few python ones shell out to it.']
+2026-10-30T01:28:27.6421595Z [INFO 01:28:27] run 3/3  done  P-eval=0.05s  gen=77.82s  Q=100%  SCHEMA=['changes beyond the requested edit: -USER 65534:65534 | +USER 655']
+2026-10-30T01:28:27.7358080Z [INFO 01:28:27] warming up qwen3.6:27B (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T01:28:49.6589159Z [INFO 01:28:49] warmup done  cold_load=21909ms
+2026-10-30T01:28:49.6593674Z [INFO 01:28:49] payload=surgical_edit_homelab_pip_removal  model=qwen3.6:27B  msgs=1  ~1337 tokens  runs=3  +surgical_edit-validate
+2026-10-30T01:34:45.0704232Z [INFO 01:34:45] run 1/3  done  P-eval=4.30s  gen=351.01s  Q=100%  SCHEMA=['changes beyond the requested edit: -# Pinned like every other version here. The set of modules the image must | -# carry is pinned by bin/tests/test_image_ships_what_scripts_read.py. | -RUN pip install --no-cache-dir --only-binary=:all: pyyaml==6.0.3 && \\ | -# pip is build-time only; its vendored urllib3/msgpack/setuptools carry CVEs (homelab#1697). | -python3 -m pip uninstall -y pip | -']
+2026-10-30T01:38:08.9859208Z [INFO 01:38:08] run 2/3  done  P-eval=0.15s  gen=203.60s  Q=100%
+2026-10-30T01:43:58.1401805Z [INFO 01:43:58] run 3/3  done  P-eval=0.14s  gen=348.86s  Q=100%  SCHEMA=['code_blocks=0']
+2026-10-30T01:43:58.2633367Z [INFO 01:43:58] warming up qwen3.5:27B (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T01:44:40.7879190Z [INFO 01:44:40] warmup done  cold_load=42520ms
+2026-10-30T01:44:40.7882967Z [INFO 01:44:40] payload=surgical_edit_homelab_pip_removal  model=qwen3.5:27B  msgs=1  ~1337 tokens  runs=3  +surgical_edit-validate
+2026-10-30T01:50:33.5192996Z [INFO 01:50:33] run 1/3  done  P-eval=4.27s  gen=348.34s  Q=100%  SCHEMA=['code_blocks=0']
+2026-10-30T01:53:40.4579982Z [INFO 01:53:40] run 2/3  done  P-eval=0.15s  gen=186.64s  Q=100%
+2026-10-30T01:57:26.1759035Z [INFO 01:57:26] run 3/3  done  P-eval=0.15s  gen=225.42s  Q=100%
+2026-10-30T01:57:26.3094583Z [INFO 01:57:26] warming up gemma4:26b-a4b-it-qat (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T01:57:32.8581885Z [INFO 01:57:32] warmup done  cold_load=6536ms
+2026-10-30T01:57:32.8582523Z [INFO 01:57:32] payload=surgical_edit_homelab_pip_removal  model=gemma4:26b-a4b-it-qat  msgs=1  ~1337 tokens  runs=3  +surgical_edit-validate
+2026-10-30T01:59:10.4402305Z [INFO 01:59:10] run 1/3  done  P-eval=0.95s  gen=96.61s  Q=100%  SCHEMA=['code_blocks=0']
+2026-10-30T02:00:45.0544293Z [INFO 02:00:45] run 2/3  done  P-eval=0.07s  gen=94.48s  Q=100%  SCHEMA=['code_blocks=0']
+2026-10-30T02:02:19.2142510Z [INFO 02:02:19] run 3/3  done  P-eval=0.08s  gen=93.99s  Q=100%  SCHEMA=['changes beyond the requested edit: -# file that was never in the image. It failed closed, but the packaging gap | -# read as a policy problem. | -# | -# 56K, against prompts/ at 40MB -- which is deliberately NOT shipped, since | -# only gen-owui-tool.py reads it and that never runs in-cluster. The contract | -# is pinned by bin/tests/test_image_ships_what_scripts_read.py.']
+2026-10-30T02:02:19.3293592Z [INFO 02:02:19] warming up gemma4:31b-it-qat (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T02:02:34.3032044Z [INFO 02:02:34] warmup done  cold_load=14965ms
+2026-10-30T02:02:34.3032722Z [INFO 02:02:34] payload=surgical_edit_homelab_pip_removal  model=gemma4:31b-it-qat  msgs=1  ~1337 tokens  runs=3  +surgical_edit-validate
+2026-10-30T02:05:51.9381580Z [INFO 02:05:51] run 1/3  done  P-eval=4.87s  gen=192.74s  Q=100%
+2026-10-30T02:11:16.5604066Z [INFO 02:11:16] run 2/3  done  P-eval=0.15s  gen=324.30s  Q=100%
+2026-10-30T02:14:53.8314505Z [INFO 02:14:53] run 3/3  done  P-eval=0.16s  gen=216.91s  Q=100%
+2026-10-30T02:14:53.9805248Z [INFO 02:14:53] warming up qwen3-coder-next:latest (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T02:15:05.6038256Z [INFO 02:15:05] warmup done  cold_load=11615ms
+2026-10-30T02:15:05.6039276Z [INFO 02:15:05] payload=surgical_edit_homelab_pip_removal  model=qwen3-coder-next:latest  msgs=1  ~1337 tokens  runs=3  +surgical_edit-validate
+2026-10-30T02:15:33.1269548Z [INFO 02:15:33] run 1/3  done  P-eval=1.47s  gen=25.99s  Q=100%
+2026-10-30T02:15:59.2033123Z [INFO 02:15:59] run 2/3  done  P-eval=0.06s  gen=25.99s  Q=100%
+2026-10-30T02:16:25.2460385Z [INFO 02:16:25] run 3/3  done  P-eval=0.06s  gen=25.96s  Q=100%
+2026-10-30T02:16:25.2723374Z [INFO 02:16:25] warming up qwen3.8:27B (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T02:16:33.1177270Z [INFO 02:16:33] warmup done  cold_load=7829ms
+2026-10-30T02:16:33.1178025Z [INFO 02:16:33] payload=surgical_edit_homelab_pip_removal  model=qwen3.8:27B  msgs=1  ~1337 tokens  runs=3  +surgical_edit-validate
+2026-10-30T02:17:47.6811734Z [INFO 02:17:47] run 1/3  done  P-eval=4.60s  gen=69.87s  Q=100%
+2026-10-30T02:18:43.9639305Z [INFO 02:18:43] run 2/3  done  P-eval=0.15s  gen=55.97s  Q=100%
+2026-10-30T02:19:40.4976021Z [INFO 02:19:40] run 3/3  done  P-eval=0.15s  gen=56.25s  Q=100%
+2026-10-30T02:19:40.6492448Z [INFO 02:19:40] warming up gemma4:31b (attempt 1/3) — ensuring model is fully loaded into VRAM...
+2026-10-30T02:19:55.2035630Z [INFO 02:19:55] warmup done  cold_load=14540ms
+2026-10-30T02:19:55.2036368Z [INFO 02:19:55] payload=surgical_edit_homelab_pip_removal  model=gemma4:31b  msgs=1  ~1337 tokens  runs=3  +surgical_edit-validate
+2026-10-30T02:25:54.1054085Z [INFO 02:25:54] run 1/3  done  P-eval=5.07s  gen=353.79s  Q=100%
+2026-10-30T02:31:53.5564908Z [INFO 02:31:53] run 2/3  done  P-eval=0.31s  gen=358.96s  Q=100%
+2026-10-30T02:37:41.4289747Z [INFO 02:37:41] run 3/3  done  P-eval=0.32s  gen=347.34s  Q=100%

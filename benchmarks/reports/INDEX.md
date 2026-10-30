@@ -40,6 +40,11 @@ generation, and similar small background classification calls).
 
 Picks for the daily-driver coding model (opencode, dmf-coder, etc.).
 
+- [2026-10-30 — surgical-edit](coder-models/2026-10-30-surgical-edit/README.md)
+  Deterministic `surgical_edit` scorer (#139) × the three dmf CVE Dockerfile payloads, n=3, warm loads.
+  **D-029 confirmed:** qwen3-coder-next is clean on 8/9 (one refused format slip). qwen3.6:35b, uncapped, is clean on 6/9, and on
+  open-terminal it rewrote `/etc/apt/sources.list.d` in all 3 runs. qwen3.8:27B was clean 9/9. At the 4096 cap,
+  thinking models mostly truncate. GHA runs `40985588529`, `41076227331`.
 - [2026-06-08 — gemma4-qat-swap-eval](coder-models/2026-06-08-gemma4-qat-swap-eval/README.md)
   `gemma4:26b-a4b-it-qat` (Ollama 0.30.6's new QAT MoE variant) evaluated
   as a `qwen3.6:35b` replacement. Three stages: capability + TPS smoke (3
