@@ -12,7 +12,7 @@ on:
         required: false
         default: ''
       payload:
-        description: 'Payload name, "fiction" subset, or "all"'
+        description: 'Payload name, "fiction" or "surgical_edit" subset, or "all"'
         required: false
         default: 'all'
       runs:
@@ -59,7 +59,7 @@ jobs:
       - id: set-matrix
         run: |
           INPUT="${{ github.event.inputs.payload || 'all' }}"
-          if [ "$INPUT" = "all" ] || [ "$INPUT" = "fiction" ]; then
+          if [ "$INPUT" = "all" ] || [ "$INPUT" = "fiction" ] || [ "$INPUT" = "surgical_edit" ]; then
             # `find -printf` rather than parsing `ls` (SC2011). `sort` is not
             # cosmetic: this list becomes the matrix AND the expected-payload
             # set the coverage check compares against, so a stable order keeps
@@ -68,6 +68,8 @@ jobs:
             # coverage assertion continue to describe each actual test.
             if [ "$INPUT" = "fiction" ]; then
               PATTERN='fiction_*.json'
+            elif [ "$INPUT" = "surgical_edit" ]; then
+              PATTERN='surgical_edit_*.json'
             else
               PATTERN='*.json'
             fi

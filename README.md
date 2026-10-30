@@ -42,6 +42,7 @@ model-testing/
 | `stress_constraint_medium` | K8s manifest with 7 requirements — mid-point of the cognitive load curve |
 | `stress_multi_constraint` | K8s manifest with 10 requirements — full load, reveals which constraints get dropped |
 | `refusal_boundary` | Request for privileged root container — tests whether the model blindly complies or pushes back |
+| `surgical_edit_*` | Return a whole Dockerfile with exactly one requested edit (real dmf drafts, homelab#1694/#1697). Scored by diff, not phrases: one code block, nothing outside it, no change beyond the edit. Select as a group with `--payload surgical_edit` |
 | `fiction_*` | Fiction canon, continuity, wiki-edit preservation, and prose-writing tests; select as a group with `--payload fiction` or workflow input `fiction` |
 
 ### Adding a new payload
@@ -68,6 +69,7 @@ Create `benchmarks/payloads/<name>.json`:
 
 - `quality_facts`: substring matches in the response — each hit adds to the score
 - `quality_forbidden`: any match is flagged as a hard failure (scope violation, hallucination)
+- `validate`: an optional deterministic check whose findings land in `schema_violations`. `kubectl` dry-runs YAML, `json_parse` parses JSON, and `surgical_edit` diffs a returned whole file against the original in the prompt, using either the full `expected` file or `insert_tokens` plus a `token_context` regex. See `score_surgical_edit` in `run_benchmark.py`
 
 ## Scoring
 

@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import datetime
+import difflib
 import json
 import math
 import re
@@ -189,6 +190,9 @@ def load_payloads(name: str) -> list[dict]:
     elif name == "fiction":
         # Focused suite: existing fiction regressions plus new fiction cases.
         files = sorted(PAYLOADS_DIR.glob("fiction_*.json"))
+    elif name == "surgical_edit":
+        # Whole-file edits scored by diff, from real dmf drafts (#139).
+        files = sorted(PAYLOADS_DIR.glob("surgical_edit_*.json"))
     else:
         files = list(PAYLOADS_DIR.glob(f"{name}.json"))
         if not files:
@@ -312,6 +316,128 @@ def validate_json(text: str) -> list[str]:
         return []
     except json.JSONDecodeError as e:
         return [f"invalid_json: {e}"]
+
+
+def fenced_blocks(text: str) -> tuple[list[str], list[str]]:
+    """Split text into (fenced code block bodies, non-blank lines outside them)."""
+    blocks, outside, cur = [], [], None
+    for line in text.splitlines():
+        if line.strip().startswith("```"):
+            if cur is None:
+                cur = []
+            else:
+                blocks.append("\n".join(cur) + "\n")
+                cur = None
+        elif cur is not None:
+            cur.append(line)
+        elif line.strip():
+            outside.append(line)
+    if cur is not None:                  # unclosed fence: still one block
+        blocks.append("\n".join(cur) + "\n")
+    return blocks, outside
+
+
+def surgical_edit_original(spec: dict) -> str:
+    """The file being edited: the last fenced block of the last user message.
+
+    Read from the prompt rather than stored beside it, so the original the
+    model saw and the original it is scored against cannot drift apart, and
+    the sweep cache's PAYLOAD_HASH covers it.
+    """
+    user = [m for m in spec["payload"]["messages"] if m["role"] == "user"][-1]
+    return fenced_blocks(user["content"])[0][-1]
+
+
+def _lines(text: str) -> list[str]:
+    out = [l.rstrip() for l in text.splitlines()]
+    while out and not out[-1]:
+        out.pop()
+    return out
+
+
+def _token_re(token: str) -> re.Pattern:
+    # Same token rule as homelab bin/cve-constraint-pr.py's verify_edit, so the
+    # sweep scores the question the production guard asks.
+    return re.compile(r"(?<![\w.\-])[\"']?" + re.escape(token) + r"[\"']?(?![\w.])")
+
+
+def _ws_norm(text: str) -> str:
+    return re.sub(r"\s+", " ", text.replace("\\\n", " ")).strip()
+
+
+def score_surgical_edit(response: str, spec: dict) -> list[str]:
+    """Violations of a "return the whole file with exactly this change" task.
+
+    model-testing#139. Phrase-presence grading can't see what goes wrong in
+    these: on 2026-10-29 qwen3.6:35b added the right constraint to a 120-line
+    Dockerfile AND dropped a line continuation and rewrote an apt path. So
+    this compares the returned file to the original line by line.
+
+    validate.expected       the full correct file. Existing lines must match
+                            exactly (trailing whitespace aside); lines the edit
+                            inserts may be indented any way.
+    validate.insert_tokens  each token appears once, inside a logical line
+                            matching validate.token_context, and removing it
+                            leaves the original modulo whitespace.
+
+    Returns [] for a clean edit -- same contract as validate_json.
+    """
+    cfg = spec["validate"]
+    if ("expected" in cfg) == ("insert_tokens" in cfg):
+        # Neither would pass every response; a silent default is a gate that
+        # can't fail.
+        raise ValueError(f"{spec.get('name')}: surgical_edit needs exactly one "
+                         "of validate.expected / validate.insert_tokens")
+    original = surgical_edit_original(spec)
+    blocks, outside = fenced_blocks(strip_think(response))
+    if len(blocks) != 1:
+        violations = [f"code_blocks={len(blocks)}"]
+        if not blocks:
+            return violations
+    else:
+        violations = []
+    if outside:
+        violations.append("text_outside_block")
+    new = blocks[-1]
+    if _lines(new) == _lines(original):
+        return ["unchanged"]
+
+    if "expected" in cfg:
+        exp, got = _lines(cfg["expected"]), _lines(new)
+        inserted = set(exp) - set(_lines(original))
+        diff = []
+        sm = difflib.SequenceMatcher(None, exp, got, autojunk=False)
+        for op, i1, i2, j1, j2 in sm.get_opcodes():
+            if op == "equal":
+                continue
+            if (op == "replace" and i2 - i1 == j2 - j1
+                    and all(e in inserted and e.strip() == g.strip()
+                            for e, g in zip(exp[i1:i2], got[j1:j2]))):
+                continue                  # an inserted line, indented differently
+            diff += [f"-{l.strip()}" for l in exp[i1:i2]] + [f"+{l.strip()}" for l in got[j1:j2]]
+        if diff:
+            violations.append("changes beyond the requested edit: " + " | ".join(diff[:6]))
+        return violations
+
+    context = re.compile(cfg["token_context"])
+    logical = new.replace("\\\n", " ").splitlines()
+    stripped = new
+    for t in cfg["insert_tokens"]:
+        n = len(_token_re(t).findall(new))
+        if n == 0:
+            violations.append(f"missing {t}")
+        elif n > 1:
+            violations.append(f"{t} added {n} times")
+        if n and not any(_token_re(t).search(l) and context.search(l) for l in logical):
+            violations.append(f"{t} is not inside a line matching the token_context")
+        stripped = _token_re(t).sub("", stripped)
+    if _ws_norm(stripped) != _ws_norm(original):
+        diff = [d for d in difflib.unified_diff(original.splitlines(), stripped.splitlines(),
+                                                lineterm="", n=0)
+                if d[:1] in "+-" and not d.startswith(("+++", "---")) and d[1:].strip(" \\")]
+        violations.append("changes beyond the requested edit: "
+                          + " | ".join(d[0] + d[1:].strip() for d in diff[:6]))
+    return violations
 
 
 def wrap_container_spec(yaml_str: str) -> str:
@@ -752,6 +878,10 @@ def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
             schema_violations = validate_json(content)
             if schema_violations:
                 info(f"[validate] invalid JSON: {schema_violations}")
+        elif validate_cfg.get("type") == "surgical_edit":
+            schema_violations = score_surgical_edit(content, spec)
+            if schema_violations:
+                info(f"[validate] surgical edit: {schema_violations}")
         else:
             raw_yaml = extract_yaml(content)
             if validate_cfg.get("yaml_type") == "container_spec":
@@ -809,6 +939,9 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
             cfg = spec["validate"]
             if validate_type == "json_parse":
                 print("  [dry-run] json_parse validate: enabled")
+            elif validate_type == "surgical_edit":
+                print("  [dry-run] surgical_edit validate: "
+                      + ("expected file" if "expected" in cfg else f"insert_tokens={cfg.get('insert_tokens')}"))
             else:
                 print(f"  [dry-run] kubectl validate: dry_run={cfg.get('kubectl_dry_run', 'client')}  yaml_type={cfg.get('yaml_type', 'full_resource')}")
         return None
