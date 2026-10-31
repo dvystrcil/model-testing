@@ -1,0 +1,4155 @@
+{
+ "_captured": "2026-10-30 from the live in-cluster MCP servers (tools/list), homelab#1871 AC2",
+ "servers": {
+  "mealie-mcp": [
+   {
+    "name": "get_recipes",
+    "description": "Provides a paginated list of recipes with optional filtering.\n\nIMPORTANT: When filtering by tags or categories, you MUST use slugs or UUIDs, NOT display names!\n- \u2705 Correct: tags=[\"quick-meals\", \"vegetarian\"]\n- \u274c Wrong: tags=[\"Quick Meals\", \"Vegetarian\"]\n\nUse get_tags() or get_categories() first to find the correct slugs.\n\nArgs:\n    search: Filters recipes by name or description.\n    page: Page number for pagination.\n    per_page: Number of items per page.\n    categories: Filter by category SLUGS (e.g., [\"breakfast\", \"dinner\"]).\n    tags: Filter by tag SLUGS or UUIDs (e.g., [\"quick\", \"healthy\"]).\n    require_all_tags: If True, recipe must have ALL specified tags (AND). Default False (OR).\n    require_all_categories: If True, recipe must have ALL specified categories (AND).\n\nReturns:\n    Dict[str, Any]: Recipe summaries with details like ID, name, description, and image information.\n",
+    "inputSchema": {
+     "properties": {
+      "search": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Search"
+      },
+      "page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Page"
+      },
+      "per_page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Per Page"
+      },
+      "categories": {
+       "anyOf": [
+        {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Categories"
+      },
+      "tags": {
+       "anyOf": [
+        {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Tags"
+      },
+      "require_all_tags": {
+       "anyOf": [
+        {
+         "type": "boolean"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Require All Tags"
+      },
+      "require_all_categories": {
+       "anyOf": [
+        {
+         "type": "boolean"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Require All Categories"
+      }
+     },
+     "title": "get_recipesArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_recipe_detailed",
+    "description": "Retrieve a specific recipe by its slug identifier. Use this when to get full recipe\ndetails for tasks like updating or displaying the recipe.\n\nArgs:\n    slug: The unique text identifier for the recipe, typically found in recipe URLs\n        or from get_recipes results.\n\nReturns:\n    Dict[str, Any]: Comprehensive recipe details including ingredients, instructions,\n        nutrition information, notes, and associated metadata.\n",
+    "inputSchema": {
+     "properties": {
+      "slug": {
+       "title": "Slug",
+       "type": "string"
+      }
+     },
+     "required": [
+      "slug"
+     ],
+     "title": "get_recipe_detailedArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_recipe_concise",
+    "description": "Retrieve a concise version of a specific recipe by its slug identifier. Use this when you only\nneed a summary of the recipe, such as for when mealplaning.\n\nArgs:\n    slug: The unique text identifier for the recipe, typically found in recipe URLs\n        or from get_recipes results.\n\nReturns:\n    Dict[str, Any]: Concise recipe summary with essential fields.\n",
+    "inputSchema": {
+     "properties": {
+      "slug": {
+       "title": "Slug",
+       "type": "string"
+      }
+     },
+     "required": [
+      "slug"
+     ],
+     "title": "get_recipe_conciseArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "create_recipe",
+    "description": "Create a new recipe.\n\nIngredients and instructions each accept either a plain string or a\nstructured object:\n\n- An ingredient string (e.g. \"200 g basmati rice\") is resolved by\n  Mealie's natural-language parser into quantity/unit/food.\n- An ingredient object can set quantity, note, title, an existing\n  Mealie unit/food (by id and name), and a referenceId for step links.\n- An instruction string is the step text; an instruction object can\n  also carry a title and ingredientReferences for cook-mode highlights.\n\nArgs:\n    name: The name of the new recipe to be created.\n    ingredients: Ingredient strings and/or structured ingredient objects.\n    instructions: Instruction strings and/or structured instruction objects.\n\nReturns:\n    Dict[str, Any]: The created recipe details.\n",
+    "inputSchema": {
+     "$defs": {
+      "IngredientReference": {
+       "properties": {
+        "referenceId": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "title": "Referenceid"
+        }
+       },
+       "title": "IngredientReference",
+       "type": "object"
+      },
+      "RecipeIngredientInput": {
+       "description": "Structured ingredient accepted by the create/update recipe tools.\n\nPass a plain string instead of this object to let Mealie's\nnatural-language parser resolve the quantity, unit, and food.",
+       "properties": {
+        "referenceId": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Id used to link instruction steps to this ingredient. Mealie stores it as a UUID v4; any string is accepted and non-v4 values are converted to a stable UUID v4 server-side. Reuse the same value on the step's ingredientReferences to keep the link.",
+         "title": "Referenceid"
+        },
+        "quantity": {
+         "anyOf": [
+          {
+           "type": "number"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Numeric amount, e.g. 200.",
+         "title": "Quantity"
+        },
+        "unit": {
+         "anyOf": [
+          {
+           "additionalProperties": true,
+           "type": "object"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Existing Mealie unit object. Mealie requires both the id and the name, e.g. {\"id\": \"<uuid>\", \"name\": \"gram\"}.",
+         "title": "Unit"
+        },
+        "food": {
+         "anyOf": [
+          {
+           "additionalProperties": true,
+           "type": "object"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Existing Mealie food object. Mealie requires both the id and the name, e.g. {\"id\": \"<uuid>\", \"name\": \"rice\"}.",
+         "title": "Food"
+        },
+        "note": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Free-text qualifier shown after the food, e.g. \"Basmati\".",
+         "title": "Note"
+        },
+        "title": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Section heading rendered above this ingredient.",
+         "title": "Title"
+        }
+       },
+       "title": "RecipeIngredientInput",
+       "type": "object"
+      },
+      "RecipeInstructionInput": {
+       "description": "Structured preparation step accepted by the create/update recipe tools.\n\nPass a plain string instead of this object for a step that has no title\nand no ingredient links.",
+       "properties": {
+        "text": {
+         "description": "The instruction text for this step.",
+         "title": "Text",
+         "type": "string"
+        },
+        "title": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Optional heading for this step or section.",
+         "title": "Title"
+        },
+        "ingredientReferences": {
+         "anyOf": [
+          {
+           "items": {
+            "$ref": "#/$defs/IngredientReference"
+           },
+           "type": "array"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "referenceIds of the ingredients used in this step; must match the referenceId set on those ingredients (Mealie requires UUID v4 here; non-v4 values are converted to a stable UUID v4 server-side). Enables Mealie's cook-mode highlighting.",
+         "title": "Ingredientreferences"
+        }
+       },
+       "required": [
+        "text"
+       ],
+       "title": "RecipeInstructionInput",
+       "type": "object"
+      }
+     },
+     "properties": {
+      "name": {
+       "title": "Name",
+       "type": "string"
+      },
+      "ingredients": {
+       "items": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "$ref": "#/$defs/RecipeIngredientInput"
+         }
+        ]
+       },
+       "title": "Ingredients",
+       "type": "array"
+      },
+      "instructions": {
+       "items": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "$ref": "#/$defs/RecipeInstructionInput"
+         }
+        ]
+       },
+       "title": "Instructions",
+       "type": "array"
+      }
+     },
+     "required": [
+      "name",
+      "ingredients",
+      "instructions"
+     ],
+     "title": "create_recipeArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "import_recipe_from_url",
+    "description": "Import a recipe into Mealie by scraping a URL.\n\nUses Mealie's server-side scraper (the `recipe-scrapers` library), which\nhas built-in adapters for many recipe sites and falls back to\nJSON-LD/Schema.org parsing for sites without a dedicated adapter.\nCoverage varies by Mealie version; URLs the scraper can't parse return\na 400 from Mealie.\n\nThe created recipe is fetched and returned so the caller can verify the\nscrape result. Some sources (notably paywalled URLs that redirect) can\ncause the scraper to land on the wrong page and silently return the\nwrong recipe \u2014 always confirm the returned `name` matches what was\nrequested.\n\nArgs:\n    url: Source URL of the recipe to import.\n    include_tags: If True, import tags Mealie extracts from the source.\n        Defaults to False.\n\nReturns:\n    Dict[str, Any]: The created recipe, including slug, name,\n    ingredients, and instructions.\n",
+    "inputSchema": {
+     "properties": {
+      "url": {
+       "title": "Url",
+       "type": "string"
+      },
+      "include_tags": {
+       "default": false,
+       "title": "Include Tags",
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "url"
+     ],
+     "title": "import_recipe_from_urlArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "update_recipe",
+    "description": "Replaces the ingredients and instructions of an existing recipe.\n\nIngredients and instructions accept the same flat-string or structured\nforms as create_recipe.\n\nArgs:\n    slug: The unique text identifier for the recipe to be updated.\n    ingredients: Ingredient strings and/or structured ingredient objects.\n    instructions: Instruction strings and/or structured instruction objects.\n\nReturns:\n    Dict[str, Any]: The updated recipe details.\n",
+    "inputSchema": {
+     "$defs": {
+      "IngredientReference": {
+       "properties": {
+        "referenceId": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "title": "Referenceid"
+        }
+       },
+       "title": "IngredientReference",
+       "type": "object"
+      },
+      "RecipeIngredientInput": {
+       "description": "Structured ingredient accepted by the create/update recipe tools.\n\nPass a plain string instead of this object to let Mealie's\nnatural-language parser resolve the quantity, unit, and food.",
+       "properties": {
+        "referenceId": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Id used to link instruction steps to this ingredient. Mealie stores it as a UUID v4; any string is accepted and non-v4 values are converted to a stable UUID v4 server-side. Reuse the same value on the step's ingredientReferences to keep the link.",
+         "title": "Referenceid"
+        },
+        "quantity": {
+         "anyOf": [
+          {
+           "type": "number"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Numeric amount, e.g. 200.",
+         "title": "Quantity"
+        },
+        "unit": {
+         "anyOf": [
+          {
+           "additionalProperties": true,
+           "type": "object"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Existing Mealie unit object. Mealie requires both the id and the name, e.g. {\"id\": \"<uuid>\", \"name\": \"gram\"}.",
+         "title": "Unit"
+        },
+        "food": {
+         "anyOf": [
+          {
+           "additionalProperties": true,
+           "type": "object"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Existing Mealie food object. Mealie requires both the id and the name, e.g. {\"id\": \"<uuid>\", \"name\": \"rice\"}.",
+         "title": "Food"
+        },
+        "note": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Free-text qualifier shown after the food, e.g. \"Basmati\".",
+         "title": "Note"
+        },
+        "title": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Section heading rendered above this ingredient.",
+         "title": "Title"
+        }
+       },
+       "title": "RecipeIngredientInput",
+       "type": "object"
+      },
+      "RecipeInstructionInput": {
+       "description": "Structured preparation step accepted by the create/update recipe tools.\n\nPass a plain string instead of this object for a step that has no title\nand no ingredient links.",
+       "properties": {
+        "text": {
+         "description": "The instruction text for this step.",
+         "title": "Text",
+         "type": "string"
+        },
+        "title": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Optional heading for this step or section.",
+         "title": "Title"
+        },
+        "ingredientReferences": {
+         "anyOf": [
+          {
+           "items": {
+            "$ref": "#/$defs/IngredientReference"
+           },
+           "type": "array"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "referenceIds of the ingredients used in this step; must match the referenceId set on those ingredients (Mealie requires UUID v4 here; non-v4 values are converted to a stable UUID v4 server-side). Enables Mealie's cook-mode highlighting.",
+         "title": "Ingredientreferences"
+        }
+       },
+       "required": [
+        "text"
+       ],
+       "title": "RecipeInstructionInput",
+       "type": "object"
+      }
+     },
+     "properties": {
+      "slug": {
+       "title": "Slug",
+       "type": "string"
+      },
+      "ingredients": {
+       "items": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "$ref": "#/$defs/RecipeIngredientInput"
+         }
+        ]
+       },
+       "title": "Ingredients",
+       "type": "array"
+      },
+      "instructions": {
+       "items": {
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "$ref": "#/$defs/RecipeInstructionInput"
+         }
+        ]
+       },
+       "title": "Instructions",
+       "type": "array"
+      }
+     },
+     "required": [
+      "slug",
+      "ingredients",
+      "instructions"
+     ],
+     "title": "update_recipeArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "create_recipe_full",
+    "description": "Create a recipe and populate all of its content in one call.\n\nUse this instead of create_recipe when you already have complete\nrecipe data (description, timing, servings, source URL, ingredients,\nsteps, and optionally an image URL). It creates the recipe, fills in\nevery provided field, and sets the image by scraping image_url when\ngiven.\n\nIngredients and instructions accept the same flat-string or structured\nforms as create_recipe.\n\nArgs:\n    name: The name of the new recipe.\n    description: Recipe description.\n    org_url: Source URL for the recipe (shown as a link in the Mealie UI).\n    total_time: Total time as free text, e.g. \"35 min\" or ISO-8601 \"PT35M\".\n    prep_time: Preparation time, same format as total_time.\n    cook_time: Cooking time, same format as total_time.\n    perform_time: Hands-on/active time, same format as total_time.\n    recipe_yield: Yield as free text, e.g. \"4 Portionen\".\n    servings: Number of servings (numeric).\n    image_url: URL of an image to scrape and set as the recipe image.\n    ingredients: Ingredient strings and/or structured ingredient objects.\n    instructions: Instruction strings and/or structured instruction objects.\n    tags: Existing Mealie tags (id+name) to assign; look up with get_tags.\n    tools: Existing Mealie tools (id+name) to assign; look up with get_tools.\n\nReturns:\n    Dict[str, Any]: The created recipe details.\n",
+    "inputSchema": {
+     "$defs": {
+      "IngredientReference": {
+       "properties": {
+        "referenceId": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "title": "Referenceid"
+        }
+       },
+       "title": "IngredientReference",
+       "type": "object"
+      },
+      "OrganizerRef": {
+       "description": "Reference to an existing Mealie tag, category, or tool.\n\nLook up ids with get_tags / get_categories / get_tools. Mealie requires\nboth the id and the name.",
+       "properties": {
+        "id": {
+         "description": "UUID of the existing organizer.",
+         "title": "Id",
+         "type": "string"
+        },
+        "name": {
+         "description": "Display name of the existing organizer.",
+         "title": "Name",
+         "type": "string"
+        },
+        "slug": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Optional slug; Mealie derives it when omitted.",
+         "title": "Slug"
+        }
+       },
+       "required": [
+        "id",
+        "name"
+       ],
+       "title": "OrganizerRef",
+       "type": "object"
+      },
+      "RecipeIngredientInput": {
+       "description": "Structured ingredient accepted by the create/update recipe tools.\n\nPass a plain string instead of this object to let Mealie's\nnatural-language parser resolve the quantity, unit, and food.",
+       "properties": {
+        "referenceId": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Id used to link instruction steps to this ingredient. Mealie stores it as a UUID v4; any string is accepted and non-v4 values are converted to a stable UUID v4 server-side. Reuse the same value on the step's ingredientReferences to keep the link.",
+         "title": "Referenceid"
+        },
+        "quantity": {
+         "anyOf": [
+          {
+           "type": "number"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Numeric amount, e.g. 200.",
+         "title": "Quantity"
+        },
+        "unit": {
+         "anyOf": [
+          {
+           "additionalProperties": true,
+           "type": "object"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Existing Mealie unit object. Mealie requires both the id and the name, e.g. {\"id\": \"<uuid>\", \"name\": \"gram\"}.",
+         "title": "Unit"
+        },
+        "food": {
+         "anyOf": [
+          {
+           "additionalProperties": true,
+           "type": "object"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Existing Mealie food object. Mealie requires both the id and the name, e.g. {\"id\": \"<uuid>\", \"name\": \"rice\"}.",
+         "title": "Food"
+        },
+        "note": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Free-text qualifier shown after the food, e.g. \"Basmati\".",
+         "title": "Note"
+        },
+        "title": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Section heading rendered above this ingredient.",
+         "title": "Title"
+        }
+       },
+       "title": "RecipeIngredientInput",
+       "type": "object"
+      },
+      "RecipeInstructionInput": {
+       "description": "Structured preparation step accepted by the create/update recipe tools.\n\nPass a plain string instead of this object for a step that has no title\nand no ingredient links.",
+       "properties": {
+        "text": {
+         "description": "The instruction text for this step.",
+         "title": "Text",
+         "type": "string"
+        },
+        "title": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Optional heading for this step or section.",
+         "title": "Title"
+        },
+        "ingredientReferences": {
+         "anyOf": [
+          {
+           "items": {
+            "$ref": "#/$defs/IngredientReference"
+           },
+           "type": "array"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "referenceIds of the ingredients used in this step; must match the referenceId set on those ingredients (Mealie requires UUID v4 here; non-v4 values are converted to a stable UUID v4 server-side). Enables Mealie's cook-mode highlighting.",
+         "title": "Ingredientreferences"
+        }
+       },
+       "required": [
+        "text"
+       ],
+       "title": "RecipeInstructionInput",
+       "type": "object"
+      }
+     },
+     "properties": {
+      "name": {
+       "title": "Name",
+       "type": "string"
+      },
+      "description": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Description"
+      },
+      "org_url": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Org Url"
+      },
+      "total_time": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Total Time"
+      },
+      "prep_time": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Prep Time"
+      },
+      "cook_time": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Cook Time"
+      },
+      "perform_time": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Perform Time"
+      },
+      "recipe_yield": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Recipe Yield"
+      },
+      "servings": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Servings"
+      },
+      "image_url": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Image Url"
+      },
+      "ingredients": {
+       "anyOf": [
+        {
+         "items": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "$ref": "#/$defs/RecipeIngredientInput"
+           }
+          ]
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Ingredients"
+      },
+      "instructions": {
+       "anyOf": [
+        {
+         "items": {
+          "anyOf": [
+           {
+            "type": "string"
+           },
+           {
+            "$ref": "#/$defs/RecipeInstructionInput"
+           }
+          ]
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Instructions"
+      },
+      "tags": {
+       "anyOf": [
+        {
+         "items": {
+          "$ref": "#/$defs/OrganizerRef"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Tags"
+      },
+      "tools": {
+       "anyOf": [
+        {
+         "items": {
+          "$ref": "#/$defs/OrganizerRef"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Tools"
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "title": "create_recipe_fullArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "patch_recipe",
+    "description": "Partially update a recipe (only updates provided fields).\n\nArgs:\n    slug: The unique text identifier for the recipe to be updated.\n    name: New name for the recipe.\n    description: New description for the recipe.\n    recipe_yield: Yield as free text, e.g. \"4 Portionen\".\n    servings: Number of servings (numeric).\n    total_time: Total time as free text, e.g. \"35 min\" or ISO-8601 \"PT35M\".\n    prep_time: Preparation time, same format as total_time.\n    cook_time: Cooking time, same format as total_time.\n    perform_time: Hands-on/active time, same format as total_time.\n    org_url: Source URL for the recipe (shown as a link in the Mealie UI).\n    tags: Existing Mealie tags (id+name) to set; look up with get_tags.\n    tools: Existing Mealie tools (id+name) to set; look up with get_tools.\n\nReturns:\n    Dict[str, Any]: The updated recipe details.\n",
+    "inputSchema": {
+     "$defs": {
+      "OrganizerRef": {
+       "description": "Reference to an existing Mealie tag, category, or tool.\n\nLook up ids with get_tags / get_categories / get_tools. Mealie requires\nboth the id and the name.",
+       "properties": {
+        "id": {
+         "description": "UUID of the existing organizer.",
+         "title": "Id",
+         "type": "string"
+        },
+        "name": {
+         "description": "Display name of the existing organizer.",
+         "title": "Name",
+         "type": "string"
+        },
+        "slug": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ],
+         "default": null,
+         "description": "Optional slug; Mealie derives it when omitted.",
+         "title": "Slug"
+        }
+       },
+       "required": [
+        "id",
+        "name"
+       ],
+       "title": "OrganizerRef",
+       "type": "object"
+      }
+     },
+     "properties": {
+      "slug": {
+       "title": "Slug",
+       "type": "string"
+      },
+      "name": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Name"
+      },
+      "description": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Description"
+      },
+      "recipe_yield": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Recipe Yield"
+      },
+      "servings": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Servings"
+      },
+      "total_time": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Total Time"
+      },
+      "prep_time": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Prep Time"
+      },
+      "cook_time": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Cook Time"
+      },
+      "perform_time": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Perform Time"
+      },
+      "org_url": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Org Url"
+      },
+      "tags": {
+       "anyOf": [
+        {
+         "items": {
+          "$ref": "#/$defs/OrganizerRef"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Tags"
+      },
+      "tools": {
+       "anyOf": [
+        {
+         "items": {
+          "$ref": "#/$defs/OrganizerRef"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Tools"
+      }
+     },
+     "required": [
+      "slug"
+     ],
+     "title": "patch_recipeArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "duplicate_recipe",
+    "description": "Duplicate an existing recipe, creating a copy with a new slug.\n\nArgs:\n    slug: The unique text identifier for the recipe to duplicate.\n    name: Optional new name for the duplicate (if not provided, uses original name with copy indicator).\n\nReturns:\n    Dict[str, Any]: The newly created duplicate recipe details.\n",
+    "inputSchema": {
+     "properties": {
+      "slug": {
+       "title": "Slug",
+       "type": "string"
+      },
+      "name": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Name"
+      }
+     },
+     "required": [
+      "slug"
+     ],
+     "title": "duplicate_recipeArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "mark_recipe_last_made",
+    "description": "Mark a recipe as having been made today (updates last made timestamp).\n\nArgs:\n    slug: The unique text identifier for the recipe.\n\nReturns:\n    Dict[str, Any]: The updated recipe details.\n",
+    "inputSchema": {
+     "properties": {
+      "slug": {
+       "title": "Slug",
+       "type": "string"
+      }
+     },
+     "required": [
+      "slug"
+     ],
+     "title": "mark_recipe_last_madeArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "upload_recipe_image_file",
+    "description": "Upload an image file for a recipe.\n\nArgs:\n    slug: The unique text identifier for the recipe.\n    image_path: Local file path to the image to upload.\n\nReturns:\n    Dict[str, Any]: Confirmation that the image was uploaded.\n",
+    "inputSchema": {
+     "properties": {
+      "slug": {
+       "title": "Slug",
+       "type": "string"
+      },
+      "image_path": {
+       "title": "Image Path",
+       "type": "string"
+      }
+     },
+     "required": [
+      "slug",
+      "image_path"
+     ],
+     "title": "upload_recipe_image_fileArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "upload_recipe_asset_file",
+    "description": "Upload an asset file (document, PDF, etc.) for a recipe.\n\nArgs:\n    slug: The unique text identifier for the recipe.\n    asset_path: Local file path to the asset to upload.\n\nReturns:\n    Dict[str, Any]: Details of the uploaded asset.\n",
+    "inputSchema": {
+     "properties": {
+      "slug": {
+       "title": "Slug",
+       "type": "string"
+      },
+      "asset_path": {
+       "title": "Asset Path",
+       "type": "string"
+      }
+     },
+     "required": [
+      "slug",
+      "asset_path"
+     ],
+     "title": "upload_recipe_asset_fileArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "set_recipe_categories",
+    "description": "Set the categories for a recipe, replacing any existing categories.\nUse get_categories() first to find valid category IDs.\nPassing an empty list will remove all categories from the recipe.\n\nArgs:\n    slug: The unique text identifier for the recipe.\n    category_ids: List of category UUIDs to assign.\n\nReturns:\n    Dict[str, Any]: The updated recipe details.\n",
+    "inputSchema": {
+     "properties": {
+      "slug": {
+       "title": "Slug",
+       "type": "string"
+      },
+      "category_ids": {
+       "items": {
+        "type": "string"
+       },
+       "title": "Category Ids",
+       "type": "array"
+      }
+     },
+     "required": [
+      "slug",
+      "category_ids"
+     ],
+     "title": "set_recipe_categoriesArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "set_recipe_tags",
+    "description": "Set the tags for a recipe, replacing any existing tags.\nUse get_tags() first to find valid tag IDs.\nPassing an empty list will remove all tags from the recipe.\n\nArgs:\n    slug: The unique text identifier for the recipe.\n    tag_ids: List of tag UUIDs to assign.\n\nReturns:\n    Dict[str, Any]: The updated recipe details.\n",
+    "inputSchema": {
+     "properties": {
+      "slug": {
+       "title": "Slug",
+       "type": "string"
+      },
+      "tag_ids": {
+       "items": {
+        "type": "string"
+       },
+       "title": "Tag Ids",
+       "type": "array"
+      }
+     },
+     "required": [
+      "slug",
+      "tag_ids"
+     ],
+     "title": "set_recipe_tagsArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "update_recipe_categories_and_tags",
+    "description": "Update categories and/or tags for a recipe in a single API call.\nUse get_categories() and get_tags() first to find valid IDs.\nPassing an empty list for either field will clear it; omitting (None) leaves it unchanged.\n\nArgs:\n    slug: The unique text identifier for the recipe.\n    category_ids: List of category UUIDs to assign (omit to leave unchanged).\n    tag_ids: List of tag UUIDs to assign (omit to leave unchanged).\n\nReturns:\n    Dict[str, Any]: The updated recipe details.\n",
+    "inputSchema": {
+     "properties": {
+      "slug": {
+       "title": "Slug",
+       "type": "string"
+      },
+      "category_ids": {
+       "anyOf": [
+        {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Category Ids"
+      },
+      "tag_ids": {
+       "anyOf": [
+        {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Tag Ids"
+      }
+     },
+     "required": [
+      "slug"
+     ],
+     "title": "update_recipe_categories_and_tagsArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "delete_recipe",
+    "description": "Delete a recipe permanently.\n\nArgs:\n    slug: The unique text identifier for the recipe to delete.\n\nReturns:\n    Dict[str, Any]: Confirmation of deletion.\n",
+    "inputSchema": {
+     "properties": {
+      "slug": {
+       "title": "Slug",
+       "type": "string"
+      }
+     },
+     "required": [
+      "slug"
+     ],
+     "title": "delete_recipeArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_categories",
+    "description": "Get all recipe categories with pagination.\n\nArgs:\n    page: Page number to retrieve\n    per_page: Number of items per page\n\nReturns:\n    Dict[str, Any]: Categories with pagination information\n",
+    "inputSchema": {
+     "properties": {
+      "page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Page"
+      },
+      "per_page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Per Page"
+      }
+     },
+     "title": "get_categoriesArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_empty_categories",
+    "description": "Get all categories that have no recipes assigned.\n\nReturns:\n    List[Dict[str, Any]]: List of empty categories\n",
+    "inputSchema": {
+     "properties": {},
+     "title": "get_empty_categoriesArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "create_category",
+    "description": "Create a new recipe category.\n\nArgs:\n    name: Name of the category (e.g., \"Breakfast\", \"Desserts\", \"Vegetarian\")\n\nReturns:\n    Dict[str, Any]: The created category details\n",
+    "inputSchema": {
+     "properties": {
+      "name": {
+       "title": "Name",
+       "type": "string"
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "title": "create_categoryArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_category",
+    "description": "Get a specific category by ID.\n\nArgs:\n    category_id: The UUID of the category\n\nReturns:\n    Dict[str, Any]: The category details including associated recipes\n",
+    "inputSchema": {
+     "properties": {
+      "category_id": {
+       "title": "Category Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "category_id"
+     ],
+     "title": "get_categoryArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_category_by_slug",
+    "description": "Get a specific category by its slug.\n\nArgs:\n    category_slug: The slug of the category (e.g., \"breakfast\", \"desserts\")\n\nReturns:\n    Dict[str, Any]: The category details including associated recipes\n",
+    "inputSchema": {
+     "properties": {
+      "category_slug": {
+       "title": "Category Slug",
+       "type": "string"
+      }
+     },
+     "required": [
+      "category_slug"
+     ],
+     "title": "get_category_by_slugArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "update_category",
+    "description": "Update a category's details.\n\nArgs:\n    category_id: The UUID of the category to update\n    name: New name for the category\n\nReturns:\n    Dict[str, Any]: The updated category details\n",
+    "inputSchema": {
+     "properties": {
+      "category_id": {
+       "title": "Category Id",
+       "type": "string"
+      },
+      "name": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Name"
+      }
+     },
+     "required": [
+      "category_id"
+     ],
+     "title": "update_categoryArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "delete_category",
+    "description": "Delete a specific category.\n\nArgs:\n    category_id: The UUID of the category to delete\n\nReturns:\n    Dict[str, Any]: Confirmation of deletion\n",
+    "inputSchema": {
+     "properties": {
+      "category_id": {
+       "title": "Category Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "category_id"
+     ],
+     "title": "delete_categoryArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_tags",
+    "description": "Get all recipe tags with pagination.\n\nArgs:\n    page: Page number to retrieve\n    per_page: Number of items per page\n\nReturns:\n    Dict[str, Any]: Tags with pagination information\n",
+    "inputSchema": {
+     "properties": {
+      "page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Page"
+      },
+      "per_page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Per Page"
+      }
+     },
+     "title": "get_tagsArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_empty_tags",
+    "description": "Get all tags that have no recipes assigned.\n\nReturns:\n    List[Dict[str, Any]]: List of empty tags\n",
+    "inputSchema": {
+     "properties": {},
+     "title": "get_empty_tagsArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "create_tag",
+    "description": "Create a new recipe tag.\n\nArgs:\n    name: Name of the tag (e.g., \"Quick\", \"Healthy\", \"Family Favorite\")\n\nReturns:\n    Dict[str, Any]: The created tag details\n",
+    "inputSchema": {
+     "properties": {
+      "name": {
+       "title": "Name",
+       "type": "string"
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "title": "create_tagArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_tag",
+    "description": "Get a specific tag by ID.\n\nArgs:\n    tag_id: The UUID of the tag\n\nReturns:\n    Dict[str, Any]: The tag details including associated recipes\n",
+    "inputSchema": {
+     "properties": {
+      "tag_id": {
+       "title": "Tag Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "tag_id"
+     ],
+     "title": "get_tagArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_tag_by_slug",
+    "description": "Get a specific tag by its slug.\n\nArgs:\n    tag_slug: The slug of the tag (e.g., \"quick\", \"healthy\")\n\nReturns:\n    Dict[str, Any]: The tag details including associated recipes\n",
+    "inputSchema": {
+     "properties": {
+      "tag_slug": {
+       "title": "Tag Slug",
+       "type": "string"
+      }
+     },
+     "required": [
+      "tag_slug"
+     ],
+     "title": "get_tag_by_slugArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "update_tag",
+    "description": "Update a tag's details.\n\nArgs:\n    tag_id: The UUID of the tag to update\n    name: New name for the tag\n\nReturns:\n    Dict[str, Any]: The updated tag details\n",
+    "inputSchema": {
+     "properties": {
+      "tag_id": {
+       "title": "Tag Id",
+       "type": "string"
+      },
+      "name": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Name"
+      }
+     },
+     "required": [
+      "tag_id"
+     ],
+     "title": "update_tagArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "delete_tag",
+    "description": "Delete a specific tag.\n\nArgs:\n    tag_id: The UUID of the tag to delete\n\nReturns:\n    Dict[str, Any]: Confirmation of deletion\n",
+    "inputSchema": {
+     "properties": {
+      "tag_id": {
+       "title": "Tag Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "tag_id"
+     ],
+     "title": "delete_tagArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_foods",
+    "description": "List the household's foods, optionally filtered by a search term.\n\nUse this to resolve an existing Mealie food id+name before building a\nstructured ingredient, instead of hardcoding UUIDs. The Mealie search is\ntoken-based; do client-side matching against the returned items if you\nneed fuzzy matching (e.g. \"Basmatireis\" -> \"Reis\").\n\nArgs:\n    search: Search term to filter foods by name/alias.\n    page: Page number to retrieve.\n    per_page: Number of items per page.\n\nReturns:\n    Dict[str, Any]: Foods (under \"items\") with pagination information.\n",
+    "inputSchema": {
+     "properties": {
+      "search": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Search"
+      },
+      "page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Page"
+      },
+      "per_page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Per Page"
+      }
+     },
+     "title": "get_foodsArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "create_food",
+    "description": "Create a new food.\n\nArgs:\n    name: Name of the food (e.g. \"Reis\").\n    plural_name: Optional plural name.\n    description: Optional description.\n\nReturns:\n    Dict[str, Any]: The created food.\n",
+    "inputSchema": {
+     "properties": {
+      "name": {
+       "title": "Name",
+       "type": "string"
+      },
+      "plural_name": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Plural Name"
+      },
+      "description": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Description"
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "title": "create_foodArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_food",
+    "description": "Get a specific food by ID.\n\nArgs:\n    food_id: The UUID of the food.\n\nReturns:\n    Dict[str, Any]: The food details.\n",
+    "inputSchema": {
+     "properties": {
+      "food_id": {
+       "title": "Food Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "food_id"
+     ],
+     "title": "get_foodArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "update_food",
+    "description": "Update a food's details (only provided fields are changed).\n\nArgs:\n    food_id: The UUID of the food to update.\n    name: New name for the food.\n    plural_name: New plural name.\n    description: New description.\n\nReturns:\n    Dict[str, Any]: The updated food.\n",
+    "inputSchema": {
+     "properties": {
+      "food_id": {
+       "title": "Food Id",
+       "type": "string"
+      },
+      "name": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Name"
+      },
+      "plural_name": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Plural Name"
+      },
+      "description": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Description"
+      }
+     },
+     "required": [
+      "food_id"
+     ],
+     "title": "update_foodArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "delete_food",
+    "description": "Delete a specific food.\n\nArgs:\n    food_id: The UUID of the food to delete.\n\nReturns:\n    Dict[str, Any]: Confirmation of deletion.\n",
+    "inputSchema": {
+     "properties": {
+      "food_id": {
+       "title": "Food Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "food_id"
+     ],
+     "title": "delete_foodArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_units",
+    "description": "List the household's units, optionally filtered by a search term.\n\nUse this to resolve an existing Mealie unit id+name before building a\nstructured ingredient.\n\nArgs:\n    search: Search term to filter units by name/abbreviation.\n    page: Page number to retrieve.\n    per_page: Number of items per page.\n\nReturns:\n    Dict[str, Any]: Units (under \"items\") with pagination information.\n",
+    "inputSchema": {
+     "properties": {
+      "search": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Search"
+      },
+      "page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Page"
+      },
+      "per_page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Per Page"
+      }
+     },
+     "title": "get_unitsArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "create_unit",
+    "description": "Create a new unit.\n\nArgs:\n    name: Name of the unit (e.g. \"Gramm\").\n    abbreviation: Optional short form (e.g. \"g\", \"ml\").\n    plural_name: Optional plural name.\n    description: Optional description.\n\nReturns:\n    Dict[str, Any]: The created unit.\n",
+    "inputSchema": {
+     "properties": {
+      "name": {
+       "title": "Name",
+       "type": "string"
+      },
+      "abbreviation": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Abbreviation"
+      },
+      "plural_name": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Plural Name"
+      },
+      "description": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Description"
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "title": "create_unitArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_unit",
+    "description": "Get a specific unit by ID.\n\nArgs:\n    unit_id: The UUID of the unit.\n\nReturns:\n    Dict[str, Any]: The unit details.\n",
+    "inputSchema": {
+     "properties": {
+      "unit_id": {
+       "title": "Unit Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "unit_id"
+     ],
+     "title": "get_unitArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "update_unit",
+    "description": "Update a unit's details (only provided fields are changed).\n\nArgs:\n    unit_id: The UUID of the unit to update.\n    name: New name for the unit.\n    abbreviation: New abbreviation.\n    plural_name: New plural name.\n    description: New description.\n\nReturns:\n    Dict[str, Any]: The updated unit.\n",
+    "inputSchema": {
+     "properties": {
+      "unit_id": {
+       "title": "Unit Id",
+       "type": "string"
+      },
+      "name": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Name"
+      },
+      "abbreviation": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Abbreviation"
+      },
+      "plural_name": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Plural Name"
+      },
+      "description": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Description"
+      }
+     },
+     "required": [
+      "unit_id"
+     ],
+     "title": "update_unitArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "delete_unit",
+    "description": "Delete a specific unit.\n\nArgs:\n    unit_id: The UUID of the unit to delete.\n\nReturns:\n    Dict[str, Any]: Confirmation of deletion.\n",
+    "inputSchema": {
+     "properties": {
+      "unit_id": {
+       "title": "Unit Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "unit_id"
+     ],
+     "title": "delete_unitArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_tools",
+    "description": "List the household's recipe tools, optionally filtered by a search term.\n\nUse this to resolve a tool id+name before assigning it to a recipe via\ncreate_recipe_full or patch_recipe. Each item includes\n``householdsWithTool``: a non-empty value means the household owns the\ntool, an empty list means it only exists in the database.\n\nArgs:\n    search: Search term to filter tools by name.\n    page: Page number to retrieve.\n    per_page: Number of items per page.\n\nReturns:\n    Dict[str, Any]: Tools (under \"items\") with pagination information.\n",
+    "inputSchema": {
+     "properties": {
+      "search": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Search"
+      },
+      "page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Page"
+      },
+      "per_page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Per Page"
+      }
+     },
+     "title": "get_toolsArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "create_tool",
+    "description": "Create a new recipe tool.\n\nArgs:\n    name: Name of the tool (e.g. \"Kochtopf\", \"Backofen\").\n\nReturns:\n    Dict[str, Any]: The created tool.\n",
+    "inputSchema": {
+     "properties": {
+      "name": {
+       "title": "Name",
+       "type": "string"
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "title": "create_toolArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_tool",
+    "description": "Get a specific tool by ID.\n\nArgs:\n    tool_id: The UUID of the tool.\n\nReturns:\n    Dict[str, Any]: The tool details.\n",
+    "inputSchema": {
+     "properties": {
+      "tool_id": {
+       "title": "Tool Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "tool_id"
+     ],
+     "title": "get_toolArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_tool_by_slug",
+    "description": "Get a specific tool by its slug.\n\nArgs:\n    tool_slug: The slug of the tool (e.g. \"kochtopf\").\n\nReturns:\n    Dict[str, Any]: The tool details.\n",
+    "inputSchema": {
+     "properties": {
+      "tool_slug": {
+       "title": "Tool Slug",
+       "type": "string"
+      }
+     },
+     "required": [
+      "tool_slug"
+     ],
+     "title": "get_tool_by_slugArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "update_tool",
+    "description": "Update a tool's details (only provided fields are changed).\n\nArgs:\n    tool_id: The UUID of the tool to update.\n    name: New name for the tool.\n\nReturns:\n    Dict[str, Any]: The updated tool.\n",
+    "inputSchema": {
+     "properties": {
+      "tool_id": {
+       "title": "Tool Id",
+       "type": "string"
+      },
+      "name": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Name"
+      }
+     },
+     "required": [
+      "tool_id"
+     ],
+     "title": "update_toolArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "delete_tool",
+    "description": "Delete a specific tool.\n\nArgs:\n    tool_id: The UUID of the tool to delete.\n\nReturns:\n    Dict[str, Any]: Confirmation of deletion.\n",
+    "inputSchema": {
+     "properties": {
+      "tool_id": {
+       "title": "Tool Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "tool_id"
+     ],
+     "title": "delete_toolArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_shopping_lists",
+    "description": "Get all shopping lists for the current household with pagination.\n\nArgs:\n    page: Page number to retrieve\n    per_page: Number of items per page\n\nReturns:\n    Dict[str, Any]: Shopping lists with pagination information\n",
+    "inputSchema": {
+     "properties": {
+      "page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Page"
+      },
+      "per_page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Per Page"
+      }
+     },
+     "title": "get_shopping_listsArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "create_shopping_list",
+    "description": "Create a new shopping list.\n\nArgs:\n    name: Name of the shopping list\n\nReturns:\n    Dict[str, Any]: The created shopping list details\n",
+    "inputSchema": {
+     "properties": {
+      "name": {
+       "title": "Name",
+       "type": "string"
+      }
+     },
+     "required": [
+      "name"
+     ],
+     "title": "create_shopping_listArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_shopping_list",
+    "description": "Get a specific shopping list by ID.\n\nArgs:\n    list_id: The UUID of the shopping list\n\nReturns:\n    Dict[str, Any]: The shopping list details including all items\n",
+    "inputSchema": {
+     "properties": {
+      "list_id": {
+       "title": "List Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "list_id"
+     ],
+     "title": "get_shopping_listArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "update_shopping_list",
+    "description": "Update a shopping list's properties (e.g. rename it).\n\nArgs:\n    list_id: The UUID of the shopping list to update.\n    name: The new name for the shopping list.\n\nReturns:\n    Dict[str, Any]: The updated shopping list details.\n",
+    "inputSchema": {
+     "properties": {
+      "list_id": {
+       "title": "List Id",
+       "type": "string"
+      },
+      "name": {
+       "title": "Name",
+       "type": "string"
+      }
+     },
+     "required": [
+      "list_id",
+      "name"
+     ],
+     "title": "update_shopping_listArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "delete_shopping_list",
+    "description": "Delete a specific shopping list.\n\nArgs:\n    list_id: The UUID of the shopping list to delete\n\nReturns:\n    Dict[str, Any]: Confirmation of deletion\n",
+    "inputSchema": {
+     "properties": {
+      "list_id": {
+       "title": "List Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "list_id"
+     ],
+     "title": "delete_shopping_listArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "add_recipe_to_shopping_list",
+    "description": "Add a recipe's ingredients to a shopping list.\n\nArgs:\n    list_id: The UUID of the shopping list\n    recipe_id: The UUID of the recipe to add\n    recipe_increment_quantity: Multiplier for recipe quantities (e.g., 2.0 for double)\n\nReturns:\n    Dict[str, Any]: The updated shopping list\n",
+    "inputSchema": {
+     "properties": {
+      "list_id": {
+       "title": "List Id",
+       "type": "string"
+      },
+      "recipe_id": {
+       "title": "Recipe Id",
+       "type": "string"
+      },
+      "recipe_increment_quantity": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Recipe Increment Quantity"
+      }
+     },
+     "required": [
+      "list_id",
+      "recipe_id"
+     ],
+     "title": "add_recipe_to_shopping_listArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "remove_recipe_from_shopping_list",
+    "description": "Remove a recipe's ingredients from a shopping list.\n\nArgs:\n    list_id: The UUID of the shopping list\n    recipe_id: The UUID of the recipe to remove\n\nReturns:\n    Dict[str, Any]: The updated shopping list\n",
+    "inputSchema": {
+     "properties": {
+      "list_id": {
+       "title": "List Id",
+       "type": "string"
+      },
+      "recipe_id": {
+       "title": "Recipe Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "list_id",
+      "recipe_id"
+     ],
+     "title": "remove_recipe_from_shopping_listArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_shopping_list_items",
+    "description": "Get all shopping list items with pagination and search.\n\nArgs:\n    page: Page number to retrieve\n    per_page: Number of items per page\n    search: Search term to filter items\n\nReturns:\n    Dict[str, Any]: Shopping list items with pagination information\n",
+    "inputSchema": {
+     "properties": {
+      "page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Page"
+      },
+      "per_page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Per Page"
+      },
+      "search": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Search"
+      }
+     },
+     "title": "get_shopping_list_itemsArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_shopping_list_item",
+    "description": "Get a specific shopping list item by ID.\n\nArgs:\n    item_id: The UUID of the shopping list item\n\nReturns:\n    Dict[str, Any]: The shopping list item details\n",
+    "inputSchema": {
+     "properties": {
+      "item_id": {
+       "title": "Item Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "item_id"
+     ],
+     "title": "get_shopping_list_itemArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "create_shopping_list_item",
+    "description": "Create a new item in a shopping list.\n\nArgs:\n    shopping_list_id: UUID of the shopping list\n    note: Item description (e.g., \"2 lbs chicken breast\")\n    quantity: Item quantity\n    unit_id: UUID of the unit (optional)\n    food_id: UUID of the food (optional)\n    label_id: UUID of the label (optional)\n\nReturns:\n    Dict[str, Any]: The created shopping list item\n",
+    "inputSchema": {
+     "properties": {
+      "shopping_list_id": {
+       "title": "Shopping List Id",
+       "type": "string"
+      },
+      "note": {
+       "title": "Note",
+       "type": "string"
+      },
+      "quantity": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Quantity"
+      },
+      "unit_id": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Unit Id"
+      },
+      "food_id": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Food Id"
+      },
+      "label_id": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Label Id"
+      }
+     },
+     "required": [
+      "shopping_list_id",
+      "note"
+     ],
+     "title": "create_shopping_list_itemArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "create_shopping_list_items_bulk",
+    "description": "Create multiple shopping list items at once.\n\nArgs:\n    items: List of item dictionaries, each containing:\n        - shopping_list_id (str): UUID of the shopping list\n        - note (str): Item description\n        - quantity (float, optional): Item quantity\n        - unit_id (str, optional): UUID of the unit\n        - food_id (str, optional): UUID of the food\n\nReturns:\n    Dict[str, Any]: Results of the bulk creation operation\n",
+    "inputSchema": {
+     "properties": {
+      "items": {
+       "items": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "title": "Items",
+       "type": "array"
+      }
+     },
+     "required": [
+      "items"
+     ],
+     "title": "create_shopping_list_items_bulkArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "update_shopping_list_item",
+    "description": "Update a shopping list item. Use this to check/uncheck items or modify their details.\n\nArgs:\n    item_id: The UUID of the shopping list item to update\n    note: Updated item description\n    quantity: Updated quantity\n    checked: Whether the item is checked off\n\nReturns:\n    Dict[str, Any]: The updated shopping list item\n",
+    "inputSchema": {
+     "properties": {
+      "item_id": {
+       "title": "Item Id",
+       "type": "string"
+      },
+      "note": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Note"
+      },
+      "quantity": {
+       "anyOf": [
+        {
+         "type": "number"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Quantity"
+      },
+      "checked": {
+       "anyOf": [
+        {
+         "type": "boolean"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Checked"
+      }
+     },
+     "required": [
+      "item_id"
+     ],
+     "title": "update_shopping_list_itemArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "delete_shopping_list_item",
+    "description": "Delete a specific shopping list item.\n\nArgs:\n    item_id: The UUID of the shopping list item to delete\n\nReturns:\n    Dict[str, Any]: Confirmation of deletion\n",
+    "inputSchema": {
+     "properties": {
+      "item_id": {
+       "title": "Item Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "item_id"
+     ],
+     "title": "delete_shopping_list_itemArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "update_shopping_list_items_bulk",
+    "description": "Update multiple shopping list items at once.\n\nIMPORTANT: Each item dictionary must include:\n- id: The item UUID\n- shoppingListId: The shopping list UUID\n- Any other fields you want to update (note, quantity, checked, etc.)\n\nArgs:\n    items: List of item dictionaries with IDs, shoppingListId, and fields to update\n\nReturns:\n    Dict[str, Any]: Results of the bulk update operation\n",
+    "inputSchema": {
+     "properties": {
+      "items": {
+       "items": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "title": "Items",
+       "type": "array"
+      }
+     },
+     "required": [
+      "items"
+     ],
+     "title": "update_shopping_list_items_bulkArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "delete_shopping_list_items_bulk",
+    "description": "Delete multiple shopping list items at once.\n\nArgs:\n    item_ids: List of shopping list item UUIDs to delete\n\nReturns:\n    Dict[str, Any]: Results of the bulk deletion operation\n",
+    "inputSchema": {
+     "properties": {
+      "item_ids": {
+       "items": {
+        "type": "string"
+       },
+       "title": "Item Ids",
+       "type": "array"
+      }
+     },
+     "required": [
+      "item_ids"
+     ],
+     "title": "delete_shopping_list_items_bulkArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_all_mealplans",
+    "description": "Get all meal plans for the current household with pagination.\n\nArgs:\n    start_date: Start date for filtering meal plans (ISO format YYYY-MM-DD)\n    end_date: End date for filtering meal plans (ISO format YYYY-MM-DD)\n    page: Page number to retrieve\n    per_page: Number of items per page\n\nReturns:\n    Dict[str, Any]: JSON response containing mealplan items and pagination information\n",
+    "inputSchema": {
+     "properties": {
+      "start_date": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Start Date"
+      },
+      "end_date": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "End Date"
+      },
+      "page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Page"
+      },
+      "per_page": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Per Page"
+      }
+     },
+     "title": "get_all_mealplansArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "create_mealplan",
+    "description": "Create a new meal plan entry.\n\nArgs:\n    date: Date for the mealplan in ISO format (YYYY-MM-DD)\n    recipe_id: UUID of the recipe to add to the mealplan (optional)\n    title: Title for the mealplan entry if not using a recipe (optional)\n    entry_type: Type of mealplan entry (breakfast, lunch, dinner, side)\n\nReturns:\n    Dict[str, Any]: JSON response containing the created mealplan entry\n",
+    "inputSchema": {
+     "properties": {
+      "date": {
+       "title": "Date",
+       "type": "string"
+      },
+      "recipe_id": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Recipe Id"
+      },
+      "title": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Title"
+      },
+      "entry_type": {
+       "default": "breakfast",
+       "title": "Entry Type",
+       "type": "string"
+      }
+     },
+     "required": [
+      "date"
+     ],
+     "title": "create_mealplanArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "create_mealplan_bulk",
+    "description": "Create multiple meal plan entries in bulk.\n\nArgs:\n    entries: List of mealplan entries, each containing:\n        - date (str): Date in ISO format (YYYY-MM-DD)\n        - recipe_id (str, optional): UUID of the recipe\n        - title (str, optional): Title for the entry\n        - entry_type (str, optional): Type of entry (breakfast, lunch, dinner, side)\n\nReturns:\n    Dict[str, Any]: JSON response with success message\n",
+    "inputSchema": {
+     "properties": {
+      "entries": {
+       "items": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "title": "Entries",
+       "type": "array"
+      }
+     },
+     "required": [
+      "entries"
+     ],
+     "title": "create_mealplan_bulkArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "update_mealplan",
+    "description": "Update selected fields on an existing meal-plan entry.",
+    "inputSchema": {
+     "properties": {
+      "entry_id": {
+       "title": "Entry Id",
+       "type": "string"
+      },
+      "date": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Date"
+      },
+      "recipe_id": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Recipe Id"
+      },
+      "title": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Title"
+      },
+      "entry_type": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "title": "Entry Type"
+      }
+     },
+     "required": [
+      "entry_id"
+     ],
+     "title": "update_mealplanArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "delete_mealplan",
+    "description": "Delete a specific meal plan entry.\n\nArgs:\n    item_id: The ID of the mealplan entry to delete\n\nReturns:\n    Dict[str, Any]: Confirmation of deletion\n",
+    "inputSchema": {
+     "properties": {
+      "item_id": {
+       "title": "Item Id",
+       "type": "string"
+      }
+     },
+     "required": [
+      "item_id"
+     ],
+     "title": "delete_mealplanArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_todays_mealplan",
+    "description": "Get the mealplan entries for today.\n\nReturns:\n    List[Dict[str, Any]]: List of today's mealplan entries\n",
+    "inputSchema": {
+     "properties": {},
+     "title": "get_todays_mealplanArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "set_recipe_image_from_url",
+    "description": "Set a recipe's image by scraping from a URL \u2014 verified.\n\nAfter Mealie processes the request this tool re-reads the recipe to\nconfirm the image field actually updated to a non-empty value. If it\ndidn't (most common cause: source URL returned 4xx anti-bot), the\ncall raises with a clear next-step suggestion (different URL,\nog:image from the recipe's source page, or upload_recipe_image_file\nwith a local file).\n\nArgs:\n    slug: The unique text identifier for the recipe.\n    image_url: URL of the image to fetch.\n\nReturns:\n    On success: {\"success\": True, \"slug\": ..., \"image_id\": ..., \"url_used\": ...}\n    On verified failure: raises with a helpful message naming the URL.\n",
+    "inputSchema": {
+     "properties": {
+      "slug": {
+       "title": "Slug",
+       "type": "string"
+      },
+      "image_url": {
+       "title": "Image Url",
+       "type": "string"
+      }
+     },
+     "required": [
+      "slug",
+      "image_url"
+     ],
+     "title": "set_recipe_image_from_urlArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "set_recipe_org_url",
+    "description": "Set a recipe's original source URL \u2014 verified.\n\nMealie's `orgURL` field is shown as a clickable \"view original\nrecipe\" link in the UI. Call this after create_recipe (or use\ncreate_recipe_full's org_url parameter to set it in one step) to\nrecord where a recipe came from. Do NOT put the URL in the\ndescription field \u2014 that's not link-clickable and clutters prose\nwith a raw URL.\n\nArgs:\n    slug: The unique text identifier for the recipe.\n    org_url: The recipe's original source URL.\n\nReturns:\n    On success: {\"success\": True, \"slug\": ..., \"org_url\": ...}\n    On verified failure: raises with a message naming the recipe.\n",
+    "inputSchema": {
+     "properties": {
+      "slug": {
+       "title": "Slug",
+       "type": "string"
+      },
+      "org_url": {
+       "title": "Org Url",
+       "type": "string"
+      }
+     },
+     "required": [
+      "slug",
+      "org_url"
+     ],
+     "title": "set_recipe_org_urlArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_recipe_by_slug",
+    "description": "Retrieve a specific recipe by its slug identifier.\n\nAlias of get_recipe_detailed, provided so the name matches\nget_category_by_slug / get_tag_by_slug / get_tool_by_slug.\nReturns the full recipe details.\n\nArgs:\n    slug: The unique text identifier for the recipe.\n\nReturns:\n    Dict[str, Any]: The full recipe details.\n",
+    "inputSchema": {
+     "properties": {
+      "slug": {
+       "title": "Slug",
+       "type": "string"
+      }
+     },
+     "required": [
+      "slug"
+     ],
+     "title": "get_recipe_by_slugArguments",
+     "type": "object"
+    }
+   }
+  ],
+  "kroger-mcp": [
+   {
+    "name": "search_locations",
+    "description": "Search for Kroger store locations near a zip code.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "zip_code": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Zip code to search near (uses environment default if not provided)"
+      },
+      "radius_in_miles": {
+       "default": 10,
+       "description": "Search radius in miles (1-100)",
+       "maximum": 100,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "limit": {
+       "default": 10,
+       "description": "Number of results to return (1-200)",
+       "maximum": 200,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "chain": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Filter by specific chain name"
+      }
+     },
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_user_zip_code",
+    "description": "Returns user zip code, it is anticipated that by exposing this to the LLM it will choose to use it\nrather than generating a zip code based on system data.\n\nArgs: \n    N/A\nReturns:\n    Dictionary containing user Zip Code",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {},
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_location_details",
+    "description": "Get detailed information about a specific Kroger store location.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "location_id": {
+       "type": "string",
+       "description": "The unique identifier for the store location"
+      }
+     },
+     "required": [
+      "location_id"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "set_preferred_location",
+    "description": "Set a preferred store location for future operations.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "location_id": {
+       "type": "string",
+       "description": "The unique identifier for the store location"
+      }
+     },
+     "required": [
+      "location_id"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_preferred_location",
+    "description": "Get the currently set preferred store location.\n\nReturns:\n    Dictionary containing the preferred location information",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {},
+     "type": "object"
+    }
+   },
+   {
+    "name": "check_location_exists",
+    "description": "Check if a location exists in the Kroger system.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "location_id": {
+       "type": "string",
+       "description": "The unique identifier for the store location"
+      }
+     },
+     "required": [
+      "location_id"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_product_images",
+    "description": "Get an image for a specific product from the requested perspective.\n\nUse get_product_details first to see what perspectives are available (typically \"front\", \"back\", \"left\", \"right\").",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "product_id": {
+       "type": "string",
+       "description": "The unique product identifier"
+      },
+      "perspective": {
+       "default": "front",
+       "type": "string",
+       "description": "The image perspective to retrieve (default: \"front\")"
+      },
+      "location_id": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Store location ID (uses preferred if not provided)"
+      }
+     },
+     "required": [
+      "product_id"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "search_products",
+    "description": "Search for products at a Kroger store.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "search_term": {
+       "type": "string",
+       "description": "Product search term (e.g., \"milk\", \"bread\", \"organic apples\")"
+      },
+      "location_id": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Store location ID (uses preferred location if not provided)"
+      },
+      "limit": {
+       "default": 10,
+       "description": "Number of results to return (1-50)",
+       "maximum": 50,
+       "minimum": 1,
+       "type": "integer"
+      },
+      "fulfillment": {
+       "anyOf": [
+        {
+         "enum": [
+          "csp",
+          "delivery",
+          "pickup"
+         ],
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Filter by fulfillment method (csp=curbside pickup, delivery, pickup)"
+      },
+      "brand": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Filter by brand name"
+      }
+     },
+     "required": [
+      "search_term"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "bulk_search_products",
+    "description": "Search for multiple products in a single tool call to reduce round-trips.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "searches": {
+       "items": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "type": "array",
+       "description": "List of search queries (1-25). Each item should have:\n      - term: The search term (e.g., \"milk\", \"bread\")\n      - limit: Number of results per search (1-50, default: 10)\n      - fulfillment: Optional fulfillment filter (\"csp\", \"delivery\", \"pickup\")\n      - brand: Optional brand filter"
+      },
+      "location_id": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Store location ID applied to all searches (uses preferred if not provided)"
+      }
+     },
+     "required": [
+      "searches"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_product_details",
+    "description": "Get detailed information about a specific product.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "product_id": {
+       "type": "string",
+       "description": "The unique product identifier"
+      },
+      "location_id": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Store location ID for pricing/availability (uses preferred if not provided)"
+      }
+     },
+     "required": [
+      "product_id"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "search_products_by_id",
+    "description": "Search for products by their specific product ID.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "product_id": {
+       "type": "string",
+       "description": "The product ID to search for"
+      },
+      "location_id": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Store location ID (uses preferred location if not provided)"
+      }
+     },
+     "required": [
+      "product_id"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "add_items_to_cart",
+    "description": "Add a single item to the user's Kroger cart and track it locally.\n\nIf the user doesn't specifically indicate a preference for pickup or delivery,\nyou should ask them which modality they prefer before calling this tool.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "product_id": {
+       "type": "string",
+       "description": "The product ID or UPC to add to cart"
+      },
+      "quantity": {
+       "default": 1,
+       "type": "integer",
+       "description": "Quantity to add (default: 1)"
+      },
+      "modality": {
+       "default": "PICKUP",
+       "type": "string",
+       "description": "Fulfillment method - PICKUP or DELIVERY"
+      }
+     },
+     "required": [
+      "product_id"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "bulk_add_to_cart",
+    "description": "Add multiple items to the user's Kroger cart in a single operation.\n\nIf the user doesn't specifically indicate a preference for pickup or delivery,\nyou should ask them which modality they prefer before calling this tool.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "items": {
+       "items": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "type": "array",
+       "description": "List of items to add. Each item should have:\n   - product_id: The product ID or UPC\n   - quantity: Quantity to add (default: 1)\n   - modality: PICKUP or DELIVERY (default: PICKUP)"
+      }
+     },
+     "required": [
+      "items"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "view_current_cart",
+    "description": "View the current cart contents tracked locally.\n\nNote: This tool can only see items that were added via this MCP server.\nThe Kroger API does not provide permission to query the actual user cart contents.\n\nReturns:\n    Dictionary containing current cart items and summary",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {},
+     "type": "object"
+    }
+   },
+   {
+    "name": "remove_from_cart",
+    "description": "Remove an item from the local cart tracking only.\n\nIMPORTANT: This tool CANNOT remove items from the actual Kroger cart in the app/website.\nIt only updates our local tracking to stay in sync. The user must remove the item from\ntheir actual cart through the Kroger app or website themselves.\n\nUse this tool only when:\n1. The user has already removed an item from their Kroger cart through the app/website\n2. You need to update the local tracking to reflect that change",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "product_id": {
+       "type": "string",
+       "description": "The product ID to remove"
+      },
+      "modality": {
+       "default": null,
+       "type": "string",
+       "description": "Specific modality to remove (if None, removes all instances)"
+      }
+     },
+     "required": [
+      "product_id"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "clear_current_cart",
+    "description": "Clear all items from the local cart tracking only.\n\nIMPORTANT: This tool CANNOT remove items from the actual Kroger cart in the app/website.\nIt only clears our local tracking. The user must remove items from their actual cart\nthrough the Kroger app or website themselves.\n\nUse this tool only when:\n1. The user has already cleared their Kroger cart through the app/website\n2. You need to update the local tracking to reflect that change\n3. Or when the local tracking is out of sync with the actual cart\n\nReturns:\n    Dictionary confirming the local cart tracking was cleared",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {},
+     "type": "object"
+    }
+   },
+   {
+    "name": "mark_order_placed",
+    "description": "Mark the current cart as an order that has been placed and move it to order history.\nUse this after you've completed checkout on the Kroger website/app.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "order_notes": {
+       "default": null,
+       "type": "string",
+       "description": "Optional notes about the order"
+      }
+     },
+     "type": "object"
+    }
+   },
+   {
+    "name": "view_order_history",
+    "description": "View the history of placed orders.\n\nNote: This tool can only see orders that were explicitly marked as placed via this MCP server.\nThe Kroger API does not provide permission to query the actual order history from Kroger's systems.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "limit": {
+       "default": 10,
+       "type": "integer",
+       "description": "Number of recent orders to show (1-50)"
+      }
+     },
+     "type": "object"
+    }
+   },
+   {
+    "name": "list_chains",
+    "description": "Get a list of all Kroger-owned chains.\n\nReturns:\n    Dictionary containing chain information",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {},
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_chain_details",
+    "description": "Get detailed information about a specific Kroger chain.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "chain_name": {
+       "type": "string",
+       "description": "Name of the chain to get details for"
+      }
+     },
+     "required": [
+      "chain_name"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "check_chain_exists",
+    "description": "Check if a chain exists in the Kroger system.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "chain_name": {
+       "type": "string",
+       "description": "Name of the chain to check"
+      }
+     },
+     "required": [
+      "chain_name"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "list_departments",
+    "description": "Get a list of all available departments in Kroger stores.\n\nReturns:\n    Dictionary containing department information",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {},
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_department_details",
+    "description": "Get detailed information about a specific department.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "department_id": {
+       "type": "string",
+       "description": "The unique identifier for the department"
+      }
+     },
+     "required": [
+      "department_id"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "check_department_exists",
+    "description": "Check if a department exists in the Kroger system.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "department_id": {
+       "type": "string",
+       "description": "The department ID to check"
+      }
+     },
+     "required": [
+      "department_id"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_user_profile",
+    "description": "Get the authenticated user's Kroger profile information.\n\nReturns:\n    Dictionary containing user profile data",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {},
+     "type": "object"
+    }
+   },
+   {
+    "name": "test_authentication",
+    "description": "Test if the current authentication token is valid.\n\nReturns:\n    Dictionary indicating authentication status",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {},
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_authentication_info",
+    "description": "Get information about the current authentication state and token.\n\nReturns:\n    Dictionary containing authentication information",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {},
+     "type": "object"
+    }
+   },
+   {
+    "name": "force_reauthenticate",
+    "description": "Force re-authentication by clearing the current authentication token.\nUse this if you're having authentication issues or need to log in as a different user.\n\nReturns:\n    Dictionary indicating the re-authentication was initiated",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {},
+     "type": "object"
+    }
+   },
+   {
+    "name": "get_current_datetime",
+    "description": "Get the current system date and time.\n\nThis tool is useful for comparing with cart checkout dates, order history,\nor any other time-sensitive operations.\n\nReturns:\n    Dictionary containing current date and time information",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {},
+     "type": "object"
+    }
+   },
+   {
+    "name": "start_authentication",
+    "description": "Start the OAuth authentication flow with Kroger.\n\nThis tool returns a URL that the user needs to open in their browser\nto authenticate with Kroger. After authorization, the user will be\nredirected to a callback URL that they need to copy and paste back.\n\nReturns:\n    Dictionary with authorization URL and instructions",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {},
+     "type": "object"
+    }
+   },
+   {
+    "name": "complete_authentication",
+    "description": "Complete the OAuth flow using the redirect URL from Kroger.\n\nAfter opening the auth URL in your browser and authorizing the app,\nyou'll be redirected to a callback URL. Copy that entire URL and\npass it to this tool to complete the authentication process.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "redirect_url": {
+       "type": "string",
+       "description": "The full URL from your browser after authorization"
+      }
+     },
+     "required": [
+      "redirect_url"
+     ],
+     "type": "object"
+    }
+   },
+   {
+    "name": "add_items_to_cart_batch",
+    "description": "Add multiple items to the Kroger cart in ONE call.\n\nSTRONGLY PREFER this over calling add_items_to_cart repeatedly.\nN individual adds = N model inference passes (slow). This is 1.",
+    "inputSchema": {
+     "additionalProperties": false,
+     "properties": {
+      "items": {
+       "items": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "type": "array",
+       "description": "List of {product_id, quantity?, modality?} dicts.\n   product_id is the UPC. quantity defaults to 1.\n   modality defaults to the batch-level modality below."
+      },
+      "modality": {
+       "default": "PICKUP",
+       "type": "string",
+       "description": "PICKUP or DELIVERY for items that don't override.\n      Default PICKUP."
+      }
+     },
+     "required": [
+      "items"
+     ],
+     "type": "object"
+    }
+   }
+  ],
+  "rpg-dice-mcp": [
+   {
+    "name": "roll",
+    "description": "Roll a generic dice expression (NdM\u00b1K). Use this for any non-system-specific roll: 2d6+1, 1d20, 3d8-2, d12. For The One Ring tests, prefer roll_tor_check which encodes the system rules.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "spec": {
+       "type": "string",
+       "description": "Dice expression, e.g. \"2d6+1\", \"1d20\", \"d12\", \"3d8-2\"."
+      }
+     },
+     "required": [
+      "spec"
+     ]
+    }
+   },
+   {
+    "name": "roll_tor_check",
+    "description": "Resolve a The One Ring check. Rolls the Feat die (d12) plus skill_rating \u00d7 Success dice (d6), interprets Eye/Gandalf special faces, applies weariness if set, and reports succeeds/margin against the TN. The Loremaster calls this for NPC/Loremaster-side rolls (per the dice-resolution skill). Player-side rolls are physical \u2014 the Loremaster only frames them.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "format": {
+       "type": "string",
+       "description": "Optional rendering style. When set, the response includes a `formatted` field with the result as a display-ready string. Values: \"html_tor\" (HTML with .fdie/.sdie span classes for the homelab CSS theme \u2014 use this from the OWUI Loremaster surface and the dice-roller web app), \"plain\" (no markup, for terminals/logs), \"markdown\" (emoji + bold for Discord/Slack), or \"none\" (default \u2014 no formatted field). The structured fields (feat_die, success_dice, etc.) are always present regardless of format.",
+       "enum": [
+        "none",
+        "html_tor",
+        "plain",
+        "markdown"
+       ]
+      },
+      "miserable": {
+       "type": "boolean",
+       "description": "When true, an Eye result sets MiserableEye in the response for Hope/Shadow bookkeeping."
+      },
+      "skill_rating": {
+       "type": "integer",
+       "description": "Rating of the relevant skill or attribute (>= 0). Determines Success dice count.",
+       "minimum": 0
+      },
+      "target_number": {
+       "type": "integer",
+       "description": "TN to meet or beat for success."
+      },
+      "weariness": {
+       "type": "boolean",
+       "description": "When true, Success die rolls of 1-3 are treated as 0."
+      }
+     },
+     "required": [
+      "skill_rating",
+      "target_number"
+     ]
+    }
+   },
+   {
+    "name": "roll_tor_combat",
+    "description": "Resolve a TOR combat attack roll. Thin wrapper over roll_tor_check using combat-flavored field names (attacker_skill / defender_tn). In TOR Strider Mode the player rolls most combat checks; use this when the Loremaster genuinely needs to roll for an NPC's offensive action.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "attacker_skill": {
+       "type": "integer",
+       "description": "Rating of the attacker's weapon skill (Sword, Spear, Bow, etc.). Success dice count.",
+       "minimum": 0
+      },
+      "defender_tn": {
+       "type": "integer",
+       "description": "Defender's effective Parry TN."
+      },
+      "format": {
+       "type": "string",
+       "description": "Optional rendering style. When set, the response includes a `formatted` field with the result as a display-ready string. Values: \"html_tor\" (HTML with .fdie/.sdie span classes for the homelab CSS theme \u2014 use this from the OWUI Loremaster surface and the dice-roller web app), \"plain\" (no markup, for terminals/logs), \"markdown\" (emoji + bold for Discord/Slack), or \"none\" (default \u2014 no formatted field). The structured fields (feat_die, success_dice, etc.) are always present regardless of format.",
+       "enum": [
+        "none",
+        "html_tor",
+        "plain",
+        "markdown"
+       ]
+      },
+      "miserable": {
+       "type": "boolean",
+       "description": "When true, Eye results trigger MiserableEye flag."
+      },
+      "weariness": {
+       "type": "boolean",
+       "description": "When true, attacker's Success dice 1-3 count as 0."
+      }
+     },
+     "required": [
+      "attacker_skill",
+      "defender_tn"
+     ]
+    }
+   },
+   {
+    "name": "tor_adjudicate",
+    "description": "Rule on HOW a One Ring situation resolves, before any dice are thrown. Returns who rolls, the Target Number, the Success dice count, and the hero's derived Weary/Miserable state \u2014 each computed from the Core Rules rather than recalled. Call this FIRST for any mechanical question or contested action, then roll_tor_check with the returned target_number and success_dice. Do not state a TN, a dice count, or who rolls without calling this: those values are computed here and are not reliably remembered.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "action": {
+       "type": "string",
+       "description": "What is being resolved. hero_skill/hero_attack/protection_test are rolled by the player; adversary_attack/eye_awareness/hidden_hazard/npc_wits are rolled by the Loremaster.",
+       "enum": [
+        "hero_skill",
+        "hero_attack",
+        "protection_test",
+        "adversary_attack",
+        "eye_awareness",
+        "hidden_hazard",
+        "npc_wits"
+       ]
+      },
+      "armour_protection": {
+       "type": "integer",
+       "description": "PROTECTION value of the armour worn (protection_test dice).",
+       "minimum": 0
+      },
+      "endurance": {
+       "type": "integer",
+       "description": "Hero's CURRENT Endurance. With load, derives Weary.",
+       "minimum": 0
+      },
+      "hero_parry": {
+       "type": "integer",
+       "description": "Target hero's Parry score (adversary_attack TN).",
+       "minimum": 0
+      },
+      "hope": {
+       "type": "integer",
+       "description": "Hero's current Hope. With shadow, derives Miserable.",
+       "minimum": 0
+      },
+      "hope_spent": {
+       "type": "integer",
+       "description": "Hope points the player spends on this roll. At most 1 is legal.",
+       "minimum": 0
+      },
+      "load": {
+       "type": "integer",
+       "description": "Hero's Load score. Weary when Endurance <= Load.",
+       "minimum": 0
+      },
+      "shadow": {
+       "type": "integer",
+       "description": "Hero's current Shadow. Miserable when Hope <= Shadow.",
+       "minimum": 0
+      },
+      "skill_rating": {
+       "type": "integer",
+       "description": "Rating of the relevant skill, attribute, or WEAPON PROFICIENCY. \"Sword rating 4\" goes here. Sets the Success dice count.",
+       "minimum": 0
+      },
+      "strength": {
+       "type": "integer",
+       "description": "The hero's STRENGTH ATTRIBUTE (a 1-8 character stat, not a weapon rating). REQUIRED for hero_attack: the TN is (20 - STRENGTH) + the target's Parry.",
+       "minimum": 0
+      },
+      "target_number": {
+       "type": "integer",
+       "description": "Explicit TN, when the situation does not derive one."
+      },
+      "target_parry": {
+       "type": "integer",
+       "description": "Parry rating of the enemy being attacked (hero_attack).",
+       "minimum": 0
+      },
+      "weapon_injury": {
+       "type": "integer",
+       "description": "protection_test ONLY: the Injury rating of the ADVERSARY's weapon, used as that test's TN. Not used for hero_attack, and not the hero's weapon proficiency (that is skill_rating).",
+       "minimum": 0
+      }
+     },
+     "required": [
+      "action"
+     ]
+    }
+   }
+  ],
+  "wiki-mcp": [
+   {
+    "name": "wiki_audit",
+    "description": "Audit the link-graph health of a domain. Returns hubs (most-linked-to pages), orphans (pages no one links to), and dangling wikilink targets that don't resolve to any existing page in any domain. Reports state; does NOT mutate. Call this at the end of a writing session \u2014 orphans are entities to weave in, dangling targets are entities to write next (or links to remove if the target was speculative).",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "domain": {
+       "type": "string",
+       "description": "Domain to audit (e.g., fiction, one-ring, homelab)."
+      }
+     },
+     "required": [
+      "domain"
+     ]
+    }
+   },
+   {
+    "name": "wiki_import",
+    "description": "Import a canonical Middle-earth place into the wiki ON DEMAND from Tolkien Gateway. Use this when wiki_search(domain=\"one-ring\", query=<place>) returns no hits for what looks like a real Tolkien place: call wiki_import with the term, then call wiki_lookup with the returned slug. \n\nReturns one of five statuses (read the `status` field and act accordingly):\n  - `imported`: page added AND visible locally; call wiki_lookup(domain=\"one-ring\", slug=<returned slug>) right away.\n  - `imported_pending`: page added to the remote wiki but the local cache has not synced yet. Wait ~30s and call wiki_lookup. Do NOT name canonical geography for this place until the lookup succeeds.\n  - `not_found`: Tolkien Gateway has no page for this term. The place is non-canonical OR misspelled. DO NOT proceed to name distances/directions; ask the player to clarify or describe vaguely.\n  - `disambiguation`: multiple TG pages match. Ask the player which they meant, then re-call wiki_import.\n  - `error`: import pipeline failed (network/script). Describe the journey vaguely without naming canonical geography.\n\nDO NOT call this tool for the same term twice in the same session \u2014 check your tool history first. DO NOT call this for places that are obviously player-invented (the player's hometown, etc.).",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "domain": {
+       "type": "string",
+       "description": "Wiki domain to write into. Default: \"one-ring\"."
+      },
+      "slug": {
+       "type": "string",
+       "description": "Optional local slug override. Default: slugify(term)."
+      },
+      "term": {
+       "type": "string",
+       "description": "Tolkien Gateway page name (e.g. \"Dunland\", \"Lonely Mountain\", \"Weathertop\"). Match TG's capitalization when possible."
+      },
+      "type": {
+       "type": "string",
+       "description": "Wiki entry type. Default: \"entity\". One of: entity, concept, source, synthesis.",
+       "enum": [
+        "entity",
+        "concept",
+        "source",
+        "synthesis"
+       ]
+      }
+     },
+     "required": [
+      "term"
+     ]
+    }
+   },
+   {
+    "name": "wiki_list_domains",
+    "description": "List all domains in the wiki (one-ring, homelab, fiction, etc.). Useful when the caller doesn't know which domain a topic lives in.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {}
+    }
+   },
+   {
+    "name": "wiki_lookup",
+    "description": "Fetch a single wiki page by its (domain, slug). Returns the page's frontmatter, body, and metadata. Use this when you know the exact page you need. For finding pages by content/keywords, use wiki_search instead.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "domain": {
+       "type": "string",
+       "description": "Wiki domain, e.g. \"one-ring\" or \"homelab\"."
+      },
+      "slug": {
+       "type": "string",
+       "description": "Page slug (filename without .md), e.g. \"del\" or \"mcp-client\"."
+      }
+     },
+     "required": [
+      "domain",
+      "slug"
+     ]
+    }
+   },
+   {
+    "name": "wiki_neighbors",
+    "description": "Return all pages directly linked from the given page via [[wikilink]] syntax. Handles in-domain, cross-section, and cross-domain links. Only RESOLVED links appear (broken wikilinks are silently skipped).",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "domain": {
+       "type": "string"
+      },
+      "slug": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "domain",
+      "slug"
+     ]
+    }
+   },
+   {
+    "name": "wiki_search",
+    "description": "Search a domain's wiki pages by keyword. Matches against aliases, tags, slug, and body \u2014 case-insensitive. Returns pages sorted by relevance (alias/tag hits > slug hits > body hits). Returns the metadata of each hit; call wiki_lookup to retrieve full page bodies.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "domain": {
+       "type": "string",
+       "description": "Wiki domain to search within."
+      },
+      "query": {
+       "type": "string",
+       "description": "Keyword or phrase to match."
+      }
+     },
+     "required": [
+      "domain",
+      "query"
+     ]
+    }
+   },
+   {
+    "name": "wiki_write",
+    "description": "Create or overwrite a wiki page. Writes to the local mount; a git-sync sidecar in the deploy pod commits + pushes on a separate schedule. WILL REFUSE: writes under raw/ (immutable per AGENTS.md), invalid domain/slug (must be lowercase-kebab), or invalid type (must be entities/concepts/sources/syntheses). Provide the FULL page body including the YAML frontmatter. The response includes a `dangling` list \u2014 any [[wikilink]] in the body you just wrote that doesn't resolve to an existing page in any domain. Each entry is either a target you should write next (offer the author a stub) or a slug typo / speculative reference that should be pruned (offer the author the prune). Resolve before moving on so the link graph stays clean. It also includes `schema_violations` -- every way the page breaks the domain's page schema (missing frontmatter `type`, missing required frontmatter keys, missing required `## ` sections, type/domain not matching the path). The page IS written either way; if the list is non-empty, rewrite the page to fix every entry before moving on. `schema_checked: false` means no schema was available, not that the page is clean.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "body": {
+       "type": "string",
+       "description": "Full page content including YAML frontmatter at the top."
+      },
+      "domain": {
+       "type": "string",
+       "description": "Target domain, e.g. \"one-ring\"."
+      },
+      "slug": {
+       "type": "string",
+       "description": "Slug (filename without .md). Must be lowercase-kebab."
+      },
+      "type": {
+       "type": "string",
+       "description": "Page type directory: entities, concepts, sources, or syntheses.",
+       "enum": [
+        "entities",
+        "concepts",
+        "sources",
+        "syntheses"
+       ]
+      }
+     },
+     "required": [
+      "domain",
+      "type",
+      "slug",
+      "body"
+     ]
+    }
+   }
+  ],
+  "tor-character-mcp": [
+   {
+    "name": "tor_calling_template",
+    "description": "Return the full template for one Calling: name, description, body text, the 2 added Favoured Skills, and the Shadow Path that this Calling steers the hero's corruption toward.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "calling": {
+       "type": "string",
+       "description": "Calling slug from tor_list_callings, e.g. \"scholar\"."
+      }
+     },
+     "required": [
+      "calling"
+     ]
+    }
+   },
+   {
+    "name": "tor_create_starting_hero",
+    "description": "Build a fully-resolved TOR 2e starting hero from player elections. Validates that the chosen Distinctive Features are offered by the culture, that Favoured Skill allocations sum to exactly 10 and only target Favoured Skills (culture's 6 + calling's 2), that the Combat Proficiency primary is one of the culture's options, and that no skill exceeds rank 6. Returns the hero as structured JSON in `hero` plus a `formatted` field rendered per the `format` arg (defaults to markdown for chat). Use this instead of asking the LLM to compose a character \u2014 the LLM cannot get the rules right consistently. Workflow: call tor_culture_template first to read each skill's base rank, then plan an allocation where base+alloc never exceeds 6. The LLM's job is to talk to the player about the elections; THIS TOOL builds the sheet. Reply to the player by paraphrasing the `hero` JSON in your own words \u2014 the `formatted` field is a convenience for direct rendering and need not be copied verbatim.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "attribute_row": {
+       "type": "integer",
+       "description": "Row 1-6 from the culture's attribute table.",
+       "minimum": 1,
+       "maximum": 6
+      },
+      "blessing_attribute": {
+       "type": "string",
+       "description": "Strength|Heart|Wits when culture's blessing is player-choice.",
+       "enum": [
+        "Strength",
+        "Heart",
+        "Wits",
+        ""
+       ]
+      },
+      "calling": {
+       "type": "string",
+       "description": "Calling slug."
+      },
+      "combat_primary": {
+       "type": "string",
+       "description": "One of the culture's primary combat-proficiency choices."
+      },
+      "combat_secondary": {
+       "type": "string",
+       "description": "Player's choice of any other combat proficiency."
+      },
+      "culture": {
+       "type": "string",
+       "description": "Culture slug."
+      },
+      "distinctive_features": {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "description": "Exactly 2 features from the culture's offered list (verbatim, case-sensitive \u2014 copy from tor_culture_template.distinctive_features)."
+      },
+      "favoured_skill_allocations": {
+       "type": "object",
+       "description": "Map of skill name \u2192 extra ranks. Keys are the canonical UPPERCASE skill names (AWE, ENHEARTEN, PERSUADE, ATHLETICS, TRAVEL, STEALTH, AWARENESS, INSIGHT, SCAN, HUNTING, HEALING, EXPLORE, SONG, COURTESY, RIDDLE, CRAFT, BATTLE, LORE) but the server is case-insensitive. Only Favoured Skills (culture's 6 + calling's 2) may receive points. Must sum to exactly 10. Each final rank (culture base + alloc) capped at 6 \u2014 read tor_culture_template.skill_base_ranks before allocating.",
+       "additionalProperties": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 6
+       }
+      },
+      "format": {
+       "type": "string",
+       "description": "Rendering style for the optional `formatted` field. Default is \"markdown\" \u2014 produces a clean character sheet that renders well in OWUI chat. \"plain\" drops markup for terminals/logs. \"none\" omits the formatted field entirely (structured `hero` JSON is always returned).",
+       "default": "markdown",
+       "enum": [
+        "none",
+        "plain",
+        "markdown"
+       ]
+      },
+      "name": {
+       "type": "string",
+       "description": "The hero's name."
+      }
+     },
+     "required": [
+      "culture",
+      "calling",
+      "attribute_row",
+      "distinctive_features",
+      "favoured_skill_allocations",
+      "combat_primary",
+      "name"
+     ]
+    }
+   },
+   {
+    "name": "tor_culture_template",
+    "description": "Return the canonical starting block for one Heroic Culture: 6-row attribute table, 18-skill base ranks, Favoured Skill list, Combat Proficiency options, Distinctive Features, languages, Standard of Living, sample names, and cultural notes (e.g. 'Beset by Woe' for Elves). Values are verbatim from the rulebooks.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "culture": {
+       "type": "string",
+       "description": "Culture slug from tor_list_cultures, e.g. \"high-elves-of-rivendell\"."
+      }
+     },
+     "required": [
+      "culture"
+     ]
+    }
+   },
+   {
+    "name": "tor_list_callings",
+    "description": "List the six TOR 2e Callings (Captain, Champion, Messenger, Scholar, Treasure-Hunter, Warden). Each Calling adds 2 Favoured Skills on top of the culture's six and assigns the hero's Shadow Path.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {}
+    }
+   },
+   {
+    "name": "tor_list_cultures",
+    "description": "List the Heroic Cultures available for TOR 2e character creation. Returns slug + display name + source rulebook for each. Use the slug as the `culture` argument to other tools.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {}
+    }
+   }
+  ],
+  "sweep-mcp": [
+   {
+    "name": "run_sweep",
+    "description": "Trigger a model-testing sweep against the homelab ARC runner. Forwards to the n8n model-sweep-kickoff webhook, which dispatches the GHA workflow and files a tracking GitHub issue. Returns immediately with sweep_id + issue_url; the sweep itself runs for 5-90 minutes depending on the payload set. The tracking issue gets dual-summarize comments (local LLM + Claude) when the sweep completes. Single-sweep mutex enforced server-side: a second call while a sweep is in flight returns an error pointing at the in-flight run.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "model": {
+       "type": "string",
+       "description": "The ollama model tag to sweep (e.g. 'qwen3.6:35b', 'devstral:24b'). Must exist on the cluster's ollama service."
+      },
+      "payload": {
+       "type": "string",
+       "description": "Which benchmark payload(s) to run. 'all' (default) runs every payload (~1-2 hours); a single name like 'instruction_following' runs just that one (~5-15 min). Names match files in benchmarks/payloads/ in the model-testing repo."
+      },
+      "requester": {
+       "type": "string",
+       "description": "Free-form identifier for who/what asked. Surfaces in the tracking issue title. Default 'mcp:unknown'. LLMs should fill this in with something distinguishable, e.g. 'mcp:chat-session-2026-06-01'."
+      },
+      "runs": {
+       "type": "string",
+       "description": "Number of runs per (model, payload) pair. Default '1'. Higher values average out noise but multiply runtime."
+      }
+     },
+     "required": [
+      "model"
+     ]
+    }
+   }
+  ],
+  "tinysearch-mcp": [
+   {
+    "name": "get_current_datetime",
+    "description": "Return the current date and time in UTC. Call this first for time-sensitive questions, relative dates such as latest, this year, or last month, or before adding year/month/day context to a search query.",
+    "inputSchema": {
+     "properties": {},
+     "title": "get_current_datetime_toolArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "search",
+    "description": "Fast discovery for one to five independent items. Use one item for a simple lookup, multiple only for independent subquestions, and domains for hard source restrictions. Does not crawl or rerank.",
+    "inputSchema": {
+     "properties": {
+      "items": {
+       "anyOf": [
+        {
+         "items": {
+          "additionalProperties": true,
+          "type": "object"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "One to five items, each with query and optional positive domains.",
+       "title": "Items"
+      },
+      "query": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Deprecated single-query compatibility; prefer items.",
+       "title": "Query"
+      },
+      "domains": {
+       "anyOf": [
+        {
+         "items": {
+          "type": "string"
+         },
+         "type": "array"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "Deprecated; positive domains for the single-query compatibility form.",
+       "title": "Domains"
+      }
+     },
+     "title": "search_toolArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "scrape_urls",
+    "description": "Inspect one to five URL/query pairs. Each item has url and optional query; omit query or use '*' for page-order content, or provide a focused query describing needed evidence. Related links are navigation candidates; batch URLs only after selecting them. Returns each item's success or error independently.",
+    "inputSchema": {
+     "properties": {
+      "items": {
+       "description": "One to five items, each with url and optional query.",
+       "items": {
+        "additionalProperties": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        },
+        "type": "object"
+       },
+       "title": "Items",
+       "type": "array"
+      }
+     },
+     "required": [
+      "items"
+     ],
+     "title": "scrape_urls_toolArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "browser_navigate",
+    "description": "Open an exact URL in a live browser and return a view of the page. Call scrape_urls on this exact URL first -- most pages, including ordinary articles, are static, and scrape_urls reads them for a fraction of the cost of a browser. Reach for this tool only when that call actually came back thin, empty, or clearly incomplete, or the page needs a read-only interaction first (a cookie banner, a \"load more\" control, content that renders after load, a client-side search box) to reveal what was asked for. Not a discovery tool. find narrows what comes back to the matching nodes and their context, not the whole tree. Pass it unless you truly need the tree: a full page can be 50x larger. Then drive the same page with browser_act.",
+    "inputSchema": {
+     "properties": {
+      "url": {
+       "description": "Exact URL to open.",
+       "title": "Url",
+       "type": "string"
+      },
+      "find": {
+       "default": "",
+       "description": "Regex (case-insensitive) to return instead of the tree, e.g. 'click|submit'. Plain text that is not valid regex is matched as a literal substring, so ordinary words need no escaping.",
+       "title": "Find",
+       "type": "string"
+      },
+      "depth": {
+       "default": 0,
+       "description": "Unfiltered view only: max tree depth. 0 = configured default.",
+       "title": "Depth",
+       "type": "integer"
+      }
+     },
+     "required": [
+      "url"
+     ],
+     "title": "browser_navigate_toolArguments",
+     "type": "object"
+    }
+   },
+   {
+    "name": "browser_act",
+    "description": "One action on the page browser_navigate opened. look() reads it without touching it. click(target) / type(target, text, submit) act on a ref you saw in a returned view; never invent a ref or selector, never type credentials. wait_for(time | text | text_gone). tabs(tab_action, index). close() when done. All but close return a page view, so find narrows what comes back to the matching nodes and their context, not the whole tree. Pass it unless you truly need the tree: a full page can be 50x larger. Read-only steps revealing already-public content (pagination, expanding a section, a cookie banner) need no confirmation; real-world side effects do.",
+    "inputSchema": {
+     "properties": {
+      "action": {
+       "description": "look|click|type|wait_for|tabs|close",
+       "title": "Action",
+       "type": "string"
+      },
+      "target": {
+       "default": "",
+       "description": "click, type: element ref, e.g. 'e42'.",
+       "title": "Target",
+       "type": "string"
+      },
+      "text": {
+       "default": "",
+       "description": "type: text to enter. wait_for: text to await.",
+       "title": "Text",
+       "type": "string"
+      },
+      "submit": {
+       "default": false,
+       "description": "type: press Enter.",
+       "title": "Submit",
+       "type": "boolean"
+      },
+      "find": {
+       "default": "",
+       "description": "Regex (case-insensitive) to return instead of the tree, e.g. 'click|submit'. Plain text that is not valid regex is matched as a literal substring, so ordinary words need no escaping.",
+       "title": "Find",
+       "type": "string"
+      },
+      "depth": {
+       "default": 0,
+       "description": "Unfiltered view only: max tree depth. 0 = configured default.",
+       "title": "Depth",
+       "type": "integer"
+      },
+      "time": {
+       "default": 0.0,
+       "description": "wait_for: seconds.",
+       "title": "Time",
+       "type": "number"
+      },
+      "text_gone": {
+       "default": "",
+       "description": "wait_for: text to await disappearing.",
+       "title": "Text Gone",
+       "type": "string"
+      },
+      "tab_action": {
+       "default": "list",
+       "description": "tabs: list|new|select|close.",
+       "title": "Tab Action",
+       "type": "string"
+      },
+      "index": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "default": null,
+       "description": "tabs: index for select/close.",
+       "title": "Index"
+      }
+     },
+     "required": [
+      "action"
+     ],
+     "title": "browser_act_toolArguments",
+     "type": "object"
+    }
+   }
+  ]
+ }
+}
