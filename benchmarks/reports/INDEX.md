@@ -7,6 +7,9 @@ Newest first within each topic.
 
 OWUI v0.12 Tool Search and lazy skill loading, measured off/on against copies of prod presets on a throwaway OWUI. Harness: `benchmarks/owui-tool-search/run.py`; see `benchmarks/owui-tool-search/README.md`.
 
+- [2026-10-31 — tor-cultures before/after prompt fix](owui-tool-search/2026-10-31-tor-cultures-after-b/README.md)
+  the-one-ring prompt edits for the inline culture list. Dropping it (a) raised tool_search 4/10→8/10 but invented cultures
+  in 19/20 replies; keeping it as a guard + requiring the tool (b) raised 4/10→8/10 with real cultures only. (b) ships. (homelab#1885)
 - [2026-10-31 — tor-cultures](owui-tool-search/2026-10-31-tor-cultures/README.md)
   10-trial rerun of the one case Tool Search still lost: baseline 7/10, tool_search 4/10 (pooled 10/13 vs 4/13,
   p≈0.047). The case is flaky either way; the system prompt's inline culture list competes with the tool. (homelab#1871)
