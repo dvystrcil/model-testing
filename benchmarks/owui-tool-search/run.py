@@ -104,10 +104,11 @@ def called_tools(output, tools: set[str] | None = None) -> list[str]:
     return names
 
 
-def score(names: list[str], expect: list[str]) -> dict:
+def score(names: list[str], expect: list[str], none_ok: bool = False) -> dict:
     domain = [n for n in names if n not in META_TOOLS]
     first = domain[0] if domain else None
-    ok = (first is None) if not expect else (first in expect)
+    # none_ok: making no domain call is also right (e.g. asking the player to roll)
+    ok = (first is None) if not expect else (first in expect or (none_ok and first is None))
     return {"ok": ok, "first_domain_tool": first, "used_search_tools": "search_tools" in names,
             "n_tool_calls": len(names)}
 
@@ -365,7 +366,8 @@ def cmd_bench(a):
                     res = run_turn(token, c["preset"], c["prompt"], f"bench {arm} {c['id']} t{trial}", a.timeout)
                     rec = {"arm": arm, "case": c["id"], "preset": c["preset"], "trial": trial, "expect": c["expect"],
                            "overhead": bool(c.get("overhead")),
-                           **res, **score(called_tools(res.get("output"), preset_tools(c["preset"])), c["expect"])}
+                           **res, **score(called_tools(res.get("output"), preset_tools(c["preset"])), c["expect"],
+                                   c.get("none_ok", False))}
                     rec["called"] = called_tools(res.get("output"), preset_tools(c["preset"]))
                     f.write(json.dumps(rec) + "\n")
                     f.flush()
@@ -381,12 +383,14 @@ def cmd_bench(a):
 def cmd_rescore(a):
     out = Path(a.report) / "raw/results.jsonl"
     expect = {c["id"]: c["expect"] for c in cases()["cases"]}
+    none_ok = {c["id"]: c.get("none_ok", False) for c in cases()["cases"]}
     records = []
     for line in out.read_text().splitlines():
         r = json.loads(line)
         r["expect"] = expect.get(r["case"], r["expect"])  # cases.json is the current truth
+        r["none_ok"] = none_ok.get(r["case"], False)
         r["called"] = called_tools(r.get("output"), preset_tools(r["preset"]))
-        r.update(score(r["called"], r["expect"]))
+        r.update(score(r["called"], r["expect"], r["none_ok"]))
         records.append(r)
     (Path(a.report) / "summary.md").write_text(summarize(records) + "\n")
     print(summarize(records))
