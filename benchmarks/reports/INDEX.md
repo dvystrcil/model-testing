@@ -3,6 +3,15 @@
 Auto-curated catalog of all evaluation reports in this directory.
 Newest first within each topic.
 
+## owui-tool-search
+
+OWUI v0.12 Tool Search and lazy skill loading, measured off/on against copies of prod presets on a throwaway OWUI. Harness: `benchmarks/owui-tool-search/run.py`; see `benchmarks/owui-tool-search/README.md`.
+
+- [2026-10-30 — v0.12.5](owui-tool-search/2026-10-30-v0.12.5/README.md)
+  meal-time (107 MCP tools) and the-one-ring (21) × baseline / tool_search / lazy / both / pinned, 3 trials →
+  **neither turned on**: Tool Search cuts meal-time's prompt 63% and fixes its made-up Mealie tool names, but drops
+  the-one-ring from 11/12 to 6/12 (pinned 8/12), and it's global; lazy saves ≤4k tokens and costs the Kroger case. (homelab#1871)
+
 ## owui-visual-tools
 
 OWUI in-chat rendering tools (Inline Visualizer, OpenUI) × local models. Harness: `bin/owui-visual-tools-eval.py`; see `benchmarks/owui-visual-tools/README.md`.

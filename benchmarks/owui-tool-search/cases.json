@@ -1,0 +1,139 @@
+{
+ "_note": "Copies of two prod presets. meal-time: builtins on + mealie (70) + kroger (32) + tinysearch (5) MCP tools, the largest tool surface in prod. the-one-ring: builtins on + 21 MCP tools and a 12k-char skill. `expect` = acceptable FIRST domain tool; [] = no domain tool should be called. `overhead: true` cases ask for a one-word reply: one LLM call, so their input_tokens is the fixed per-turn prompt cost.",
+ "presets": [
+  "meal-time",
+  "the-one-ring"
+ ],
+ "cases": [
+  {
+   "id": "mt_overhead",
+   "preset": "meal-time",
+   "overhead": true,
+   "prompt": "Reply with exactly OK and nothing else. Do not call any tools.",
+   "expect": []
+  },
+  {
+   "id": "mt_mealie_search",
+   "preset": "meal-time",
+   "prompt": "Do we have any chicken thigh recipes in our Mealie library?",
+   "expect": [
+    "mealie-mcp_get_recipes"
+   ]
+  },
+  {
+   "id": "mt_todays_plan",
+   "preset": "meal-time",
+   "prompt": "What's on our meal plan for today?",
+   "expect": [
+    "mealie-mcp_get_todays_mealplan",
+    "mealie-mcp_get_all_mealplans"
+   ]
+  },
+  {
+   "id": "mt_import_url",
+   "preset": "meal-time",
+   "prompt": "Import this recipe into Mealie: https://www.allrecipes.com/recipe/23600/worlds-best-lasagna/",
+   "expect": [
+    "mealie-mcp_import_recipe_from_url"
+   ]
+  },
+  {
+   "id": "mt_shopping_list",
+   "preset": "meal-time",
+   "prompt": "Which shopping lists do we have in Mealie?",
+   "expect": [
+    "mealie-mcp_get_shopping_lists"
+   ]
+  },
+  {
+   "id": "mt_kroger_price",
+   "preset": "meal-time",
+   "prompt": "How much is a gallon of whole milk at my Kroger store?",
+   "expect": [
+    "kroger-mcp_search_products",
+    "kroger-mcp_get_preferred_location",
+    "kroger-mcp_bulk_search_products",
+    "kroger-mcp_get_user_zip_code",
+    "kroger-mcp_search_locations"
+   ]
+  },
+  {
+   "id": "mt_kroger_cart",
+   "preset": "meal-time",
+   "prompt": "What's currently in my Kroger cart?",
+   "expect": [
+    "kroger-mcp_view_current_cart"
+   ]
+  },
+  {
+   "id": "mt_web_recipe",
+   "preset": "meal-time",
+   "prompt": "Search the web for a highly rated shakshuka recipe.",
+   "expect": [
+    "tinysearch-mcp_search",
+    "search_web"
+   ]
+  },
+  {
+   "id": "mt_no_tool_units",
+   "preset": "meal-time",
+   "prompt": "How many tablespoons are in a quarter cup?",
+   "expect": []
+  },
+  {
+   "id": "tor_overhead",
+   "preset": "the-one-ring",
+   "overhead": true,
+   "prompt": "Reply with exactly OK and nothing else. Do not call any tools.",
+   "expect": []
+  },
+  {
+   "id": "tor_roll",
+   "preset": "the-one-ring",
+   "prompt": "Roll 3d6 for me.",
+   "expect": [
+    "rpg-dice-mcp_roll"
+   ]
+  },
+  {
+   "id": "tor_skill_check",
+   "preset": "the-one-ring",
+   "prompt": "My hero attempts an Athletics test to climb the cliff. Athletics rating 2, Strength TN 14, not Weary or Miserable. Resolve it.",
+   "expect": [
+    "rpg-dice-mcp_roll_tor_check",
+    "rpg-dice-mcp_tor_adjudicate"
+   ]
+  },
+  {
+   "id": "tor_wiki",
+   "preset": "the-one-ring",
+   "prompt": "Look up Rivendell in the wiki and tell me what it says.",
+   "expect": [
+    "wiki-mcp_wiki_search",
+    "wiki-mcp_wiki_lookup"
+   ]
+  },
+  {
+   "id": "tor_cultures",
+   "preset": "the-one-ring",
+   "prompt": "Which heroic cultures can I pick for a new player-hero?",
+   "expect": [
+    "tor-character-mcp_tor_list_cultures",
+    "tor-character-mcp_tor_culture_template"
+   ]
+  }
+ ],
+ "preset_servers": {
+  "meal-time": [
+   "mealie-mcp",
+   "kroger-mcp",
+   "tinysearch-mcp"
+  ],
+  "the-one-ring": [
+   "rpg-dice-mcp",
+   "wiki-mcp",
+   "tor-character-mcp",
+   "tinysearch-mcp"
+  ]
+ }
+}
