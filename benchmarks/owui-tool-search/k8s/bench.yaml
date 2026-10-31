@@ -1,0 +1,105 @@
+# Throwaway OWUI for the owui-tool-search bench (homelab#1871 AC2).
+# NOT GitOps: applied by run.py `up`, deleted by `down` (the whole namespace).
+# ConfigMaps `stub-mcp`, `patch-middleware` and Secret `owui-bench` are created
+# by run.py from local files / the prod copy, so nothing secret is in git.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: owui-bench
+  labels:
+    purpose: bench
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stub-mcp
+  namespace: owui-bench
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: stub-mcp}
+  template:
+    metadata:
+      labels: {app: stub-mcp}
+    spec:
+      containers:
+        - name: stub-mcp
+          image: ghcr.io/open-webui/open-webui:v0.12.5
+          command: ["python3", "/config/stub_mcp.py", "/config/tools.lock.json"]
+          ports: [{containerPort: 8080}]
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8080}
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+            limits: {memory: 1Gi}
+          volumeMounts:
+            - {name: config, mountPath: /config}
+      volumes:
+        - name: config
+          configMap: {name: stub-mcp}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stub-mcp
+  namespace: owui-bench
+spec:
+  selector: {app: stub-mcp}
+  ports: [{port: 8080, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: owui-bench
+  namespace: owui-bench
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: owui-bench}
+  template:
+    metadata:
+      labels: {app: owui-bench}
+    spec:
+      containers:
+        - name: open-webui
+          image: ghcr.io/open-webui/open-webui:v0.12.5
+          # Same tool-name repair hot-patch prod runs (homelab#1152), so tool
+          # dispatch matches prod. index/css patches are UI-only and skipped.
+          command: ["/bin/bash", "-c"]
+          args: ["python3 /scripts/patch-middleware.py; exec bash /app/backend/start.sh"]
+          env:
+            - name: WEBUI_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: owui-bench, key: webui-secret-key}}
+            - {name: OLLAMA_BASE_URL, value: "http://ollama.ollama.svc.cluster.local:80"}
+            - {name: ENABLE_OPENAI_API, value: "False"}
+            - {name: ENABLE_SIGNUP, value: "True"}
+            - {name: RAG_EMBEDDING_ENGINE, value: "ollama"}
+            - {name: AIOHTTP_CLIENT_TIMEOUT, value: "1800"}
+            - {name: CHAT_RESPONSE_MAX_TOOL_CALL_ITERATIONS, value: "1000"}
+          ports: [{containerPort: 8080}]
+          readinessProbe:
+            httpGet: {path: /health, port: 8080}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 250m, memory: 1Gi}
+            limits: {memory: 4Gi}
+          volumeMounts:
+            - {name: data, mountPath: /app/backend/data}
+            - {name: patch, mountPath: /scripts/patch-middleware.py, subPath: patch-middleware.py}
+      volumes:
+        # emptyDir survives a container restart (run.py restarts the container
+        # after seeding config) but not pod deletion: one bench, one DB.
+        - name: data
+          emptyDir: {}
+        - name: patch
+          configMap: {name: patch-middleware}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: owui-bench
+  namespace: owui-bench
+spec:
+  selector: {app: owui-bench}
+  ports: [{port: 8080, targetPort: 8080}]

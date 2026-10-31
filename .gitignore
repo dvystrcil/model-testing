@@ -6,3 +6,6 @@ benchmarks/__pycache__/
 # Lands in benchmarks/results/ for staging runs, or in any report's raw/
 # subdir when invoked with --report.
 **/.last_result
+
+# owui-tool-search bench: admin token + test user id for the namespace's life
+benchmarks/owui-tool-search/.bench-state.json
