@@ -7,10 +7,14 @@ Newest first within each topic.
 
 OWUI v0.12 Tool Search and lazy skill loading, measured off/on against copies of prod presets on a throwaway OWUI. Harness: `benchmarks/owui-tool-search/run.py`; see `benchmarks/owui-tool-search/README.md`.
 
+- [2026-10-31 — tor-cultures](owui-tool-search/2026-10-31-tor-cultures/README.md)
+  10-trial rerun of the one case Tool Search still lost: baseline 7/10, tool_search 4/10 (pooled 10/13 vs 4/13,
+  p≈0.047). The case is flaky either way; the system prompt's inline culture list competes with the tool. (homelab#1871)
 - [2026-10-30 — v0.12.5](owui-tool-search/2026-10-30-v0.12.5/README.md)
-  meal-time (107 MCP tools) and the-one-ring (21) × baseline / tool_search / lazy / both / pinned, 3 trials →
-  **neither turned on**: Tool Search cuts meal-time's prompt 63% and fixes its made-up Mealie tool names, but drops
-  the-one-ring from 11/12 to 6/12 (pinned 8/12), and it's global; lazy saves ≤4k tokens and costs the Kroger case. (homelab#1871)
+  meal-time (107 MCP tools) and the-one-ring (21) × baseline / tool_search / lazy / both / pinned, 3 trials.
+  **Corrected 2026-10-31** (skill check re-scored: the dice skill forbids rolling the player's dice) →
+  Tool Search: meal-time prompt −63% and made-up Mealie tool names gone; the-one-ring 12/12 → 9/12, all on cultures.
+  Lazy: ≤4k tokens saved; costs the Kroger case and rolls the player's dice. (homelab#1871)
 
 ## owui-visual-tools
 

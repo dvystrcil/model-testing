@@ -87,6 +87,14 @@ class ScoreTest(unittest.TestCase):
         self.assertTrue(ots.score(["view_skill"], [])["ok"])
         self.assertFalse(ots.score(["tinysearch-mcp_search"], [])["ok"])
 
+    def test_none_ok_accepts_no_domain_call(self):
+        # the-one-ring's dice skill: "Never roll the player's dice for them."
+        # Asking the player to roll is the right answer to the hero's own test.
+        expect = ["rpg-dice-mcp_tor_adjudicate"]
+        self.assertTrue(ots.score([], expect, none_ok=True)["ok"])
+        self.assertTrue(ots.score(["rpg-dice-mcp_tor_adjudicate"], expect, none_ok=True)["ok"])
+        self.assertFalse(ots.score(["rpg-dice-mcp_roll_tor_check"], expect, none_ok=True)["ok"])
+
     def test_no_call_on_a_tool_case_fails(self):
         self.assertFalse(ots.score([], ["rpg-dice-mcp_roll"])["ok"])
 

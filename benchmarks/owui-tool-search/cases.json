@@ -1,5 +1,5 @@
 {
- "_note": "Copies of two prod presets. meal-time: builtins on + mealie (70) + kroger (32) + tinysearch (5) MCP tools, the largest tool surface in prod. the-one-ring: builtins on + 21 MCP tools and a 12k-char skill. `expect` = acceptable FIRST domain tool; [] = no domain tool should be called. `overhead: true` cases ask for a one-word reply: one LLM call, so their input_tokens is the fixed per-turn prompt cost.",
+ "_note": "Copies of two prod presets. meal-time: builtins on + mealie (70) + kroger (32) + tinysearch (5) MCP tools, the largest tool surface in prod. the-one-ring: builtins on + 21 MCP tools and a 12k-char skill. `expect` = acceptable FIRST domain tool; [] = no domain tool should be called. `overhead: true` cases ask for a one-word reply: one LLM call, so their input_tokens is the fixed per-turn prompt cost. `none_ok: true` = making no domain call is also right.",
  "presets": [
   "meal-time",
   "the-one-ring"
@@ -100,9 +100,10 @@
    "preset": "the-one-ring",
    "prompt": "My hero attempts an Athletics test to climb the cliff. Athletics rating 2, Strength TN 14, not Weary or Miserable. Resolve it.",
    "expect": [
-    "rpg-dice-mcp_roll_tor_check",
     "rpg-dice-mcp_tor_adjudicate"
-   ]
+   ],
+   "none_ok": true,
+   "_why": "The preset's dice skill: 'The player rolls their own physical dice for their hero's actions ... Never roll the player's dice for them.' So asking the player to roll (optionally after tor_adjudicate sets the test) is right; roll_tor_check is a rule break."
   },
   {
    "id": "tor_wiki",
