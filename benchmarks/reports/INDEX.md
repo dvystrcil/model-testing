@@ -7,6 +7,9 @@ Newest first within each topic.
 
 OWUI v0.12 Tool Search and lazy skill loading, measured off/on against copies of prod presets on a throwaway OWUI. Harness: `benchmarks/owui-tool-search/run.py`; see `benchmarks/owui-tool-search/README.md`.
 
+- [2026-11-01 — tor-cultures after the 11-culture prompt](owui-tool-search/2026-11-01-tor-cultures-11/README.md)
+  Re-run after homelab#1893 grew the guard list 7→11: baseline 8/10, tool_search 10/10 (no significant change), every
+  reply named all 11 real cultures and nothing else. Note: count from `output`, `reply` is the last 400 chars. (homelab#1159)
 - [2026-10-31 — tor-cultures before/after prompt fix](owui-tool-search/2026-10-31-tor-cultures-after-b/README.md)
   the-one-ring prompt edits for the inline culture list. Dropping it (a) raised tool_search 4/10→8/10 but invented cultures
   in 19/20 replies; keeping it as a guard + requiring the tool (b) raised 4/10→8/10 with real cultures only. (b) ships. (homelab#1885)
