@@ -215,3 +215,14 @@ models:
 
   # 12.1B params, BF16, 24.3 GB. capabilities: completion,tools,thinking
   #- name: hf.co/JetBrains/Mellum2.1-12B-A2.5B-Thinking-GGUF:BF16
+
+  # --- Added by weekly candidate discovery (2026-11-01) ------------------
+  # Each of these was pulled, generated, and unloaded cleanly on
+  # max-01 before this PR was opened. Pre-flight proves it RUNS;
+  # the sweep is what decides whether it is any good.
+
+  # 7.52B params, BF16, 16.0 GB. capabilities: tools,completion,vision,audio
+  - name: hf.co/unsloth/NVIDIA-Nemotron-3.5-Bolt-E4B-GGUF:BF16
+
+  # 39.8B params, Q8_0, 42.3 GB. capabilities: tools,thinking,completion
+  - name: hf.co/unsloth/flint-GGUF:Q8_0

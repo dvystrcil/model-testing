@@ -15,6 +15,10 @@
     "reason": "done_reason=length",
     "verdict": "OK"
   },
+  "hf.co/jialinyyzz/humanizer:BF16": {
+    "reason": "done_reason=length; removed from ollama (rejected, and this pre-flight pulled it)",
+    "verdict": "REJECT"
+  },
   "hf.co/openbmb/MiniCPM-V-4.7-35B-A3B-gguf:Q8_0": {
     "reason": "done_reason=stop",
     "verdict": "OK"
@@ -27,12 +31,20 @@
     "reason": "pull failed: HTTP Error 500: Internal Server Error",
     "verdict": "REJECT"
   },
+  "hf.co/unsloth/NVIDIA-Nemotron-3.5-Bolt-E4B-GGUF:BF16": {
+    "reason": "done_reason=stop",
+    "verdict": "OK"
+  },
   "hf.co/unsloth/Qwen-Image-2.1-GGUF:F16": {
     "reason": "generate failed: HTTP Error 500: Internal Server Error",
     "verdict": "REJECT"
   },
   "hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0": {
     "reason": "done_reason=stop",
+    "verdict": "OK"
+  },
+  "hf.co/unsloth/flint-GGUF:Q8_0": {
+    "reason": "done_reason=length",
     "verdict": "OK"
   }
 }
