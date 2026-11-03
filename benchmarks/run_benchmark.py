@@ -1006,6 +1006,24 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
     # Union of schema violations seen across all runs (None if validation not configured)
     all_schema_violations = list({v for r in raw_results for v in r.get("schema_violations", [])}) if validates else None
 
+    # Per-run outcomes (model-testing#144): the aggregates above are unions
+    # and means, which cannot say "clean on 2 of 3" or "run 2 truncated".
+    per_run = [
+        {
+            "schema_violations": list(r.get("schema_violations", [])),
+            "forbidden_violations": list(r["violations"]),
+            "done_reason": r.get("dr", ""),
+            "eval_count": r["ec"],
+            "eval_duration": r["ed"],
+            "total_duration": r["td"],
+        }
+        for r in raw_results
+    ]
+    clean_runs = sum(
+        1 for pr in per_run
+        if not pr["schema_violations"] and not pr["forbidden_violations"]
+    )
+
     prompt_tps = pec / (avg_ped / 1e9) if avg_ped > 0 else 0
     gen_tps    = avg_ec / (avg_ed / 1e9) if avg_ed > 0 else 0
 
@@ -1035,6 +1053,9 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         "eval_duration": round(avg_ed),
         "eval_duration_sd": round(stddev(eds)),
         "total_duration": round(avg_td),
+        "total_duration_sd": round(stddev(tds)),
+        "clean_runs": clean_runs,
+        "per_run": per_run,
         "prompt_tps": round(prompt_tps, 1),
         "gen_tps": round(gen_tps, 1),
         "facts_score": round(avg_facts, 4),
