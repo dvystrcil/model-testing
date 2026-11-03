@@ -386,6 +386,54 @@ def test_the_wall_clock_timeout_outlasts_the_token_cap():
     assert rb.NUM_PREDICT / slowest_tps < rb.HTTP_TIMEOUT
 
 
+def test_the_timeout_outlasts_a_payload_that_raises_its_own_cap():
+    """model-testing#145: a payload may raise num_predict (setdefault keeps
+    it), so the wall-clock must derive from the EFFECTIVE cap, not the
+    default. 12288 at the slowest observed 8.4 TPS is ~1463s -- past a fixed
+    600s, which would turn a visible done_reason=length back into a lost run
+    (the #98 class)."""
+    for cap in (rb.NUM_PREDICT, 8192, 12288, 32768):
+        p = rb.apply_generation_limit(
+            {"model": "x", "messages": [], "options": {"num_predict": cap}})
+        assert cap / rb.SLOWEST_TPS < rb.http_timeout_for(p), cap
+
+
+def test_the_timeout_never_drops_below_the_floor():
+    """A small cap must not shrink the hang detector below the old 600s:
+    prompt eval and load time don't scale with num_predict."""
+    p = rb.apply_generation_limit(
+        {"model": "x", "messages": [], "options": {"num_predict": 128}})
+    assert rb.http_timeout_for(p) >= rb.HTTP_TIMEOUT
+    assert rb.http_timeout_for({"model": "x"}) >= rb.HTTP_TIMEOUT
+
+
+def test_slowest_tps_is_no_faster_than_the_slowest_observed():
+    """8.4 TPS is the slowest rate seen on the 2026-10-30 surgical-edit
+    sweep (#139). A higher assumed rate under-sizes the timeout."""
+    assert rb.SLOWEST_TPS <= 8.4
+
+
+def test_ollama_chat_uses_the_per_payload_timeout(monkeypatch):
+    """Test the composition: the helper is useless if the request path
+    still passes the fixed constant."""
+    seen = {}
+
+    class _Resp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b"{}"
+
+    def fake_urlopen(req, timeout):
+        seen["timeout"] = timeout
+        return _Resp()
+
+    monkeypatch.setattr(rb.urllib.request, "urlopen", fake_urlopen)
+    p = {"model": "x", "messages": [], "options": {"num_predict": 12288}}
+    rb.ollama_chat("http://ollama", p)
+    assert seen["timeout"] == rb.http_timeout_for(p)
+    assert seen["timeout"] > 12288 / rb.SLOWEST_TPS
+
+
 def test_the_cap_covers_the_overwhelming_majority_of_real_responses():
     """Sized from 397 observed cells across two sweeps, not guessed:
     p95=3182, p99=4872, max=5654. 4096 truncates ~2%."""
