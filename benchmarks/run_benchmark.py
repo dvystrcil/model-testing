@@ -55,6 +55,23 @@ NUM_PREDICT = 4096
 # numbers cannot drift apart.
 HTTP_TIMEOUT = 600
 
+# model-testing#145: a payload may raise its own num_predict (setdefault in
+# apply_generation_limit keeps it), so a fixed 600s no longer outlasts every
+# cap -- 12288 tokens at the slowest observed 8.4 TPS is ~1463s. The timeout
+# is therefore derived per request from the EFFECTIVE cap. SLOWEST_TPS sits
+# below the slowest rate seen on the 2026-10-30 surgical-edit sweep (#139:
+# 8.4-11.8 TPS for the slow tier); TIMEOUT_MARGIN is the prompt-eval/variance
+# headroom the original 600 carried over 4096/10.5. HTTP_TIMEOUT stays as the
+# floor so a small cap never shrinks the hang detector.
+SLOWEST_TPS = 8.0
+TIMEOUT_MARGIN = 210
+
+
+def http_timeout_for(payload: dict) -> float:
+    """Wall-clock for one request, sized so the token cap binds first."""
+    cap = (payload.get("options") or {}).get("num_predict", NUM_PREDICT)
+    return max(HTTP_TIMEOUT, cap / SLOWEST_TPS + TIMEOUT_MARGIN)
+
 
 def apply_generation_limit(payload: dict,
                            num_predict: int = NUM_PREDICT) -> dict:
@@ -226,7 +243,7 @@ def ollama_chat(ollama_url: str, payload: dict) -> dict:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as r:
+    with urllib.request.urlopen(req, timeout=http_timeout_for(payload)) as r:
         return json.loads(r.read())
 
 
