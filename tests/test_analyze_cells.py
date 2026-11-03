@@ -363,6 +363,47 @@ class AbbreviationIsNotInventionTest(unittest.TestCase):
         self.assertEqual(
             mod.invented_models("`gemma4:26b` was fastest", self.REAL), [])
 
+    # ------------------- the run that failed: a dropped registry path
+    HF = "hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0"
+
+    def test_the_real_name_from_41558888769_is_not_invention(self):
+        """Sweep 41558888769 ran exactly one model, `hf.co/unsloth/...`. The
+        summariser wrote it without the registry path, and the gate failed a
+        correct analysis as invention. Dropping leading `/` path segments is
+        the same shortening as dropping trailing tag components."""
+        invented, ambiguous, abbrev = mod.classify_named_models(
+            "`Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0` changed a comment line",
+            [self.HF])
+        self.assertEqual(invented, [])
+        self.assertEqual(ambiguous, [])
+        self.assertEqual(
+            abbrev, {"Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0": self.HF})
+
+    def test_dropping_only_the_registry_host_is_an_abbreviation(self):
+        _, _, abbrev = mod.classify_named_models(
+            "`unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0` won", [self.HF])
+        self.assertEqual(
+            abbrev,
+            {"unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0": self.HF})
+
+    def test_a_path_cut_mid_segment_is_still_invention(self):
+        """Only WHOLE path segments may go. `oder-30B...` is not a name."""
+        invented, _, abbrev = mod.classify_named_models(
+            "`oder-30B-A3B-Instruct-GGUF:Q8_0` won", [self.HF])
+        self.assertEqual(abbrev, {})
+        self.assertEqual(invented, ["oder-30B-A3B-Instruct-GGUF:Q8_0"])
+
+    def test_the_same_repo_from_two_publishers_is_ambiguous(self):
+        """Two publishers' GGUFs of one model share a basename. Without the
+        path, the claim cannot be attributed to either."""
+        known = [self.HF,
+                 "hf.co/bartowski/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0"]
+        invented, ambiguous, abbrev = mod.classify_named_models(
+            "`Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0` won", known)
+        self.assertEqual(abbrev, {})
+        self.assertEqual(invented, [])
+        self.assertEqual(ambiguous, ["Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0"])
+
     # ------------------------------------- what must STILL be fatal
     def test_the_original_confabulation_is_still_invention(self):
         """qwen3.10:30b prefixes nothing. This is the case the guard exists

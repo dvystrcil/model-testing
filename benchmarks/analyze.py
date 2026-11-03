@@ -120,10 +120,19 @@ _COMPONENT_SEPARATORS = ("-", "_", ".", ":")
 
 def _prefix_hits(low: str, known_norm: dict[str, str]) -> list[str]:
     """Real models `low` abbreviates: it is their prefix and stops at a
-    component boundary, so `qwen3.6:3` never matches `qwen3.6:35b`."""
-    return [full for k, full in known_norm.items()
-            if k.startswith(low)
-            and k[len(low):len(low) + 1] in _COMPONENT_SEPARATORS]
+    component boundary, so `qwen3.6:3` never matches `qwen3.6:35b`.
+
+    Leading registry path segments may be dropped too, whole ones only:
+    sweep 41558888769's summariser wrote `Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0`
+    for `hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0`."""
+    def shortens(k: str) -> bool:
+        if k.startswith(low) and k[len(low):len(low) + 1] in _COMPONENT_SEPARATORS:
+            return True
+        tails = [k[i + 1:] for i, c in enumerate(k) if c == "/"]
+        return any(t == low or (t.startswith(low) and
+                                t[len(low):len(low) + 1] in _COMPONENT_SEPARATORS)
+                   for t in tails)
+    return [full for k, full in known_norm.items() if shortens(k)]
 
 
 def classify_named_models(analysis: str, known: list[str],
