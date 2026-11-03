@@ -497,3 +497,58 @@ if __name__ == "__main__":
             failed += 1
     print(f"\n{passed} passed, {failed} failed")
     sys.exit(1 if failed else 0)
+
+
+# ---------------------------------------------------------------------------
+# Per-run outcomes (model-testing#144).
+#
+# run_one used to collapse a cell's runs into unions/sets/means, so no JSONL
+# could say "clean on 2 of 3" or "run 2 was truncated"; the 2026-10-30 report
+# had to scrape GHA logs to rebuild that.
+# ---------------------------------------------------------------------------
+
+def _fake_run(schema=(), violations=(), dr="stop", ec=100, ed=10**9, td=2 * 10**9):
+    return {"pec": 50, "ped": 10**8, "ec": ec, "ed": ed, "td": td, "dr": dr,
+            "facts_score": 1.0, "hits": [], "misses": [],
+            "violations": list(violations), "schema_violations": list(schema),
+            "content": "ok"}
+
+
+def _run_cell(monkeypatch, fakes):
+    it = iter(fakes)
+    monkeypatch.setattr(rb, "run_once", lambda *a, **k: next(it))
+    spec = {"name": "p", "payload": {"messages": []},
+            "validate": {"type": "json_parse"}}
+    return rb.run_one(spec, "http://x", "m", len(fakes), 0, False)
+
+
+def test_one_violating_run_of_three_yields_two_clean(monkeypatch):
+    row = _run_cell(monkeypatch, [
+        _fake_run(),
+        _fake_run(schema=["bad-key"], dr="length", ec=4096, td=5 * 10**9),
+        _fake_run(),
+    ])
+    assert row["clean_runs"] == 2
+    assert [r["schema_violations"] for r in row["per_run"]] == [[], ["bad-key"], []]
+    assert row["per_run"][1]["done_reason"] == "length"
+    assert row["per_run"][1]["eval_count"] == 4096
+    assert row["per_run"][1]["total_duration"] == 5 * 10**9
+    # Aggregates unchanged (analyze.py reads these).
+    assert row["schema_violations"] == ["bad-key"]
+    assert row["done_reasons"] == ["length", "stop"]
+
+
+def test_a_forbidden_term_alone_makes_a_run_unclean(monkeypatch):
+    row = _run_cell(monkeypatch, [_fake_run(violations=["kubectl apply"]), _fake_run()])
+    assert row["clean_runs"] == 1
+    assert row["per_run"][0]["forbidden_violations"] == ["kubectl apply"]
+    assert row["per_run"][1]["forbidden_violations"] == []
+
+
+def test_per_run_entries_carry_every_field_and_total_duration_has_an_sd(monkeypatch):
+    row = _run_cell(monkeypatch, [_fake_run(td=2 * 10**9), _fake_run(td=4 * 10**9)])
+    assert set(row["per_run"][0]) == {"schema_violations", "forbidden_violations",
+                                      "done_reason", "eval_count",
+                                      "eval_duration", "total_duration"}
+    assert row["total_duration_sd"] == round(rb.stddev([2 * 10**9, 4 * 10**9]))
+    assert row["total_duration_sd"] > 0
