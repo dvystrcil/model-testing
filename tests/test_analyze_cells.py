@@ -380,11 +380,12 @@ class AbbreviationIsNotInventionTest(unittest.TestCase):
             abbrev, {"Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0": self.HF})
 
     def test_dropping_only_the_registry_host_is_an_abbreviation(self):
-        _, _, abbrev = mod.classify_named_models(
+        """models_in_text reports the basename, so the key is the bare repo;
+        what matters is that it resolves to the real model, not invention."""
+        invented, _, abbrev = mod.classify_named_models(
             "`unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0` won", [self.HF])
-        self.assertEqual(
-            abbrev,
-            {"unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0": self.HF})
+        self.assertEqual(invented, [])
+        self.assertEqual(list(abbrev.values()), [self.HF])
 
     def test_a_path_cut_mid_segment_is_still_invention(self):
         """Only WHOLE path segments may go. `oder-30B...` is not a name."""
