@@ -1,0 +1,9 @@
+#!/bin/bash
+# dry-run shim: intercept GitHub writes, pass reads through
+LOG=$SCRATCH/runs/${RUN_ID:-x}.gh-writes.log
+a="$*"
+if [[ "$a" =~ (issue|pr)\ (create|edit|comment|close|reopen|delete)|label\ (create|edit|delete)|project\ item|api.*-X\ *(POST|PATCH|PUT|DELETE)|api.*--method ]]; then
+  { echo "=== $(date +%T) gh $a"; for ((i=1;i<=$#;i++)); do arg="${!i}"; if [[ "$arg" == --body-file || "$arg" == -F ]]; then j=$((i+1)); f="${!j}"; [[ "$f" == - ]] && cat || cat "$f" 2>/dev/null; fi; done; } >> "$LOG"
+  echo "https://github.com/dvystrcil/homelab/issues/99999"; exit 0
+fi
+exec $REAL_GH "$@"

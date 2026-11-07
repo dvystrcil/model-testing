@@ -1,0 +1,72 @@
+[dvystrcil/obico] Add mid-print failure notification to Obico integration  (model=qwen3-coder-next:latest, 29s, lane=claude)
+## Why
+Obico currently monitors print status via Moonraker/OctoPrint APIs, but does not notify when a print fails mid-way. A mid-print failure (e.g., filament runout, nozzle jam, power loss) leaves the print incomplete without any alert, requiring manual inspection or post-run checks. This is a reliability gap for unattended printing.
+
+## What we know
+- The Obico integration is deployed via dvystrcil/obico Kubernetes manifests (base/server-deployment.yaml, base/tasks-deployment.yaml). It connects to Moonraker/OctoPrint APIs to fetch print status.
+- The obico-docker repo builds images from upstream `TheSpaghettiDetective/obico-server` with local patches (obico-docker/.github/workflows/build.yaml).
+- No existing issue in dvystrcil/obico or dvystrcil/homelab explicitly tracks mid-print failure alerts.
+- Context from homelab/architecture/secret-scanning.md and homelab/issues/38 confirms cluster-resident MCP services are expected to expose status + audit + queue control, but alerting on failure states is not yet implemented.
+
+## Acceptance criteria
+- [ ] **AC1.** When a print transitions from "printing" to a terminal failure state (e.g., error, cancelled, failed) within 60 seconds, Obico sends an email or push notification (via configured SMTP or Obico cloud webhook) to the user.
+- [ ] **AC2.** The notification includes the print job name, estimated completion time at failure, and a link to the Obico UI job details page.
+- [ ] **AC3.** Mid-print failure notifications do not fire for intentional cancellations initiated by the user (i.e., distinguish between user-initiated cancel and system/device errors).
+
+## Lane
+claude — requires design decisions: which failure states qualify, how to detect them reliably from Moonraker/OctoPrint APIs, and whether to use Obico's built-in notification channels or integrate with a homelab-wide alerting system (e.g., Prometheus Alertmanager + n8n).
+
+## Related
+- https://github.com/dvystrcil/homelab/issues/38 feat: cluster-resident 3D printer MCP — wrap existing Moonraker/OctoPrint API for status + audit + queue control
+- https://github.com/dvystrcil/obico/issues/1 (hypothetical; no open issue found)
+Duplicate search over dvystrcil/* (open + closed): 47 candidate(s)
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1935  GPU batch lane: fire-and-forget Blender renders on the GTX 970 (node-03), completion pushed not polled
+ ok [closed] https://github.com/dvystrcil/gpu-batch-docker/issues/10  Shared compose test harness: mock Moonraker + all three tools chained in one run
+    [open] https://github.com/dvystrcil/prometheus/issues/64  Photos down 2.5 days: the alert fired at warning among ~720 Discord notifications/day, 157 rate-limited
+    [open] https://github.com/dvystrcil/homelab/issues/1911  truenas audit: a FAILED replication run (or any non-CRITICAL TrueNAS alert) produces no issue — only email
+    [open] https://github.com/dvystrcil/homelab/issues/1682  Alert issues stay open forever when their alert resolves while inhibited — Alertmanager sends no resolved notification
+    [open] https://github.com/dvystrcil/homelab-heartbeat/issues/10  dead-man runs up to ~13.5 h apart: `0 */6` sits on GitHub's peak minute (p50 delay 225 min, ~5% of slots dropped)
+    [open] https://github.com/dvystrcil/n8n-workflow/issues/77  feat(cluster-service-health-watcher): add CronJob success/failure probe shape (vaultwarden-backup as first target)
+ ok [open] https://github.com/dvystrcil/argocd-projects/issues/310  ops(postgres): migrate the 7 PGO clusters to CloudNativePG (D-034), by 2027-06-30
+ ok [open] https://github.com/dvystrcil/argocd-projects/issues/55  ops(pgo): Crunchy free images freeze 2026-12-31 — mirror now, pick the operator path (v6 / CNPG / paid)
+    [open] https://github.com/dvystrcil/homelab/issues/1977  pg wal archiving: wal-unreadable — n8n-workflow/n8n-postgres (pgo)
+    [open] https://github.com/dvystrcil/homelab/issues/1976  pg wal archiving: wal-unreadable — infisical/infisical-postgres (pgo)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1029  pip installs on self-hosted runners are ~15% flaky: one broken PyPI edge node
+ ok [open] https://github.com/dvystrcil/quality-first-slicer/issues/47  Audit removable dependencies and unused vendored code to reduce licensing footprint
+    [open] https://github.com/dvystrcil/homelab/issues/24  feat: Tier 4 — ARC-runner integration test for OWUI Pipelines (label-gated)
+ ok [open] https://github.com/dvystrcil/homelab/issues/38  feat: cluster-resident 3D printer MCP — wrap existing Moonraker/OctoPrint API for status + audit + queue control
+    [open] https://github.com/dvystrcil/open-webui/issues/37  fiction_writing_filter: bible context strategy — RAG, KV cache, or sliding window
+    [open] https://github.com/dvystrcil/homelab/issues/1694  Automate the CVE lifecycle for our own images: Trivy findings → deterministic/dmf remediation PRs → rebuild → rescan → close
+    [closed] https://github.com/dvystrcil/homelab/issues/1784  [WARN] KubeJobFailed in obico namespace - Job failed to complete
+    [closed] https://github.com/dvystrcil/homelab/issues/1756  [obico] Pod stuck in non-ready state for >15 minutes
+    [closed] https://github.com/dvystrcil/homelab/issues/1744  [WARN] obico: StatefulSet update stalled/not rolled out
+    [closed] https://github.com/dvystrcil/homelab/issues/451  feat: Tech Radar — qwen-backed OWUI analyst + scheduled digest (offload landscape-scanning from Claude)
+    [closed] https://github.com/dvystrcil/homelab/issues/485  INCIDENT 2026-07-18: hpm-01 OOM → node wedge → Harbor/registry/DNS cascade (post-mortem)
+    [closed] https://github.com/dvystrcil/homelab/issues/1664  [CRITICAL] AlertmanagerClusterFailedToSendAlerts: All instances failed to send notifications to critical integration
+    [open] https://github.com/dvystrcil/homelab/issues/214  eval: argo-watcher for CI→ArgoCD deploy-feedback loop
+    [open] https://github.com/dvystrcil/homelab/issues/86  fiction-writer: unify with dmf+n8n (intent stage + webhook git ops)
+    [open] https://github.com/dvystrcil/n8n-workflow/issues/20  feat: Discord bot — slash commands + interactive alert buttons (Tier 2/3)
+    [closed] https://github.com/dvystrcil/homelab/issues/1296  [CRITICAL] AlertmanagerClusterFailedToSendAlerts firing in monitoring namespace
+ ok [open] https://github.com/dvystrcil/homelab/issues/27  feat: Postgres major-version upgrade playbook + validation suite (PGO clusters)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1225  Public repos cannot auto-merge: branch protection and the auto-merge lane are in direct conflict
+ ok [open] https://github.com/dvystrcil/homelab/issues/292  Epic: Reduce Anthropic dependency — homelab autonomy thesis
+ ok [closed] https://github.com/dvystrcil/homelab/issues/889  weekly-stack-summary 2026-08-02
+ ok [closed] https://github.com/dvystrcil/homelab/issues/750  investigate: migrate YAML text-patching tooling to yq (official GHA available)
+ ok [open] https://github.com/dvystrcil/homelab/issues/814  Repo archive candidates — survey findings for review
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1942  gpu-batch guard: live tests with Neptune ON (idle) and PRINTING
+ ok [open] https://github.com/dvystrcil/homelab/issues/1980  CAD lane chains: commit outputs (STLs, renders, slice reports) back to the repo as a reviewed PR
+ ok [open] https://github.com/dvystrcil/homelab/issues/1961  CAD batch lane: per-tool images chained by n8n (our k8s node fork), fire-and-forget off the laptop
+ ok [open] https://github.com/dvystrcil/homelab/issues/529  feat(ci): wire D-012/D-013 coverage checks into per-repo PR-time CI, not just weekly cluster audits
+ ok [open] https://github.com/dvystrcil/vt350/issues/53  Dock screws on the A4Tv2 duct side (cowl remix) instead of the MadMax plate's dock bracket
+ ok [open] https://github.com/dvystrcil/homelab/issues/1177  audit: full-history gitleaks sweep — 11 repos with findings that CI has never scanned, plus an untracked 1.8MB secret dump
+ ok [open] https://github.com/dvystrcil/vt350/issues/37  Camera: review how the Obico (Nocturne) camera position was chosen
+ ok [closed] https://github.com/dvystrcil/homelab/issues/40  feat: cluster-resident Home Assistant MCP — expose non-meal-planning HA surfaces to AI
+ ok [closed] https://github.com/dvystrcil/homelab/issues/150  fiction-writer domain memory is empty — homelab#96 work is half-wired for this preset
+ ok [closed] https://github.com/dvystrcil/homelab/issues/36  design: MCP services organization — repo/image/manifest patterns as we scale beyond two servers
+ ok [open] https://github.com/dvystrcil/vt350/issues/78  Crossbow cutter: what presses the lever (depressor) on this frame and toolchanger
+ ok [open] https://github.com/dvystrcil/vt350/issues/5  Electronics pack: decide side pack vs top pack, then finish the ebox design
+ ok [open] https://github.com/dvystrcil/vt350/issues/75  Photos of the real parts, as colour and finish reference for the renders
+ ok [open] https://github.com/dvystrcil/vt350/issues/22  BOM: complete parts list with links and prices (owned + still to buy)
+
+Read each candidate (gh issue view <url>). If one already covers this idea, do NOT file: report it instead. Otherwise re-run with --ack <url> for each one.
+rc=2

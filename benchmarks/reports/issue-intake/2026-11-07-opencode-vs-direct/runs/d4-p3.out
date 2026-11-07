@@ -1,0 +1,39 @@
+[dvystrcil/gpu-batch] n8n-lane-a job ends in FileNotFoundError writing status.json  (model=qwen3-coder-next:latest, 36s, lane=claude)
+## Why
+The `n8n-lane-a` job in `gpu-batch` keeps failing with a `FileNotFoundError` when trying to write `/work/TEMPLATE/status.json.1`. This prevents the batch lane from completing successfully and blocks downstream CAD batch processing.
+
+## What we know
+- Pod `n8n-lane-a-20261107t074604-k88z7` is in `Error` state with exit code 1 ([live pods](https://github.com/dvystrcil/homelab/issues/1941)).
+- Logs show `FileNotFoundError: [Errno 2] No such file or directory: '/work/TEMPLATE/status.json.1'` in `/opt/gpu-batch/gpu_batch/runner.py`, line 85 ([logs](https://github.com/dvystrcil/homelab/issues/1941)).
+- The error occurs during `job.write()` when calling `tmp.write_text(...)` ([runner.py:85](https://github.com/dvystrcil/gpu-batch/blob/main/gpu_batch/runner.py#L85)).
+- A sibling pod `n8n-lane-a-20261107t074604-r2-4j4fg` completed successfully, indicating the issue is not systemic to the entire lane.
+
+## Acceptance criteria
+- [ ] **AC1.** The `n8n-lane-a` job completes without `FileNotFoundError` when writing status files.
+- [ ] **AC2.** The `/work/TEMPLATE` directory exists and is writable by the job container before `job.write()` is called.
+- [ ] **AC3.** A test job in `gpu-batch` verifies that status.json files can be written to `/work/TEMPLATE`.
+
+## Lane
+claude — the failure is in Python runner code (`runner.py`) and likely involves missing directory setup or race conditions in volume mount timing; requires inspecting job manifest and runner logic to determine root cause.
+
+## Related
+- https://github.com/dvystrcil/homelab/issues/1941 KubeJobFailed Alert Firing in gpu-batch Namespace
+- https://github.com/dvystrcil/homelab/issues/1978 n8n: workflows in git and n8n disagree (rolling)
+Duplicate search over dvystrcil/* (open + closed): 14 candidate(s)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1961  CAD batch lane: per-tool images chained by n8n (our k8s node fork), fire-and-forget off the laptop
+ ok [open] https://github.com/dvystrcil/homelab/issues/1205  meal-time tool calls went 0% → 100% failure after ollama 0.32.15 → 0.33.x; model held constant across the boundary
+ ok [open] https://github.com/dvystrcil/homelab/issues/1142  the alert pipeline cannot report an ollama outage — filing the issue requires the model that is down, so it fails silently
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1856  bin/dmf-edit.py: let dmf (coder-tool-free) make guarded surgical edits so Claude reviews only the diff
+ ok [open] https://github.com/dvystrcil/homelab/issues/1978  n8n: workflows in git and n8n disagree (rolling)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1941  KubeJobFailed Alert Firing in gpu-batch Namespace
+ ok [open] https://github.com/dvystrcil/homelab/issues/1974  gpu-batch: FreeCAD sweep template on max-01, live lite-26 run (for opencode)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1981  Image builds: apt cache or pinned snapshot.ubuntu.com, so a mirror sync can't fail a build
+ ok [open] https://github.com/dvystrcil/vt350/issues/53  Dock screws on the A4Tv2 duct side (cowl remix) instead of the MadMax plate's dock bracket
+ ok [open] https://github.com/dvystrcil/homelab/issues/1533  WARNING: arc-runner/dind DinD/CDI attach failures & kube-controller-manager CronJob sync errors
+ ok [open] https://github.com/dvystrcil/homelab/issues/1555  WARNING: kube-controller-manager CronJob sync errors for n8n-workflow/github-token-refresh and pihole/nebula-sync
+ ok [open] https://github.com/dvystrcil/homelab/issues/1911  truenas audit: a FAILED replication run (or any non-CRITICAL TrueNAS alert) produces no issue — only email
+ ok [open] https://github.com/dvystrcil/homelab/issues/1697  Image CVE audit: criticals in our own latest images
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1942  gpu-batch guard: live tests with Neptune ON (idle) and PRINTING
+
+--dry-run: all candidates acked, body valid; not filing.
+rc=0

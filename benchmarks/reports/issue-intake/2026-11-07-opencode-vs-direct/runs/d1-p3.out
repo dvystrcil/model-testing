@@ -1,0 +1,26 @@
+[dvystrcil/gpu-batch] Investigate n8n-lane-a job failure in gpu-batch  (model=qwen3-coder-next:latest, 46s, lane=claude)
+## Why
+The `n8n-lane-a` job in the `gpu-batch` namespace is consistently ending in `Error`. This prevents the batch lane from processing CAD-to-printer jobs reliably, blocking the GPU batch lane's core function of fire-and-forget printing off the laptop.
+
+## What we know
+- The issue was flagged via KubeJobFailed alert firing in `gpu-batch` namespace ([https://github.com/dvystrcil/homelab/issues/1941](https://github.com/dvystrcil/homelab/issues/1941)).
+- The `gpu-batch` repo defines a CronJob-based trigger system; Jobs are created dynamically by `bin/gpu-batch-submit.py` from templates like `base/freecad-sweep.yaml`.
+- The `n8n-lane-a` job is part of the chained workflow: FreeCAD → PrusaSlicer → Moonraker, orchestrated via n8n (see [https://github.com/dvystrcil/homelab/issues/1961](https://github.com/dvystrcil/homelab/issues/1961)).
+- A related open issue notes workflows in git and n8n disagree (rolling) ([https://github.com/dvystrcil/homelab/issues/1978](https://github.com/dvystrcil/homelab/issues/1978)).
+
+**unverified**: exact error message or pod logs — not present in provided context.
+
+## Acceptance criteria
+- [ ] **AC1.** `kubectl -n gpu-batch get jobs,nodes,pods -o wide` shows `n8n-lane-a-*` Job status as `Complete` (not `Error`) with all pods in `Running` or `Succeeded`.
+- [ ] **AC2.** Running `bin/gpu-batch-submit.py --dry-run --lane n8n-lane-a` produces no Python exceptions and outputs a valid Job manifest.
+- [ ] **AC3.** The compose test harness (`gpu-batch-docker/bin/compose-test.sh --lane n8n-lane-a`) passes without failure.
+
+## Lane
+claude — requires investigation of k8s Job logs, n8n workflow state, and potential mismatch between git-tracked manifests and live n8n configuration.
+
+## Related
+- https://github.com/dvystrcil/homelab/issues/1941
+- https://github.com/dvystrcil/homelab/issues/1961
+- https://github.com/dvystrcil/homelab/issues/1978
+gh api -X GET... failed: gh: API rate limit exceeded for user ID 72849269. If you reach out to GitHub Support for help, please include the request ID E98C:3D3D81:1D8A7D:36121A:6AEF5CD5 and timestamp 2026-11-07 17:16:05 UTC. For more on scraping GitHub and how it may affect your rights, please review our Terms of Service (https://docs.github.com/en/site-policy/github-terms/github-terms-of-service) (HTTP 403)
+rc=3

@@ -1,0 +1,43 @@
+[dvystrcil/gpu-batch] n8n-lane-a job fails with FileNotFoundError on /work/TEMPLATE/status.json.1  (model=qwen3-coder-next:latest, 29s, lane=claude)
+## Why
+The `n8n-lane-a` Job in the `gpu-batch` namespace is failing with a `FileNotFoundError` when trying to write status to `/work/TEMPLATE/status.json.1`. This breaks the batch lane execution flow.
+
+## What we know
+- The failing pod is `gpu-batch/n8n-lane-a-20261107t074604-k88z7`, exit code 1.
+- Error traceback shows `FileNotFoundError: [Errno 2] No such file or directory: '/work/TEMPLATE/status.json.1'` in `runner.py`, line 85 (`tmp.write_text(...)`).
+- The pod `gpu-batch/n8n-lane-a-20261107t074604-r2-4j4fg` completed successfully, indicating earlier steps work but the status-write step fails.
+- The `gpu-batch-work` PVC is mounted at `/work` (per architecture docs and `base/work-volume.yaml`).
+- The path `/work/TEMPLATE/` must exist for `status.json.1` to be written; if it doesn’t, `pathlib.write_text()` raises `FileNotFoundError`.
+- **unverified**: Whether `/work/TEMPLATE/` is created by prior containers or should be pre-created by the Job spec.
+
+## Acceptance criteria
+- [ ] **AC1.** The `n8n-lane-a` Job completes without `FileNotFoundError` when writing status.
+- [ ] **AC2.** The `/work/TEMPLATE/` directory exists before the status write step runs (either by prior container or Job init).
+- [ ] **AC3.** A test run of `gpu-batch-submit.py --lane a` succeeds end-to-end.
+
+## Lane
+claude — the failure is in the runner logic and volume setup; unclear whether the directory should be created by the Job template or by a prior container, and requires inspecting the full Job manifest and runner.py behavior.
+
+## Related
+- https://github.com/dvystrcil/homelab/issues/1941 KubeJobFailed Alert Firing in gpu-batch Namespace
+- https://github.com/dvystrcil/gpu-batch-docker/issues/10 Shared compose test harness: mock Moonraker + all three tools chained in one run
+Duplicate search over dvystrcil/* (open + closed): 16 candidate(s)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1961  CAD batch lane: per-tool images chained by n8n (our k8s node fork), fire-and-forget off the laptop
+ ok [open] https://github.com/dvystrcil/homelab/issues/1205  meal-time tool calls went 0% → 100% failure after ollama 0.32.15 → 0.33.x; model held constant across the boundary
+ ok [open] https://github.com/dvystrcil/homelab/issues/1142  the alert pipeline cannot report an ollama outage — filing the issue requires the model that is down, so it fails silently
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1856  bin/dmf-edit.py: let dmf (coder-tool-free) make guarded surgical edits so Claude reviews only the diff
+ ok [open] https://github.com/dvystrcil/homelab/issues/1978  n8n: workflows in git and n8n disagree (rolling)
+ ok [closed] https://github.com/dvystrcil/homelab/issues/160  eval: granite4.1:3b vs llama3.2:1b head-to-head on structured-JSON workloads
+ ok [open] https://github.com/dvystrcil/homelab/issues/1941  KubeJobFailed Alert Firing in gpu-batch Namespace
+ ok [open] https://github.com/dvystrcil/homelab/issues/1974  gpu-batch: FreeCAD sweep template on max-01, live lite-26 run (for opencode)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1981  Image builds: apt cache or pinned snapshot.ubuntu.com, so a mirror sync can't fail a build
+ ok [open] https://github.com/dvystrcil/vt350/issues/53  Dock screws on the A4Tv2 duct side (cowl remix) instead of the MadMax plate's dock bracket
+ ok [open] https://github.com/dvystrcil/homelab/issues/1911  truenas audit: a FAILED replication run (or any non-CRITICAL TrueNAS alert) produces no issue — only email
+ ok [open] https://github.com/dvystrcil/vt350/issues/45  CAD passes: run the clash checks in parallel (laptop first, maybe max-01 later)
+ ok [open] https://github.com/dvystrcil/vt350/issues/5  Electronics pack: decide side pack vs top pack, then finish the ebox design
+ ok [open] https://github.com/dvystrcil/homelab/issues/1533  WARNING: arc-runner/dind DinD/CDI attach failures & kube-controller-manager CronJob sync errors
+ ok [open] https://github.com/dvystrcil/argocd-projects/issues/310  ops(postgres): migrate the 7 PGO clusters to CloudNativePG (D-034), by 2027-06-30
+ ok [closed] https://github.com/dvystrcil/gpu-batch-docker/issues/10  Shared compose test harness: mock Moonraker + all three tools chained in one run
+
+--dry-run: all candidates acked, body valid; not filing.
+rc=0

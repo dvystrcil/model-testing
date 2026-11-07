@@ -1,0 +1,45 @@
+[dvystrcil/homelab] Track Longhorn disk usage per node over time with alerts  (model=qwen3-coder-next:latest, 66s, lane=claude)
+## Why
+Longhorn is now the backing storage for every Postgres cluster. As disk consumption grows, there's no per-node historical tracking or proactive alerting before a disk fills up. This creates risk of unavailability when a node's Longhorn data path reaches capacity.
+
+## What we know
+- Longhorn exposes filesystem metrics via its metrics endpoint (longhorn/values.yaml).
+- The homelab already scrapes Prometheus metrics and has alerting rules (prometheus repo, homelab architecture docs).
+- Issue https://github.com/dvystrcil/homelab/issues/1982 explicitly tracks Longhorn disk consumption growth and notes 83 orphaned objects totaling 128.6 GiB on hpm-01 by 2026-11-07 (longhorn/.github/workflows/helm-validate.yaml).
+- Node-level disk usage is critical because Longhorn distributes replicas across nodes and each node must have sufficient free space for its assigned replicas.
+
+## Acceptance criteria
+- [ ] **AC1.** A new dashboard panel in Grafana shows per-node Longhorn disk usage (used/total) over the last 7 days.
+- [ ] **AC2.** A new Prometheus alert rule fires at 80% and 95% per-node disk utilization, sending to the ops channel.
+- [ ] **AC3.** The alert includes the node name and volume name(s) consuming the most space.
+
+## Lane
+claude — requires design decisions: which metrics to surface, how to aggregate per-node usage from Longhorn's metrics, and where to place the alert logic (Prometheus vs. Longhorn UI). Also touches networking/storage and may require changes to the Prometheus scrape config for Longhorn metrics.
+
+## Related
+- https://github.com/dvystrcil/homelab/issues/1982 Track Longhorn disk consumption now that every Postgres cluster lives on it
+- https://github.com/dvystrcil/homelab/issues/1798 [Log Analysis 2026-10-27] WARNING: The cluster is experiencing storage instability within Longhorn
+- https://github.com/dvystrcil/homelab/issues/876 NodeSystemSaturation recurring on k8s-controller-01 — 2-core control-plane node shares disk-I/O-heavy Longhorn components with etcd
+Duplicate search over dvystrcil/* (open + closed): 19 candidate(s)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1911  truenas audit: a FAILED replication run (or any non-CRITICAL TrueNAS alert) produces no issue — only email
+ ok [open] https://github.com/dvystrcil/homelab/issues/465  VPA coverage audit report (rolling)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1804  self-heal: restart gateway-istio automatically on the istio#60074 HBONE stream-leak signature
+ ok [open] https://github.com/dvystrcil/freecad-mcp-docker/issues/10  track: bump FreeCAD from 1.0.2 to 1.1.1 (gated on upstream amrit3701/freecad-cli)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1694  Automate the CVE lifecycle for our own images: Trivy findings → deterministic/dmf remediation PRs → rebuild → rescan → close
+ ok [open] https://github.com/dvystrcil/homelab/issues/1720  [WARNING] longhorn-system/nightly-backup: Cannot create backup job for detached volume
+ ok [open] https://github.com/dvystrcil/homelab/issues/1570  [WARNING] longhorn-manager: Failed to get filesystem device type for Longhorn data path
+ ok [open] https://github.com/dvystrcil/homelab/issues/1798  [Log Analysis 2026-10-27] WARNING: The cluster is experiencing storage instability within Longh
+ ok [open] https://github.com/dvystrcil/trilium-notes/issues/18  trilium crash-looped with SIGBUS (12 restarts); SQLite DB on NFS
+ ok [open] https://github.com/dvystrcil/homelab/issues/1952  TrueNAS upgrade path 25.04.2.4 → 25.04.2.6 → 25.10 → 27: replace UI SMART alerting and move off the REST API first
+ ok [open] https://github.com/dvystrcil/homelab/issues/448  immich: recover ~18,414 missing original files (naive re-import won't work)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1982  Track Longhorn disk consumption now that every Postgres cluster lives on it (argocd-projects#310)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1530  WARNING: kube-apiserver Slow OpenAPI Aggregation & kube-controller-manager CronJob Sync Errors
+ ok [open] https://github.com/dvystrcil/homelab/issues/1902  weekly-stack-summary 2026-10-25
+ ok [open] https://github.com/dvystrcil/homelab/issues/876  NodeSystemSaturation recurring on k8s-controller-01 — 2-core control-plane node shares disk-I/O-heavy Longhorn components with etcd
+ ok [open] https://github.com/dvystrcil/homelab/issues/437  ops(proxmox): standing plan to keep Proxmox VE patched + version-tracked
+ ok [open] https://github.com/dvystrcil/homelab/issues/78  track: Ollama upstream gfx1151 fix landing watch (composite blocker)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1923  WARNING: Longhorn CSI Plugin connection loss & Ollama context size exceeded
+ ok [open] https://github.com/dvystrcil/homelab/issues/1984  Discover: can hpm-01 (HP EliteDesk 705 G4 DM) take a second drive for a dedicated Longhorn disk?
+
+--dry-run: all candidates acked, body valid; not filing.
+rc=0

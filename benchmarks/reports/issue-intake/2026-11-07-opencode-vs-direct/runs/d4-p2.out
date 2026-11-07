@@ -1,0 +1,46 @@
+[dvystrcil/obico] Add mid-print failure notification to Obico integration  (model=qwen3-coder-next:latest, 26s, lane=claude)
+## Why
+Obico's failure detection currently detects failed prints only at completion (e.g., via webcam analysis or Klipper's `OCTOPRINT_PRINTING_FAILED` event). Mid-print failures (e.g., filament runout, nozzle clog, power loss) are not surfaced as notifications, leaving prints running unattended until manually checked.
+
+This is a gap in reliability for unattended printing, especially when Obico is used alongside the cluster-resident GPU batch runner (node-03) where print jobs are queued and monitored automatically.
+
+## What we know
+- Obico runs in Kubernetes under the `obico` namespace; pods include `obico-web`, `obico-tasks`, `obico-ml-api`, and `gpubatch-grant-dp4gx` (completed job).
+- The Obico integration with Moonraker/Klipper is used by the vt350 printer (Voron Trident 350) as documented in `vt350/cad/README.md`.
+- The `obico-runner` pod is configured to run GitHub Actions workflows (`validate.yaml`, `secret-scan.yml`).
+- Obico's failure detection is based on webcam analysis and Klipper events, but no current issue or code reference shows handling of Klipper's runtime error events like `error: Filament runout`, `error: Temperature runaway`, or `power_loss`.
+- The `obico` repo contains Kubernetes manifests (`base/server-deployment.yaml`, `base/tasks-deployment.yaml`) but nothing in CONTEXT indicates a webhook or alerting layer for real-time failure events.
+
+**unverified**: Whether Obico exposes Moonraker's `printer/gcode/macro` or `printer/gcode/error` event streams via its API.
+
+## Acceptance criteria
+- [ ] **AC1.** When a mid-print failure occurs (e.g., filament runout, temperature runaway, power loss), Obico sends an email or push notification to the configured recipient within 60 seconds.
+- [ ] **AC2.** The notification includes the printer name, failure type, and timestamp (ISO 8601).
+- [ ] **AC3.** A test simulating a Klipper `error: Filament runout` event triggers the notification (via mock Moonraker or live test on vt350-lite-N).
+
+## Lane
+claude — Obico's failure detection logic lives in its backend (not open-source in this repo); requires design decisions about event sources (Moonraker vs. Obico ML), notification channels (email, push, webhook), and whether to extend existing Obico config or add Kubernetes-native alerts (Prometheus + Alertmanager).
+Duplicate search over dvystrcil/* (open + closed): 20 candidate(s)
+ ok [open] https://github.com/dvystrcil/argocd-projects/issues/310  ops(postgres): migrate the 7 PGO clusters to CloudNativePG (D-034), by 2027-06-30
+ ok [open] https://github.com/dvystrcil/argocd-projects/issues/55  ops(pgo): Crunchy free images freeze 2026-12-31 — mirror now, pick the operator path (v6 / CNPG / paid)
+ ok [open] https://github.com/dvystrcil/homelab/issues/814  Repo archive candidates — survey findings for review
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1935  GPU batch lane: fire-and-forget Blender renders on the GTX 970 (node-03), completion pushed not polled
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1942  gpu-batch guard: live tests with Neptune ON (idle) and PRINTING
+ ok [open] https://github.com/dvystrcil/homelab/issues/27  feat: Postgres major-version upgrade playbook + validation suite (PGO clusters)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1225  Public repos cannot auto-merge: branch protection and the auto-merge lane are in direct conflict
+ ok [open] https://github.com/dvystrcil/homelab/issues/292  Epic: Reduce Anthropic dependency — homelab autonomy thesis
+ ok [closed] https://github.com/dvystrcil/homelab/issues/889  weekly-stack-summary 2026-08-02
+ ok [closed] https://github.com/dvystrcil/homelab/issues/750  investigate: migrate YAML text-patching tooling to yq (official GHA available)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1980  CAD lane chains: commit outputs (STLs, renders, slice reports) back to the repo as a reviewed PR
+ ok [open] https://github.com/dvystrcil/homelab/issues/1961  CAD batch lane: per-tool images chained by n8n (our k8s node fork), fire-and-forget off the laptop
+ ok [closed] https://github.com/dvystrcil/gpu-batch-docker/issues/10  Shared compose test harness: mock Moonraker + all three tools chained in one run
+ ok [open] https://github.com/dvystrcil/homelab/issues/529  feat(ci): wire D-012/D-013 coverage checks into per-repo PR-time CI, not just weekly cluster audits
+ ok [open] https://github.com/dvystrcil/homelab/issues/38  feat: cluster-resident 3D printer MCP — wrap existing Moonraker/OctoPrint API for status + audit + queue control
+ ok [open] https://github.com/dvystrcil/quality-first-slicer/issues/47  Audit removable dependencies and unused vendored code to reduce licensing footprint
+ ok [closed] https://github.com/dvystrcil/homelab/issues/40  feat: cluster-resident Home Assistant MCP — expose non-meal-planning HA surfaces to AI
+ ok [closed] https://github.com/dvystrcil/homelab/issues/150  fiction-writer domain memory is empty — homelab#96 work is half-wired for this preset
+ ok [closed] https://github.com/dvystrcil/homelab/issues/36  design: MCP services organization — repo/image/manifest patterns as we scale beyond two servers
+ ok [open] https://github.com/dvystrcil/homelab/issues/86  fiction-writer: unify with dmf+n8n (intent stage + webhook git ops)
+
+--dry-run: all candidates acked, body valid; not filing.
+rc=0

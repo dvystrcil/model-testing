@@ -1,0 +1,4 @@
+p1|Create an issue for the homelab: I want to track Longhorn disk usage per node over time, and get alerted before a disk fills up.
+p2|todo: the obico printer integration should notify me when a print fails mid-way. make an issue
+p3|make an issue: the n8n-lane-a job in gpu-batch keeps ending in Error, figure out why
+p4|idea for the homelab: run a monthly test restore of the restic backup of the claude memory so we know the backup actually works. file an issue
