@@ -145,3 +145,19 @@ Lesson: a plausible-sounding, well-documented upstream issue with matching
 symptoms is a hypothesis, not a confirmed cause, until it's reproduced
 against your own actual version. It's cheap to check with one bare curl
 request before writing a fix around it.
+
+---
+
+## 6. On this stack, an agent loop doesn't terminate on research → write tasks; gather deterministically, generate once
+
+*2026-11-07.* [Report](benchmarks/reports/issue-intake/2026-11-07-opencode-vs-direct/README.md).
+
+The task was to turn a one-line homelab idea into a GitHub issue. Run as an opencode agent (`qwen3-coder-next`, read tools plus a filing script), it did real research: it found the existing Longhorn alert and the obico deploy repo. **It never got to filing.** It made 20 and 47 tool calls, hit 64k compaction, lost the plan, and either timed out at 900 s or wandered into cloning upstream source. Without research instructions, opencode filed all 4 immediately, all of them bad: no duplicate check, the wrong repo, and a literal `\n` in each body.
+
+The same model, given a script-gathered context (duplicate search, rare-keyword `git grep`, live pod logs) and **one** tool-free `/api/chat` call with a JSON schema, did 4/4 in 23–43 s each. It caught the duplicate and picked the right repo every time.
+
+Two details carry over to other lanes:
+- **Every invention was mechanically checkable.** It made up issue links, file paths, CLI flags and notification channels. A deterministic check plus a "fix these and reply again" retry removed them. No bigger model was needed.
+- **Retrieval was the bottleneck.** Every quality jump came from the gather step: live logs, rarest-keyword-first, ranking repos by keyword coverage instead of raw hit count (FreeCAD's translations contain "restic"). The prompt barely changed.
+
+Before building a local-model *agent* lane, try deterministic gather plus one generation call first. Shipped as `homelab/bin/draft-issue.py` (https://github.com/dvystrcil/homelab/pull/1986).

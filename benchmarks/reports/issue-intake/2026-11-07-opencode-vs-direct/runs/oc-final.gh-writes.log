@@ -1,0 +1,46 @@
+=== 09:29:52 gh issue create --repo dvystrcil/obico --title Add mid-print failure notification via Obico integration --body-file -
+## Why
+Obico's failure detection currently alerts only on print completion or explicit failure at start. Mid-print failures (e.g., filament runout, nozzle clog, power loss during print) are not surfaced as notifications, leaving prints unmonitored and potentially wasting material or causing damage.
+
+## What we know
+- Obico runs in the `obico` namespace with pods: `obico-web`, `obico-ml-api`, `obico-tasks`, `obico-postgres`, `obico-redis`. (Live pods)
+- The `obico-docker-runner` and `obico-runner` pods handle listeners and secret scanning. (Live pods + obico repo files)
+- Obico uses Moonraker/OctoPrint APIs to detect print state changes. (homelab/architecture docs imply Moonraker integration for 3D printer monitoring)
+- No evidence of existing mid-print failure alerting logic in Obico manifests or workflows. (No matching code patterns found in obico repo files)
+
+**unverified**: Exact Moonraker event names for mid-print failure states (e.g., `error`, `shutdown`, `pause`) and whether Obico exposes them via its API/webhook system.
+
+## Acceptance criteria
+- [ ] **AC1.** Configure Obico to emit webhook events on Moonraker `error`, `shutdown`, or `pause` states during active prints.
+- [ ] **AC2.** Verify that a test mid-print failure (e.g., simulated filament runout via Klipper macro) triggers an email notification within 60 seconds.
+- [ ] **AC3.** Confirm no false positives during normal print pauses/resumes (e.g., manual pause/unpause via Fluidd).
+
+## Lane
+claude — requires design decisions: which Moonraker events map to "mid-print failure", notification channel (email only, per Obico SMTP config), and whether to extend Obico's ML failure model or use raw Moonraker events directly.
+
+## Related
+- https://github.com/dvystrcil/homelab/issues/38 feat: cluster-resident 3D printer MCP — wrap existing Moonraker/OctoPrint API for status + audit + queue control
+
+---
+<sub>Drafted by qwen3-coder-next:latest via bin/draft-issue.py via `bin/new-issue.py`. Duplicate search (open + closed, dvystrcil/*): `obico printer`, `obico integration`, `obico notify`, `printer integration`, `printer notify`, `integration notify`. Candidates reviewed:</sub>
+
+- https://github.com/dvystrcil/argocd-projects/issues/310
+- https://github.com/dvystrcil/argocd-projects/issues/55
+- https://github.com/dvystrcil/homelab/issues/814
+- https://github.com/dvystrcil/homelab/issues/1935
+- https://github.com/dvystrcil/homelab/issues/1942
+- https://github.com/dvystrcil/homelab/issues/27
+- https://github.com/dvystrcil/homelab/issues/1225
+- https://github.com/dvystrcil/homelab/issues/292
+- https://github.com/dvystrcil/homelab/issues/889
+- https://github.com/dvystrcil/homelab/issues/750
+- https://github.com/dvystrcil/homelab/issues/1980
+- https://github.com/dvystrcil/homelab/issues/1961
+- https://github.com/dvystrcil/gpu-batch-docker/issues/10
+- https://github.com/dvystrcil/homelab/issues/529
+- https://github.com/dvystrcil/homelab/issues/38
+- https://github.com/dvystrcil/quality-first-slicer/issues/47
+- https://github.com/dvystrcil/homelab/issues/40
+- https://github.com/dvystrcil/homelab/issues/150
+- https://github.com/dvystrcil/homelab/issues/36
+- https://github.com/dvystrcil/homelab/issues/86

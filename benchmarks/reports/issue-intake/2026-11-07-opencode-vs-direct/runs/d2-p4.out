@@ -1,0 +1,46 @@
+[dvystrcil/homelab] Add monthly restic restore test for claude memory backup  (model=qwen3-coder-next:latest, 41s, lane=opencode)
+## Why
+The claude memory is backed up via restic to TrueNAS, but there is no automated test that verifies the backup can be restored. Without periodic restore tests, a silent backup failure could go unnoticed until recovery is actually needed.
+
+## What we know
+- The claude memory is stored in `claude-personal-config` and its diary path is configured via `DIARY_PATH` ([`claude-personal-config/README.md`](claude-personal-config/README.md)).
+- TrueNAS replication and restic backups are used for data protection (see [`homelab/architecture/`](homelab/architecture/) docs).
+- Existing scheduled jobs like `etcd-backup`, `immich-db-backup`, `pihole-backup`, and `vaultwarden-backup` run weekly or biweekly and complete successfully ([`Live pods`](Live PODS (kubectl get pods -A, filtered))).
+- There is an open issue about disaster recovery playbook including ArgoCD repos and data restore verification ([https://github.com/dvystrcil/homelab/issues/29](https://github.com/dvystrcil/homelab/issues/29)).
+- A related issue notes that some scheduled checks appear green because nothing asked them to work ([https://github.com/dvystrcil/homelab/issues/1184](https://github.com/dvystrcil/homelab/issues/1184)).
+
+## Acceptance criteria
+- [ ] **AC1.** A cron job (e.g., `restic-test-restore`) runs monthly and executes `restic restore --target /tmp/restic-test-restore <snapshot-id>` against the claude memory backup location.
+- [ ] **AC2.** The job fails if any file in the restored directory differs from the current live directory (via checksum comparison or diff).
+- [ ] **AC3.** The job sends a Slack notification on success/failure (reuse existing alerting pattern from other backup jobs).
+- [ ] **AC4.** The job cleans up `/tmp/restic-test-restore` after completion.
+
+## Lane
+opencode — reuse existing restic backup infrastructure and cron pattern from other backup jobs (e.g., etcd-backup, vaultwarden-backup), only add restore verification step.
+
+## Related
+- https://github.com/dvystrcil/homelab/issues/29
+- https://github.com/dvystrcil/homelab/issues/1184
+- https://github.com/dvystrcil/homelab/issues/1911
+Duplicate search over dvystrcil/* (open + closed): 18 candidate(s)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1603  NFS archiveOnDelete: keep it as an undo buffer, but expire archived-* dirs after N days
+ ok [open] https://github.com/dvystrcil/homelab/issues/1184  pattern: five checks this week were green because nothing asked them to work — none were caught by monitoring
+ ok [open] https://github.com/dvystrcil/homelab/issues/1800  Claude Code memory is a single unversioned copy on the laptop, and its index truncates 53 of 215 entries
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1912  pool - Backup: Full Filesystem Replication breaks on any quiet child dataset — switch to per-dataset recursive and record the trade-offs
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1386  obs: a red scheduled workflow notifies nobody — 2 sat broken for 12 and 4 days
+ ok [open] https://github.com/dvystrcil/homelab/issues/1974  gpu-batch: FreeCAD sweep template on max-01, live lite-26 run (for opencode)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1911  truenas audit: a FAILED replication run (or any non-CRITICAL TrueNAS alert) produces no issue — only email
+ ok [open] https://github.com/dvystrcil/homelab/issues/1860  Mutant-killing lane: dmf (coder-tool-free) writes tests for surviving mutants, gated by the mutation harness
+ ok [open] https://github.com/dvystrcil/homelab/issues/1925  Health Event Router: unattended-run-failing issues never close on recovery, count feature-branch pushes, and bundle workflows
+ ok [open] https://github.com/dvystrcil/vt350/issues/19  Toolchanger: how many A4T heads fit (MadMax), and make the model motion-testable
+ ok [open] https://github.com/dvystrcil/homelab/issues/1929  memory-merge: propose merges of overlapping memory entries, apply them losslessly (#1800 AC5, slice 2)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1956  dr-bootstrap-credentials.py: show which cluster it reads, add --context (a kind cluster looked like a disaster)
+ ok [open] https://github.com/dvystrcil/homelab/issues/29  feat: disaster recovery playbook — point ArgoCD at the repos, restore data, verify
+ ok [open] https://github.com/dvystrcil/argocd-projects/issues/310  ops(postgres): migrate the 7 PGO clusters to CloudNativePG (D-034), by 2027-06-30
+ ok [open] https://github.com/dvystrcil/flatpak-repo/issues/4  Explore Cloudflare R2 for flatpak storage
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1698  immich Postgres passwords are literal in dvystrcil/immich values.yaml; the Bitnami subchart renders them into a Secret
+ ok [closed] https://github.com/dvystrcil/homelab/issues/319  fix(nas): TrueNAS replication 'pool → Backup' silently broken due to naming-schema mismatch
+ ok [open] https://github.com/dvystrcil/argocd-projects/issues/55  ops(pgo): Crunchy free images freeze 2026-12-31 — mirror now, pick the operator path (v6 / CNPG / paid)
+
+--dry-run: all candidates acked, body valid; not filing.
+rc=0

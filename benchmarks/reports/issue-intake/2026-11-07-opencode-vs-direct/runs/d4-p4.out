@@ -1,0 +1,44 @@
+[dvystrcil/homelab] Monthly test restore of restic backup for Claude memory  (model=qwen3-coder-next:latest, 43s, lane=claude)
+## Why
+The Claude Code memory is stored in a restic repository, but there is no automated verification that the backup can be successfully restored. Without periodic test restores, a backup may appear healthy yet be unusable when needed (e.g., after hardware failure or accidental corruption). This follows the pattern identified in https://github.com/dvystrcil/homelab/issues/1184 where scheduled checks were green because nothing asked them to work.
+
+## What we know
+- The Claude Code memory restic repository is referenced in https://github.com/dvystrcil/homelab/issues/1909 (Off-site copy of the Claude Code memory restic repo) and https://github.com/dvystrcil/homelab/issues/1951 (Off-site encrypted copy of CNPG backups).
+- A similar pattern exists in `vt350/cad/backup-models.sh --verify`, which backs up FreeCAD models with restic and then verifies by restoring and comparing checksums.
+- Homelab already has scheduled jobs for other backups (e.g., `etcd-backup`, `immich-db-backup`, `pihole-backup`, `vaultwarden-backup`) that run as CronJobs and complete successfully.
+- The homelab uses restic for backups and has existing scripts in `bin/` (e.g., `bin/homelab-memory.sh`) that interact with the memory store.
+
+**unverified**: Exact path to the restic repository and password file location for Claude memory backup; exact command to perform a non-destructive restore-and-verify test.
+
+## Acceptance criteria
+- [ ] **AC1.** A monthly CronJob runs a test restore of the Claude memory restic backup (no overwrite of live data), logs success/failure, and alerts on failure.
+- [ ] **AC2.** The test restore command is derived from `bin/homelab-memory.sh` and restic best practices (restore to a temporary directory and verify integrity).
+- [ ] **AC3.** The job is scheduled in a homelab CronJob manifest (e.g., under `homelab/cluster/` or `homelab/.github/workflows/`) and runs on the first day of each month.
+
+## Lane
+claude — requires design decisions: where to store the test restore (temp dir vs PVC), how to handle credentials securely, integration with existing alerting (e.g., Prometheus alerts via webhook), and coordination with off-site backup strategy (https://github.com/dvystrcil/homelab/issues/1909, https://github.com/dvystrcil/homelab/issues/1951).
+
+## Related
+https://github.com/dvystrcil/homelab/issues/1184
+https://github.com/dvystrcil/homelab/issues/1909
+https://github.com/dvystrcil/homelab/issues/1951
+Duplicate search over dvystrcil/* (open + closed): 16 candidate(s)
+ ok [open] https://github.com/dvystrcil/flatpak-repo/issues/4  Explore Cloudflare R2 for flatpak storage
+ ok [open] https://github.com/dvystrcil/homelab/issues/1603  NFS archiveOnDelete: keep it as an undo buffer, but expire archived-* dirs after N days
+ ok [open] https://github.com/dvystrcil/homelab/issues/1184  pattern: five checks this week were green because nothing asked them to work — none were caught by monitoring
+ ok [open] https://github.com/dvystrcil/homelab/issues/1800  Claude Code memory is a single unversioned copy on the laptop, and its index truncates 53 of 215 entries
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1698  immich Postgres passwords are literal in dvystrcil/immich values.yaml; the Bitnami subchart renders them into a Secret
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1912  pool - Backup: Full Filesystem Replication breaks on any quiet child dataset — switch to per-dataset recursive and record the trade-offs
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1386  obs: a red scheduled workflow notifies nobody — 2 sat broken for 12 and 4 days
+ ok [closed] https://github.com/dvystrcil/homelab/issues/319  fix(nas): TrueNAS replication 'pool → Backup' silently broken due to naming-schema mismatch
+ ok [open] https://github.com/dvystrcil/homelab/issues/1929  memory-merge: propose merges of overlapping memory entries, apply them losslessly (#1800 AC5, slice 2)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1956  dr-bootstrap-credentials.py: show which cluster it reads, add --context (a kind cluster looked like a disaster)
+ ok [open] https://github.com/dvystrcil/homelab/issues/29  feat: disaster recovery playbook — point ArgoCD at the repos, restore data, verify
+ ok [open] https://github.com/dvystrcil/argocd-projects/issues/55  ops(pgo): Crunchy free images freeze 2026-12-31 — mirror now, pick the operator path (v6 / CNPG / paid)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1911  truenas audit: a FAILED replication run (or any non-CRITICAL TrueNAS alert) produces no issue — only email
+ ok [open] https://github.com/dvystrcil/homelab/issues/1961  CAD batch lane: per-tool images chained by n8n (our k8s node fork), fire-and-forget off the laptop
+ ok [open] https://github.com/dvystrcil/homelab/issues/1909  Off-site copy of the Claude Code memory restic repo (follow-up to #1800)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1951  Off-site encrypted copy of the CNPG backups (R2 or B2 free tier), shared provider decision with #1909
+
+--dry-run: all candidates acked, body valid; not filing.
+rc=0

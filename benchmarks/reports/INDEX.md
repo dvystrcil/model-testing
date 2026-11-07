@@ -3,6 +3,15 @@
 Auto-curated catalog of all evaluation reports in this directory.
 Newest first within each topic.
 
+## issue-intake
+
+Idea/todo → GitHub issue on the local model, so issue intake stops costing Claude tokens. Shipped as `homelab/bin/draft-issue.py`; see `homelab/architecture/issue-intake.md`.
+
+- [2026-11-07 — opencode agent vs one direct call](issue-intake/2026-11-07-opencode-vs-direct/README.md)
+  4 real ideas, `gh` writes shimmed. Bare opencode filed 4/4 bad (no dup check, wrong repo, literal `\n`); opencode as an agent
+  filed 0 (20–47 tool calls, compaction, 900 s timeout); deterministic gather + one `/api/chat` call: 4/4, 23–43 s, dup caught.
+  Every invention (links, paths, flags, channels) was mechanically checkable. (homelab#1986)
+
 ## owui-tool-search
 
 OWUI v0.12 Tool Search and lazy skill loading, measured off/on against copies of prod presets on a throwaway OWUI. Harness: `benchmarks/owui-tool-search/run.py`; see `benchmarks/owui-tool-search/README.md`.

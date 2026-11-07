@@ -1,0 +1,55 @@
+[dvystrcil/homelab] Add monthly restic restore test for claude memory backup  (model=qwen3-coder-next:latest, 35s, lane=claude)
+## Why
+The claude memory is backed up via restic to TrueNAS, but there is no verification that restores actually work. A backup without tested restores is not a backup — it only confirms data *was* present at backup time, not that it can be recovered when needed.
+
+## What we know
+- claude memory is stored in `claude-personal-config` and backed up via restic to TrueNAS (per architecture docs and repo READMEs).
+- The homelab already has restic workflows (e.g., `bin/restic-backup.sh`, `bin/restic-prune.sh`) and TrueNAS replication patterns documented in `homelab/architecture/`.
+- Issue https://github.com/dvystrcil/homelab/issues/29 (disaster recovery playbook) is open and covers backup/restore verification, but does not specify automated monthly restore tests for individual datasets like claude memory.
+
+## Acceptance criteria
+- [ ] **AC1.** A scheduled workflow (`bin/test-restic-restore.sh`) runs monthly, restores the latest claude memory snapshot to a temp directory, verifies integrity, and deletes the temp directory.
+- [ ] **AC2.** The workflow fails the run if the restore or integrity check fails (non-zero exit code).
+- [ ] **AC3.** The workflow sends a Slack notification on failure (reuse existing `SLACK_WEBHOOK_URL` pattern from other workflows).
+
+## Lane
+claude — requires design of the restore test script, integration with existing restic tooling, and scheduling in the homelab's CI/CD (cron workflow). Touches multiple repos: homelab (script + cron), claude-personal-config (backup path definition), and potentially cluster-ops if TrueNAS credentials are involved.
+
+## Related
+- https://github.com/dvystrcil/homelab/issues/29
+- https://github.com/dvystrcil/homelab/issues/1911
+Duplicate search over dvystrcil/* (open + closed): 31 candidate(s)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1800  Claude Code memory is a single unversioned copy on the laptop, and its index truncates 53 of 215 entries
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1912  pool - Backup: Full Filesystem Replication breaks on any quiet child dataset — switch to per-dataset recursive and record the trade-offs
+ ok [open] https://github.com/dvystrcil/homelab/issues/1603  NFS archiveOnDelete: keep it as an undo buffer, but expire archived-* dirs after N days
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1386  obs: a red scheduled workflow notifies nobody — 2 sat broken for 12 and 4 days
+ ok [closed] https://github.com/dvystrcil/homelab/issues/319  fix(nas): TrueNAS replication 'pool → Backup' silently broken due to naming-schema mismatch
+ ok [open] https://github.com/dvystrcil/flatpak-repo/issues/4  Explore Cloudflare R2 for flatpak storage
+ ok [open] https://github.com/dvystrcil/homelab/issues/1184  pattern: five checks this week were green because nothing asked them to work — none were caught by monitoring
+ ok [closed] https://github.com/dvystrcil/homelab/issues/1698  immich Postgres passwords are literal in dvystrcil/immich values.yaml; the Bitnami subchart renders them into a Secret
+    [closed] https://github.com/dvystrcil/homelab/issues/33  feat: cluster-resident Mealie MCP server — recipe recall + AI-driven meal planning
+    [closed] https://github.com/dvystrcil/homelab/issues/1212  Close the resource loop: vpa-rightsize.py should manage limits, staggered to avoid a restart storm
+    [closed] https://github.com/dvystrcil/homelab/issues/1007  vpa-rightsize opens no-op PRs — add a materiality threshold
+    [open] https://github.com/dvystrcil/homelab/issues/1909  Off-site copy of the Claude Code memory restic repo (follow-up to #1800)
+    [open] https://github.com/dvystrcil/homelab/issues/1951  Off-site encrypted copy of the CNPG backups (R2 or B2 free tier), shared provider decision with #1909
+ ok [open] https://github.com/dvystrcil/homelab/issues/1911  truenas audit: a FAILED replication run (or any non-CRITICAL TrueNAS alert) produces no issue — only email
+ ok [open] https://github.com/dvystrcil/homelab/issues/1961  CAD batch lane: per-tool images chained by n8n (our k8s node fork), fire-and-forget off the laptop
+ ok [open] https://github.com/dvystrcil/homelab/issues/1929  memory-merge: propose merges of overlapping memory entries, apply them losslessly (#1800 AC5, slice 2)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1956  dr-bootstrap-credentials.py: show which cluster it reads, add --context (a kind cluster looked like a disaster)
+ ok [open] https://github.com/dvystrcil/homelab/issues/29  feat: disaster recovery playbook — point ArgoCD at the repos, restore data, verify
+    [open] https://github.com/dvystrcil/argocd-projects/issues/55  ops(pgo): Crunchy free images freeze 2026-12-31 — mirror now, pick the operator path (v6 / CNPG / paid)
+    [open] https://github.com/dvystrcil/skills/issues/72  Skill evals: a regression suite built from recorded failures, proving each skill still changes behaviour
+    [open] https://github.com/dvystrcil/homelab/issues/415  ops(memory): decommission custom homelab_memory system — native memory adopted on OWUI 0.10.2
+    [open] https://github.com/dvystrcil/homelab/issues/715  Evaluate Basic Memory MCP as a cross-agent memory layer for Claude Code + opencode + OWUI
+    [open] https://github.com/dvystrcil/homelab/issues/1902  weekly-stack-summary 2026-10-25
+ ok [open] https://github.com/dvystrcil/homelab/issues/1860  Mutant-killing lane: dmf (coder-tool-free) writes tests for surviving mutants, gated by the mutation harness
+ ok [open] https://github.com/dvystrcil/vt350/issues/19  Toolchanger: how many A4T heads fit (MadMax), and make the model motion-testable
+ ok [open] https://github.com/dvystrcil/homelab/issues/1974  gpu-batch: FreeCAD sweep template on max-01, live lite-26 run (for opencode)
+ ok [open] https://github.com/dvystrcil/homelab/issues/1925  Health Event Router: unattended-run-failing issues never close on recovery, count feature-branch pushes, and bundle workflows
+ ok [open] https://github.com/dvystrcil/argocd-projects/issues/310  ops(postgres): migrate the 7 PGO clusters to CloudNativePG (D-034), by 2027-06-30
+ ok [closed] https://github.com/dvystrcil/vt350/issues/58  Model fix: belt line vs MadMax carriage (the attach-slide 'belt x parked plate' overlap is a model error)
+ ok [open] https://github.com/dvystrcil/trilium-notes/issues/18  trilium crash-looped with SIGBUS (12 restarts); SQLite DB on NFS
+ ok [open] https://github.com/dvystrcil/homelab/issues/1345  The Backup pool is readable only through one specific USB bridge — 4K sector translation
+
+Read each candidate (gh issue view <url>). If one already covers this idea, do NOT file: report it instead. Otherwise re-run with --ack <url> for each one.
+rc=2
