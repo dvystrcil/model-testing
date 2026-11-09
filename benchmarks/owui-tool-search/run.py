@@ -42,7 +42,9 @@ BASE = f"http://127.0.0.1:{PORT}"
 HARNESS = Path(os.environ.get("OWUI_SOCKET_CHAT", Path.home() / "Code/homelab/bin/owui-socket-chat.py"))
 HARNESS_PY = Path(os.environ.get("OWUI_SOCKET_PY", HARNESS.parent / ".venv-socket/bin/python"))
 STATE = HERE / ".bench-state.json"  # gitignored: session tokens + test user id for this namespace's life
-PROD_PG = ("open-webui", "postgres-operator.crunchydata.com/role=master", "owui")
+# owui's CNPG primary (argocd-projects#310 moved it off PGO). Container
+# `postgres`; psql over the socket runs as the postgres OS user (peer auth).
+PROD_PG = ("open-webui", "cnpg.io/cluster=owui-postgres,cnpg.io/instanceRole=primary", "owui")
 STUB = "http://stub-mcp.owui-bench.svc.cluster.local:8080"
 
 _OFF = {"chat.tool_search.always_loaded": []}
@@ -156,7 +158,7 @@ def sh(*args, input=None, check=True) -> str:
 def prod_sql(query: str) -> str:
     ns, sel, db = PROD_PG
     pod = sh("kubectl", "-n", ns, "get", "pod", "-l", sel, "-o", "name").split()[0]
-    return sh("kubectl", "-n", ns, "exec", pod, "-c", "database", "--", "psql", "-d", db, "-Atc", query)
+    return sh("kubectl", "-n", ns, "exec", pod, "-c", "postgres", "--", "psql", "-d", db, "-Atc", query)
 
 
 def bench_sqlite_upsert(rows: dict) -> None:
