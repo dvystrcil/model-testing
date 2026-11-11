@@ -29,6 +29,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 # One run of THIS workflow at a time. Without it, the hourly detect during a
 # running probe still sees "changed" (last-version is written only at the
@@ -112,8 +113,8 @@ jobs:
       - name: Fetch secrets from Infisical
         uses: Infisical/secrets-action@v1.0.18
         with:
-          client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
-          client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+          method: oidc
+          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
           env-slug: prod
           project-slug: homelab-bz-gt
           secret-path: /
