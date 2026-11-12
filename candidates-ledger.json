@@ -31,6 +31,10 @@
     "reason": "pull failed: HTTP Error 500: Internal Server Error",
     "verdict": "REJECT"
   },
+  "hf.co/unsloth/DeepSeek-V4-Flash-0731-GGUF:UD-IQ2_XXS": {
+    "reason": "evaluated by hand (model-testing#161, RESEARCH.md Finding 11): sharded GGUF, not pullable by ollama (ollama#5245); merged+created as deepseek-v4-flash-0731:ud-iq2_xxs; ~85 GiB evicts the planner/executor pair; 15-16 TPS vs 52-58 for qwen3.6:35b at similar quality; removed from ollama",
+    "verdict": "REJECT"
+  },
   "hf.co/unsloth/NVIDIA-Nemotron-3.5-Bolt-E4B-GGUF:BF16": {
     "reason": "done_reason=stop",
     "verdict": "OK"
