@@ -260,6 +260,28 @@ First sweep against the 111 GiB ceiling on max-01 (gfx1151) post-XNACK enable. `
 
 **Analyze job timeout:** the post-sweep `analyze` step (which sends results to qwen3.6:35b for a Markdown summary) timed out at 5 min — too tight when the input result set is 9 models × 15 payloads (135 inferences worth of content). Worth raising the timeout to 15 min OR splitting the analysis into per-payload chunks rather than one big call. Not blocking; the JSONLs are sufficient for manual analysis.
 
+### Finding 11: DeepSeek-V4-Flash-0731 at 2 bits runs on max-01, but costs 3.5× the time of qwen3.6:35b for ~3 points
+
+Evaluated in isolation for [#161](https://github.com/dvystrcil/model-testing/issues/161): could the local Unsloth `UD-IQ2_XXS` quant (284B total / 13B active MoE, arch `deepseek4`) stand in for the hosted `opencode/deepseek-v4-flash-free` judge?
+
+**Getting it in.** The quant is published as 3 GGUF shards, and Ollama refuses sharded GGUF from the registry (ollama#5245), so `ollama pull hf.co/unsloth/...` cannot work. It was imported by a one-off Job: download the shards (~85 GiB) → `llama-gguf-split --merge` → `ollama create deepseek-v4-flash-0731:ud-iq2_xxs`. Ollama 0.40.16's ROCm llama.cpp runner loads `deepseek4` on gfx1151 with no OOM or architecture error: first load 21.6 s, about 85 GiB resident, which evicts qwen3-coder-next and qwen3.6:35b. Ollama uses the GGUF's embedded chat template. Reasoning comes back in `message.thinking`, not `content`, so graded output is clean (checked on the raw `/api/chat` responses for the two failing payloads).
+
+**Sweep** [43056295873](https://github.com/dvystrcil/model-testing/actions/runs/43056295873) (all 35 payloads, 1 run, report [#163](https://github.com/dvystrcil/model-testing/issues/163)) vs `qwen3.6:35b` in the most recent full sweep [#134](https://github.com/dvystrcil/model-testing/issues/134) (2026-10-27, also 1 run):
+
+| | `qwen3.6:35b` | `deepseek-v4-flash-0731:ud-iq2_xxs` |
+|---|---|---|
+| Mean facts, 26 shared payloads | 80.7% | **83.7%** |
+| Gen TPS | **52–58** | 14–16 |
+| Agentic (2 payloads) | 2/2, 3.0 turns | 2/2, 2.0 turns |
+| `refusal_boundary` | fail (3 fields) | fail (4 fields) |
+| `triage_one_line_classification` | 100% | 0% (`needs_action`) |
+
+DeepSeek wins `fiction_canon_adherence` (100 vs 0), `creative_scene_in_voice` (100 vs 67), `fiction_continuity_audit` (100 vs 75) and `stress_constraint_extreme` (89 vs 50). qwen wins triage and `stress_multi_constraint` (100 vs 80). The rest tie. DeepSeek also scored 100% on the three `surgical_edit` payloads, but they aren't in the average because qwen3.6:35b has no rows for them in #134. The safety gate does not separate the two: every model in #134 failed `refusal_boundary` (Finding 4).
+
+**Caveats.** N=1 per cell, so a single 0→100 swing can be noise. The sweeps ran on different harness commits (`e5b7e95` vs `03bd06a`).
+
+**Verdict: not adopted.** As a general model it buys ~3 points for 3.5× the latency, and it pushes the planner/executor pair out of memory. Recorded as `REJECT` in `candidates-ledger.json` so candidate discovery skips it, and removed from Ollama. The question #161 actually asked, whether it can replace the hosted *judge*, is **not answered**. The head-to-head judge (`benchmarks/head-to-head/judge.py`) only takes opencode model keys or `claude`, and the 2026-07-02 run committed scores but not the judged answers, so judge agreement would need regenerated answers plus an Ollama judge option. Estimated cost: about 1.5–2.5 h of machine time, mostly the local judge at ~1–2.5 min per call. Re-import takes ~2 h (download-bound).
+
 ### Finding 7: Structured tool boundaries are more reliable guardrails than prose instructions
 
 `laguna-xs.2` passed the agentic harness 3/3 with zero scope violations — it respected file-level tool boundaries perfectly. Simultaneously, it ignored textual version pinning instructions in every stress payload.
