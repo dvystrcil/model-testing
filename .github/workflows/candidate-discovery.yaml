@@ -67,11 +67,11 @@ jobs:
       # git sends that header on the push below instead of the App token: every
       # run since this workflow landed died with "Permission to
       # dvystrcil/model-testing.git denied to github-actions[bot]" (403).
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.15'
 
@@ -79,7 +79,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Fetch secrets from Infisical
-        uses: Infisical/secrets-action@v1.0.18
+        uses: Infisical/secrets-action@d2e351f16c6ca20d17c85e6c992e04bdeb64e87d # v1.0.18
         with:
           method: oidc
           identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
@@ -133,7 +133,7 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
         if: steps.changed.outputs.changed == 'true'
         id: app-token
         with:
