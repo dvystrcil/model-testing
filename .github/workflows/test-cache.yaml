@@ -26,7 +26,7 @@ jobs:
     outputs:
       cache-key: ${{ steps.cache-key.outputs.key }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Generate cache key
         id: cache-key
@@ -51,7 +51,7 @@ jobs:
           cat "$OUTFILE"
 
       - name: Save to cache
-        uses: actions/cache/save@v6
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: benchmarks/results/
           key: ${{ steps.cache-key.outputs.key }}
@@ -60,7 +60,7 @@ jobs:
     needs: populate
     runs-on: model-testing-runner
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Generate cache key (same logic as populate)
         id: cache-key
@@ -75,7 +75,7 @@ jobs:
 
       - name: Restore from cache
         id: cache-restore
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: benchmarks/results/
           key: ${{ steps.cache-key.outputs.key }}
@@ -100,7 +100,7 @@ jobs:
     needs: populate
     runs-on: model-testing-runner
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Generate cache key with bumped OLLAMA_VERSION
         id: cache-key
@@ -115,7 +115,7 @@ jobs:
 
       - name: Attempt restore — should MISS
         id: cache-restore
-        uses: actions/cache/restore@v6
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: benchmarks/results/
           key: ${{ steps.cache-key.outputs.key }}
