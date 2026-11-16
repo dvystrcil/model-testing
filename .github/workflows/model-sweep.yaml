@@ -283,6 +283,11 @@ jobs:
     if: always()
     runs-on: model-testing-runner
     timeout-minutes: 30
+    # OIDC to Infisical (homelab#2314). Checkout is the only other user of
+    # the token; artifacts use the runtime token, delivery the App token.
+    permissions:
+      contents: read
+      id-token: write
 
     env:
       # Which sweep's DATA this job is about -- not necessarily this run.
@@ -317,16 +322,16 @@ jobs:
 
       # OWUI_API_KEY is sourced from Infisical (homelab-bz-gt/prod) —
       # matches the helm-update-ai pattern (feedback_cicd_app_not_pat,
-      # feedback_match_sibling_workflow_conventions). The repo secrets
-      # INFISICAL_CLIENT_ID + INFISICAL_CLIENT_SECRET must be set once
-      # before the first sweep — see feedback_new_repo_infisical_secrets.
+      # feedback_match_sibling_workflow_conventions). Auth is GitHub OIDC
+      # via the repo variable INFISICAL_IDENTITY_ID (homelab#427, #2314);
+      # no stored Infisical secrets.
       # The action exports OWUI_API_KEY into the GHA environment so
       # subsequent steps read it via ${{ env.OWUI_API_KEY }}.
       - name: Fetch secrets from Infisical
         uses: Infisical/secrets-action@d2e351f16c6ca20d17c85e6c992e04bdeb64e87d # v1.0.18
         with:
-          client-id: ${{ secrets.INFISICAL_CLIENT_ID }}
-          client-secret: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+          method: oidc
+          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
           env-slug: prod
           project-slug: homelab-bz-gt
           secret-path: /
