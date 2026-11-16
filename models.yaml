@@ -226,3 +226,11 @@ models:
 
   # 39.8B params, Q8_0, 42.3 GB. capabilities: tools,thinking,completion
   - name: hf.co/unsloth/flint-GGUF:Q8_0
+
+  # --- Added by weekly candidate discovery (2026-11-15) ------------------
+  # Each of these was pulled, generated, and unloaded cleanly on
+  # max-01 before this PR was opened. Pre-flight proves it RUNS;
+  # the sweep is what decides whether it is any good.
+
+  # 27.3B params, Q8_0, 28.6 GB. capabilities: tools,thinking,completion
+  - name: hf.co/ConceptCountry/qwen-concept-27b:Q8_0
