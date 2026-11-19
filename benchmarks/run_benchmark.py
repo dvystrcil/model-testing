@@ -68,10 +68,38 @@ SLOWEST_TPS = 8.0
 TIMEOUT_MARGIN = 210
 
 
-def http_timeout_for(payload: dict) -> float:
-    """Wall-clock for one request, sized so the token cap binds first."""
+# model-testing#176: SLOWEST_TPS was still a guess about every model, and
+# ripple-preview:65b-q4_K_M generates at ~5.7 tok/s -- below it -- so in run
+# 44602629787 the 722s timeout fired before the 4096 cap could bind. Each
+# model's eval rate is now MEASURED at warmup (eval_count/eval_duration of
+# the warmup reply) and kept here for the rest of the sweep. Nothing is
+# persisted across sweeps: a rate is only trusted on the hardware and ollama
+# version it was measured on.
+EVAL_TPS: dict[str, float] = {}
+
+
+def eval_rate(resp: dict) -> float | None:
+    """Generation tok/s from an ollama reply, or None if it carries none."""
+    ec, ed = resp.get("eval_count") or 0, resp.get("eval_duration") or 0
+    if ec <= 0 or ed <= 0:
+        return None
+    return ec / (ed / 1e9)
+
+
+def http_timeout_for(payload: dict, eval_tps: float | None = None) -> float:
+    """Wall-clock for one request, sized so the token cap binds first.
+
+    The rate is the model's measured one (EVAL_TPS, from warmup) when there
+    is one, but never FASTER than SLOWEST_TPS: the warmup decodes "hi" at
+    short context, which overstates the rate deep into a 4096-token answer.
+    So a measurement can only lengthen the timeout. A timeout that is too
+    long costs time on a genuine hang; one that is too short loses a cell.
+    """
+    if eval_tps is None:
+        eval_tps = EVAL_TPS.get(payload.get("model"))
+    rate = min(eval_tps, SLOWEST_TPS) if eval_tps and eval_tps > 0 else SLOWEST_TPS
     cap = (payload.get("options") or {}).get("num_predict", NUM_PREDICT)
-    return max(HTTP_TIMEOUT, cap / SLOWEST_TPS + TIMEOUT_MARGIN)
+    return max(HTTP_TIMEOUT, cap / rate + TIMEOUT_MARGIN)
 
 
 def apply_generation_limit(payload: dict,
@@ -1030,6 +1058,9 @@ def warmup_model(ollama_url: str, model: str, attempts: int = 3) -> bool:
     evicted), so it retries: a model that has just landed on disk may need a
     moment before it will answer.
     """
+    # A rate from an earlier warmup of this model must not outlive a failed
+    # or rate-less one: fall back rather than trust a stale number.
+    EVAL_TPS.pop(model, None)
     for i in range(1, attempts + 1):
         info(f"warming up {model} (attempt {i}/{attempts}) — "
              f"ensuring model is fully loaded into VRAM...")
@@ -1046,6 +1077,16 @@ def warmup_model(ollama_url: str, model: str, attempts: int = 3) -> bool:
             # comparable across models. Without the eviction it would only be
             # a load time for whichever model happened not to be resident.
             info(f"warmup done  cold_load={load_ms:.0f}ms")
+            rate = eval_rate(resp)
+            if rate is not None:
+                EVAL_TPS[model] = rate
+            # Once per model, so the sweep log shows which budget every
+            # request for it was sent with, and why.
+            t = http_timeout_for({"model": model})
+            src = (f"measured {rate:.1f} tok/s" if rate is not None
+                   else "no usable rate -- fallback")
+            info(f"eval_rate={src}  SLOWEST_TPS={SLOWEST_TPS}  "
+                 f"timeout={t:.0f}s at num_predict={NUM_PREDICT}")
             return True
         except Exception as e:                     # noqa: BLE001 - reported
             info(f"warmup attempt {i} failed: {e}")

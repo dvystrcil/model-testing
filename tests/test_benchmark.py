@@ -633,3 +633,113 @@ def test_print_summary_survives_a_timed_out_row(capsys):
                        "elapsed_seconds": 722.0, "timeout_seconds": 722.0,
                        "timed_out_runs": 1, "runs": 1}])
     assert "timed out" in capsys.readouterr().out.lower()
+
+
+# ---------------------------------------------------------------------------
+# The wall-clock sized from the model's own measured eval rate (#176 AC2).
+#
+# SLOWEST_TPS=8.0 gave ripple-preview:65b-q4_K_M 4096/8+210 = 722s, but
+# ripple generates at ~5.7 tok/s, so the timeout fired before the token cap
+# could bind (the #145 invariant). The warmup already returns eval_count and
+# eval_duration; the rate is taken from there, and only ever LENGTHENS the
+# timeout -- "hi" decodes at short context, faster than a 4096-token answer,
+# so a fast measured rate must not shrink the hang detector.
+# ---------------------------------------------------------------------------
+
+def _p(cap=rb.NUM_PREDICT, model="m"):
+    return rb.apply_generation_limit(
+        {"model": model, "messages": [], "options": {"num_predict": cap}})
+
+
+def test_eval_rate_from_a_warmup_response():
+    assert rb.eval_rate({"eval_count": 57, "eval_duration": 10 * 10**9}) == 5.7
+
+
+def test_eval_rate_is_none_when_unusable():
+    for resp in ({}, {"eval_count": 10}, {"eval_duration": 10**9},
+                 {"eval_count": 10, "eval_duration": 0},
+                 {"eval_count": 0, "eval_duration": 10**9}):
+        assert rb.eval_rate(resp) is None, resp
+
+
+def test_a_ripple_like_rate_lets_the_cap_bind_first():
+    t = rb.http_timeout_for(_p(), eval_tps=5.7)
+    assert t == rb.NUM_PREDICT / 5.7 + rb.TIMEOUT_MARGIN
+    assert rb.NUM_PREDICT / 5.7 < t
+    # The old fixed formula is what run 44602629787 hit.
+    assert rb.http_timeout_for(_p(), eval_tps=None) == 722.0
+
+
+def test_a_fast_measured_rate_never_shrinks_the_timeout():
+    assert rb.http_timeout_for(_p(12288), eval_tps=80.0) == \
+        rb.http_timeout_for(_p(12288), eval_tps=None)
+
+
+def test_no_usable_rate_falls_back_to_slowest_tps(monkeypatch):
+    monkeypatch.setattr(rb, "EVAL_TPS", {})
+    want = 12288 / rb.SLOWEST_TPS + rb.TIMEOUT_MARGIN
+    assert rb.http_timeout_for(_p(12288)) == want
+    assert rb.http_timeout_for(_p(12288), eval_tps=0) == want
+
+
+def test_the_floor_still_holds_with_a_measured_rate():
+    assert rb.http_timeout_for(_p(128), eval_tps=5.7) == rb.HTTP_TIMEOUT
+
+
+def _fake_urlopen(responses, seen):
+    it = iter(responses)
+
+    class _Resp:
+        def __init__(self, body): self.body = body
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return json.dumps(self.body).encode()
+
+    def urlopen(req, timeout):
+        seen.append(timeout)
+        nxt = next(it)
+        if isinstance(nxt, Exception):
+            raise nxt
+        return _Resp(nxt)
+    return urlopen
+
+
+import json  # noqa: E402
+
+
+def test_warmup_records_the_rate_and_later_requests_use_it(monkeypatch, capsys):
+    """The composition: a rate measured at warmup must reach the timeout the
+    real request is sent with, and the sweep log must say what was chosen."""
+    monkeypatch.setattr(rb, "EVAL_TPS", {})
+    seen = []
+    monkeypatch.setattr(rb.urllib.request, "urlopen", _fake_urlopen(
+        [{"total_duration": 11 * 10**9, "eval_count": 57,
+          "eval_duration": 10 * 10**9}, {}], seen))
+    assert rb.warmup_model("http://x", "ripple")
+    assert rb.EVAL_TPS["ripple"] == 5.7
+    rb.ollama_chat("http://x", _p(model="ripple"))
+    assert seen[-1] == rb.NUM_PREDICT / 5.7 + rb.TIMEOUT_MARGIN
+    out = capsys.readouterr().out
+    lines = [l for l in out.splitlines() if "eval_rate=" in l]
+    assert len(lines) == 1, out
+    assert "5.7" in lines[0] and "measured" in lines[0]
+    assert f"timeout={seen[-1]:.0f}s" in lines[0]
+
+
+def test_warmup_without_eval_fields_falls_back(monkeypatch, capsys):
+    monkeypatch.setattr(rb, "EVAL_TPS", {"m": 3.0})   # stale from a prior model run
+    monkeypatch.setattr(rb.urllib.request, "urlopen",
+                        _fake_urlopen([{"total_duration": 10**9}], []))
+    assert rb.warmup_model("http://x", "m")
+    assert "m" not in rb.EVAL_TPS
+    assert rb.http_timeout_for(_p(model="m")) == 722.0
+    assert "fallback" in capsys.readouterr().out
+
+
+def test_failed_warmup_leaves_no_rate(monkeypatch):
+    monkeypatch.setattr(rb, "EVAL_TPS", {"m": 3.0})
+    monkeypatch.setattr(rb.time, "sleep", lambda s: None)
+    monkeypatch.setattr(rb.urllib.request, "urlopen", _fake_urlopen(
+        [TimeoutError("timed out")] * 3, []))
+    assert not rb.warmup_model("http://x", "m")
+    assert "m" not in rb.EVAL_TPS
