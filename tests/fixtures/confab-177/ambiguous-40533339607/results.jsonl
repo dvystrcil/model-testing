@@ -1,0 +1,3 @@
+{"type": "metadata", "ts": "2026-10-24T18:00:00Z", "ollama_url": "http://ollama.ollama.svc:11434", "ollama_version": "0.38.9", "hostname": "model-testing-runner-runner-w8n2v", "git_commit": "c0ffee1", "git_dirty": false}
+{"model": "qwen3.6:35b", "payload": "factual_recall", "runs": 2, "facts_score": 0.9, "forbidden_violations": [], "eval_count": 2207, "eval_duration": 40000000000, "gen_tps": 55.1}
+{"model": "qwen3.6:27B", "payload": "factual_recall", "runs": 2, "facts_score": 0.8, "forbidden_violations": [], "eval_count": 3100, "eval_duration": 260000000000, "gen_tps": 11.9}

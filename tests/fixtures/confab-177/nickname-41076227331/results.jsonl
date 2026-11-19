@@ -1,0 +1,3 @@
+{"type": "metadata", "ts": "2026-10-28T18:00:00Z", "ollama_url": "http://ollama.ollama.svc:11434", "ollama_version": "0.39.1", "hostname": "model-testing-runner-runner-m4k9q", "git_commit": "7f2a9c1", "git_dirty": false}
+{"model": "qwen3-coder-next:latest", "payload": "surgical_edit", "runs": 2, "facts_score": 1.0, "forbidden_violations": [], "eval_count": 700, "eval_duration": 15000000000, "gen_tps": 47.0}
+{"model": "qwen3.6:35b", "payload": "surgical_edit", "runs": 2, "facts_score": 0.5, "forbidden_violations": [], "eval_count": 1200, "eval_duration": 22000000000, "gen_tps": 54.0}
