@@ -1,0 +1,2 @@
+{"type": "metadata", "ts": "2026-11-19T21:00:00Z", "ollama_url": "http://ollama.ollama.svc:11434", "ollama_version": "0.41.2", "hostname": "brand-new-gpu-host-q7z3x", "git_commit": "0d3adb3", "git_dirty": false}
+{"model": "qwen3.6:35b", "payload": "factual_recall", "runs": 2, "facts_score": 0.9, "forbidden_violations": [], "eval_count": 2207, "eval_duration": 40000000000, "gen_tps": 55.1}

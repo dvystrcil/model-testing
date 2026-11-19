@@ -1,0 +1,6 @@
+{"type": "metadata", "ts": "2026-11-19T19:52:58Z", "ollama_url": "http://ollama.ollama.svc:11434", "ollama_version": "0.40.16", "hostname": "model-testing-runner-runner-kk8f6", "git_commit": "a9ba7a4", "git_dirty": false}
+{"model": "qwen3.6:35b", "payload": "factual_recall", "runs": 2, "facts_score": 0.9, "forbidden_violations": [], "eval_count": 2207, "eval_duration": 40000000000, "gen_tps": 55.1}
+{"model": "qwen3.6:27B", "payload": "factual_recall", "runs": 2, "facts_score": 0.8, "forbidden_violations": [], "eval_count": 3100, "eval_duration": 260000000000, "gen_tps": 11.9}
+{"type": "metadata", "ts": "2026-11-19T20:01:34Z", "ollama_url": "http://ollama.ollama.svc:11434", "ollama_version": "0.40.16", "hostname": "model-testing-runner-runner-6pz89", "git_commit": "a9ba7a4", "git_dirty": false}
+{"model": "qwen3.6:35b", "payload": "creative_scene_in_voice", "runs": 2, "facts_score": 0.8333, "forbidden_violations": [], "eval_count": 2392, "eval_duration": 44154560500, "gen_tps": 54.2}
+{"model": "qwen3.6:27B", "payload": "creative_scene_in_voice", "runs": 2, "facts_score": 0.6667, "forbidden_violations": [], "eval_count": 3304, "eval_duration": 276111331500, "gen_tps": 12.0}

@@ -1,0 +1,2 @@
+{"type": "metadata", "ts": "2026-10-30T18:00:00Z", "ollama_url": "http://ollama.ollama.svc:11434", "ollama_version": "0.39.4", "hostname": "model-testing-runner-runner-t2p8d", "git_commit": "5c1e0b2", "git_dirty": false}
+{"model": "hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q8_0", "payload": "surgical_edit", "runs": 2, "facts_score": 0.75, "forbidden_violations": [], "eval_count": 900, "eval_duration": 20000000000, "gen_tps": 45.0}
