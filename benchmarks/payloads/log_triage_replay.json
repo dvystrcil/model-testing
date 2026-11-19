@@ -1,0 +1,1902 @@
+{
+  "name": "log_triage_replay",
+  "type": "log_triage_replay",
+  "on_demand": true,
+  "description": "Replays the n8n Log Analysis Agent's `Ollama Triage` call over 31 real triage runs (redacted cluster logs) and scores each answer's overall_severity against hand labels: real problems missed, NOISE runs filed, invalid JSON, wall time. ON DEMAND ONLY (--payload log_triage_replay); excluded from 'all'. The node calls the OpenAI-compatible /v1/chat/completions with temperature 0.1, max_tokens 2048, reasoning_effort \"none\"; this runner posts to native /api/chat, mapped to think: false, options.temperature 0.1, options.num_predict 2048. That mapping is an approximation of the production request, not the same call. Complements structured_json_triage_summary (synthetic, JSON validity and speed only).",
+  "role": "Log Analysis Agent triage model (n8n `Ollama Triage` node)",
+  "prompt_source": {
+    "repo": "dvystrcil/n8n-workflow",
+    "path": "workflows/log_analysis_agent.json",
+    "commit": "6879fadcec94622b81f2bd3aa2f7d0ff27d1e0de",
+    "prompt_node": "Build Triage Prompt",
+    "prompt_js": "const { errorGroups, rangeStart, rangeEnd } = $('Process Errors').first().json;\n\nconst errorList = errorGroups.map((g, i) => {\n  const loc = g.container ? `${g.pod}/${g.container}` : g.pod;\n  const resHint = g.resourceId ? ` resource=${g.resourceId.kind}/${g.resourceId.namespace}/${g.resourceId.name}` : '';\n  const rbacHint = g.rbac ? ` rbac:SA=${g.saNs}/${g.saName} verb=${g.verb} resources=${(g.rbacResources||[]).join(',')}` : '';\n  return `${i+1}. [${g.ns}] ${loc} (x${g.count} occurrences):${resHint}${rbacHint}\\n   ${g.sample.slice(0, 200)}`;\n}).join('\\n\\n');\n\nconst prompt = `You are a Kubernetes cluster health analyst. Analyze these error log groups from a homelab cluster (time window: ${rangeStart} to ${rangeEnd}).\\n\\nFor each group classify severity as:\\n- CRITICAL: service outage, data loss risk, or immediate action required\\n- WARNING: degraded service, recurring issue worth investigating\\n- NOISE: expected, transient, or known-harmless\\n\\nError groups:\\n${errorList}\\n\\nReturn exactly ${errorGroups.length} entries in \"triaged\", one per error group, in order. \"index\" is that group's number (1 to ${errorGroups.length}). Never merge groups, even when they share a cause.\\n\\nRespond ONLY with valid JSON (no markdown fences):\\n{\"triaged\":[{\"index\":1,\"severity\":\"WARNING\",\"component\":\"infisical-operator\",\"summary\":\"Recurring reconciler errors on secret CRs\",\"severityRationale\":\"Reconciler keeps failing but cached token still valid, so cluster still works\"}],\"overall_severity\":\"WARNING\",\"executive_summary\":\"One warning: infisical operator failing on secret rotation\"}`;\n\nreturn [{ json: { prompt, errorGroups, rangeStart, rangeEnd } }];",
+    "request_node": "Ollama Triage",
+    "request_json_body": "={\n  \"model\": \"gemma4:26b-a4b-it-qat\",\n  \"stream\": false,\n  \"temperature\": 0.1,\n  \"max_tokens\": 2048,\n  \"reasoning_effort\": \"none\",\n  \"messages\": [{\"role\": \"user\", \"content\": {{ JSON.stringify($json.prompt) }}}]\n}",
+    "parse_node": "Format Issue",
+    "note": "prompt_js and request_json_body are copied verbatim from the nodes' parameters.jsCode / parameters.jsonBody at that commit. The runner renders the prompt from the template literal in prompt_js, so a re-vendor is the only edit needed when the node changes."
+  },
+  "labels_note": "labels.ac: the replay request's rule (issue closed as completed -> real, graded by the resolution; closed not planned -> NOISE). labels.adjudicated: the same runs re-read from how each was resolved. null = excluded from that set (outcome never established, or still open). Labels are per run; the group-level answers are not labelled.",
+  "payload": {
+    "model": "REPLACED_BY_RUNNER",
+    "stream": false,
+    "think": false,
+    "options": {
+      "temperature": 0.1,
+      "num_predict": 2048
+    }
+  },
+  "cases": [
+    {
+      "id": "run-2026-10-05T16:49:01.725Z",
+      "rangeStart": "2026-10-05T10:49:01.725Z",
+      "rangeEnd": "2026-10-05T16:49:01.725Z",
+      "labels": {
+        "ac": "WARNING",
+        "adjudicated": "WARNING"
+      },
+      "groups": [
+        {
+          "ns": "argocd",
+          "pod": "argocd-image-updater-controller-9f69fcc6c-bj2c9",
+          "container": "argocd-image-updater-controller",
+          "count": 5,
+          "sample": "time=\"2026-10-05T16:46:27Z\" level=warning msg=\"Could not fetch credentials: could not fetch secret 'app-a-harbor-pull' from namespace 'app-a' (field: '.dockerconfigjson'): secrets "
+        },
+        {
+          "ns": "argocd",
+          "pod": "argocd-image-updater-controller-9f69fcc6c-bj2c9",
+          "container": "argocd-image-updater-controller",
+          "count": 5,
+          "sample": "time=\"2026-10-05T16:46:27Z\" level=error msg=\"Could not set registry endpoint credentials: could not fetch secret 'app-a-harbor-pull' from namespace 'app-a' (field: '.dockerconfigjs"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1005 16:45:06.262726       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController invidious/cronjob-e, requeuing: Operation cannot be fulfilled on cronjobs"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1005 16:40:06.251699       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController cronjob-c/cronjob-c, requeuing: Operation cannot be fulfilled "
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1005 16:40:04.581818       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController ns-f/cronjob-d, requeuing: Operation cannot be fulfilled on cronjob"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 16:48:59.646093       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 16:48:57.528580       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 16:48:56.720228       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 16:48:51.189721       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 16:48:19.751967       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 16:48:05.087790       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-05T22:00:02.115Z",
+      "rangeStart": "2026-10-05T16:00:02.115Z",
+      "rangeEnd": "2026-10-05T22:00:02.115Z",
+      "labels": {
+        "ac": "WARNING",
+        "adjudicated": "WARNING"
+      },
+      "groups": [
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 2,
+          "sample": "E1005 21:51:33.935100       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1005 21:45:06.760742       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController invidious/cronjob-e, requeuing: Operation cannot be fulfilled on cronjobs"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1005 21:45:04.269626       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController app-b/app-b, requeuing: Operation cann"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 22:00:01.767968       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 21:59:46.634605       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 21:59:37.280020       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 21:59:33.313973       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 21:59:31.087463       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 21:59:29.982104       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 21:59:28.168923       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 21:58:58.909593       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 21:58:51.870439       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 21:58:36.544867       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 21:58:27.364985       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1005 21:58:21.450209       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-06T10:00:01.618Z",
+      "rangeStart": "2026-10-06T04:00:01.618Z",
+      "rangeEnd": "2026-10-06T10:00:01.618Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": "WARNING"
+      },
+      "groups": [
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1006 09:45:04.435273       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController app-b/app-b, requeuing: Operation cann"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 09:59:44.472670       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 09:59:37.246951       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 09:59:31.866292       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 09:59:28.873548       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 09:59:27.954384       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 09:59:21.226301       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 09:58:43.999122       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 09:58:35.722036       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 09:58:20.142621       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 09:58:08.839932       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 09:58:04.198216       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 09:58:02.472203       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 09:58:01.077676       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-06T16:00:01.570Z",
+      "rangeStart": "2026-10-06T10:00:01.570Z",
+      "rangeEnd": "2026-10-06T16:00:01.570Z",
+      "labels": {
+        "ac": "WARNING",
+        "adjudicated": "WARNING"
+      },
+      "groups": [
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 2,
+          "sample": "E1006 15:58:50.843201       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1006 15:45:07.232258       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController invidious/cronjob-e, requeuing: Operation cannot be fulfilled on cronjobs"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1006 15:45:04.607415       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController app-b/app-b, requeuing: Operation cann"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 15:59:48.979039       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 15:59:36.156269       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 15:59:28.226404       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 15:59:28.043825       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 15:59:24.110984       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 15:59:22.188548       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 15:59:21.248151       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotClass: the server could not find the requested resource (get volumesnapshotclasses.snapshot.stor"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 15:59:11.175939       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-snapshotter-77bb7675b4-kmzjt",
+          "container": "csi-snapshotter",
+          "count": 1,
+          "sample": "E1006 15:58:58.859787       1 reflector.go:227] \"Failed to watch\" err=\"failed to list *v1.VolumeSnapshotContent: the server could not find the requested resource (get volumesnapshotcontents.snapshot.s"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-08T10:00:01.661Z",
+      "rangeStart": "2026-10-08T04:00:01.661Z",
+      "rangeEnd": "2026-10-08T10:00:01.661Z",
+      "labels": {
+        "ac": "WARNING",
+        "adjudicated": "WARNING"
+      },
+      "groups": [
+        {
+          "ns": "ollama",
+          "pod": "ollama-59787fc65-27n77",
+          "container": "ollama",
+          "count": 81,
+          "sample": "time=2026-10-08T09:59:57.407Z level=ERROR source=images.go:777 msg=\"couldn't read model metadata\" error=\"unsupported tensor \\\"blk.0.ffn_down_exps.weight\\\" size overflows\"\n"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-09T04:00:01.336Z",
+      "rangeStart": "2026-10-08T22:00:01.336Z",
+      "rangeEnd": "2026-10-09T04:00:01.336Z",
+      "labels": {
+        "ac": "WARNING",
+        "adjudicated": "WARNING"
+      },
+      "groups": [
+        {
+          "ns": "cert-manager",
+          "pod": "cert-manager-cainjector-6468bc96c7-djmj7",
+          "container": "cert-manager-cainjector",
+          "count": 4,
+          "sample": "E1009 03:49:31.538497       1 indexers.go:67] \"unable to fetch certificate that owns the secret\" err=\"Certificate.cert-manager.io \\\"ingress-cert-production\\\" not found\" logger=\"cert-manager\" kind=\"val"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-csi-plugin-bcqw7",
+          "container": "longhorn-liveness-probe",
+          "count": 1,
+          "sample": "E1009 03:58:34.963459       1 connection.go:208] \"Lost connection\" address=\"unix:///csi/csi.sock\"\n"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-vip-node-d",
+          "container": "kube-vip",
+          "count": 1,
+          "sample": "E1009 03:49:16.246083       1 leaderelection.go:332] error retrieving resource lock kube-system/plndr-cp-lock: leases.coordination.k8s.io \"plndr-cp-lock\" is forbidden: User \"kubernetes-admin\" cannot g"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-vip-node-b",
+          "container": "kube-vip",
+          "count": 1,
+          "sample": "E1009 03:49:33.004449       1 leaderelection.go:369] Failed to update lock: Operation cannot be fulfilled on leases.coordination.k8s.io \"plndr-cp-lock\": the object has been modified; please apply your"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-vip-node-a",
+          "container": "kube-vip",
+          "count": 1,
+          "sample": "E1009 03:49:31.557912       1 leaderelection.go:369] Failed to update lock: Put \"https://kubernetes:6443/apis/coordination.k8s.io/v1/namespaces/kube-system/leases/plndr-cp-lock?timeout=10s\": context d"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-vip-node-a",
+          "container": "kube-vip",
+          "count": 1,
+          "sample": "time=\"2026-10-09T03:49:33Z\" level=fatal msg=\"lost leadership, restarting kube-vip\"\n"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "unknown",
+          "container": "",
+          "count": 1,
+          "sample": "E1009 03:49:37.225062       1 cache.go:568] \"Pod updated on a different node than previously added to. Scheduler cache is corrupted and can badly affect scheduling decisions\" logger=\"UnhandledError\" p",
+          "resourceId": {
+            "kind": "Pod",
+            "namespace": "kube-system",
+            "name": "updated"
+          }
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-scheduler-node-d",
+          "container": "kube-scheduler",
+          "count": 1,
+          "sample": "E1009 03:49:16.246495       1 authentication.go:75] \"Unable to authenticate the request\" err=\"tokenreviews.authentication.k8s.io is forbidden: User \\\"system:kube-scheduler\\\" cannot create resource \\\"t"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-scheduler-node-d",
+          "container": "kube-scheduler",
+          "count": 1,
+          "sample": "E1009 03:49:16.246458       1 webhook.go:154] Failed to make webhook authenticator request: tokenreviews.authentication.k8s.io is forbidden: User \"system:kube-scheduler\" cannot create resource \"tokenr"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-scheduler-node-d",
+          "container": "kube-scheduler",
+          "count": 1,
+          "sample": "E1009 03:49:16.245544       1 reflector.go:227] \"Failed to watch\" err=\"configmaps \\\"extension-apiserver-authentication\\\" is forbidden: User \\\"system:kube-scheduler\\\" cannot watch resource \\\"configmaps"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-scheduler-node-d",
+          "container": "kube-scheduler",
+          "count": 1,
+          "sample": "E1009 03:49:16.245847       1 reflector.go:227] \"Failed to watch\" err=\"poddisruptionbudgets.policy is forbidden: User \\\"system:kube-scheduler\\\" cannot watch resource \\\"poddisruptionbudgets\\\" in API gr"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-09T10:00:01.600Z",
+      "rangeStart": "2026-10-09T04:00:01.600Z",
+      "rangeEnd": "2026-10-09T10:00:01.600Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": "NOISE"
+      },
+      "groups": [
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1009 09:45:04.755967       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController invidious/cronjob-e, requeuing: Operation cannot be fulfilled on cronjobs"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1009 09:45:04.560744       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController app-b/app-b, requeuing: Operation cann"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1009 09:40:07.005280       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController cronjob-c/cronjob-c, requeuing: Operation cannot be fulfilled "
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1009 09:40:04.589931       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController ns-f/cronjob-d, requeuing: Operation cannot be fulfilled on cronjob"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1009 09:30:20.622345       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController pihole/nebula-sync, requeuing: Operation cannot be fulfilled on cronjobs.batch \\\"nebul"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1009 09:30:05.580466       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController invidious/cronjob-e, requeuing: Operation cannot be fulfilled on cronjobs"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-a",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "W1009 09:45:49.869880       1 controller.go:139] slow openapi aggregation of \"applicationsets.argoproj.io\": 1.435117383s\n"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-09T16:00:01.194Z",
+      "rangeStart": "2026-10-09T10:00:01.194Z",
+      "rangeEnd": "2026-10-09T16:00:01.194Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": "NOISE"
+      },
+      "groups": [
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1009 15:45:05.694461       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController invidious/cronjob-e, requeuing: Operation cannot be fulfilled on cronjobs"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1009 15:45:04.441292       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController app-b/app-b, requeuing: Operation cann"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1009 15:40:04.647846       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController ns-f/cronjob-d, requeuing: Operation cannot be fulfilled on cronjob"
+        },
+        {
+          "ns": "arc-runner",
+          "pod": "homelab-runner-z854l-runner-gjv9h",
+          "container": "dind",
+          "count": 1,
+          "sample": "time=\"2026-10-09T15:42:28.679073259Z\" level=error msg=\"Error running exec h01 in container: exec attach failed: error attaching stdout stre"
+        },
+        {
+          "ns": "arc-runner",
+          "pod": "homelab-runner-z854l-runner-gjv9h",
+          "container": "dind",
+          "count": 1,
+          "sample": "time=\"2026-10-09T15:42:13.839698736Z\" level=error msg=\"Handler for POST /containers/{name:.*}/start returned error\" error-response=\"failed to discover GPU vendor from CDI: no known GPU vendor found\" m"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-09T22:00:01.653Z",
+      "rangeStart": "2026-10-09T16:00:01.653Z",
+      "rangeEnd": "2026-10-09T22:00:01.653Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": "WARNING"
+      },
+      "groups": [
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1009 21:30:06.070795       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController invidious/cronjob-e, requeuing: Operation cannot be fulfilled on cronjobs"
+        },
+        {
+          "ns": "argocd",
+          "pod": "argocd-image-updater-controller-9f69fcc6c-bj2c9",
+          "container": "argocd-image-updater-controller",
+          "count": 1,
+          "sample": "time=\"2026-10-09T21:31:00Z\" level=error msg=\"Could not get tags from registry: toomanyrequests: retry-after: 547.349µs, allowed: 44000/minute\" application=argocd/immich controller=imageupdater control"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-10T10:00:01.292Z",
+      "rangeStart": "2026-10-10T04:00:01.292Z",
+      "rangeEnd": "2026-10-10T10:00:01.292Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": "WARNING"
+      },
+      "groups": [
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1010 09:45:05.948541       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController invidious/cronjob-e, requeuing: Operation cannot be fulfilled on cronjobs"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1010 09:30:20.523736       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController pihole/nebula-sync, requeuing: Operation cannot be fulfilled on cronjobs.batch \\\"nebul"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1010 09:30:06.205808       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController invidious/cronjob-e, requeuing: Operation cannot be fulfilled on cronjobs"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-a",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "W1010 09:55:50.024314       1 controller.go:139] slow openapi aggregation of \"applicationsets.argoproj.io\": 1.365023897s\n"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-a",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "W1010 09:40:50.423364       1 controller.go:139] slow openapi aggregation of \"applicationsets.argoproj.io\": 1.716990534s\n"
+        },
+        {
+          "ns": "argocd",
+          "pod": "argocd-image-updater-controller-9f69fcc6c-bj2c9",
+          "container": "argocd-image-updater-controller",
+          "count": 1,
+          "sample": "time=\"2026-10-10T09:30:19Z\" level=error msg=\"Could not get tags from registry: toomanyrequests: retry-after: 291.287µs, allowed: 44000/minute\" application=argocd/immich controller=imageupdater control"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-11T04:00:01.794Z",
+      "rangeStart": "2026-10-10T22:00:01.794Z",
+      "rangeEnd": "2026-10-11T04:00:01.794Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": "NOISE"
+      },
+      "groups": [
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1011 03:40:04.666965       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController ns-f/cronjob-d, requeuing: Operation cannot be fulfilled on cronjob"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1011 03:30:20.033271       1 cronjob_controllerv2.go:179] \"Unhandled Error\" err=\"error syncing CronJobController pihole/nebula-sync, requeuing: Operation cannot be fulfilled on cronjobs.batch \\\"nebul"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-15T04:00:01.280Z",
+      "rangeStart": "2026-10-14T22:00:01.280Z",
+      "rangeEnd": "2026-10-15T04:00:01.280Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": "WARNING"
+      },
+      "groups": [
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-manager-w87vq",
+          "container": "longhorn-manager",
+          "count": 2,
+          "sample": "time=\"2026-10-15T03:35:01.442994257Z\" level=warning msg=\"Failed to get filesystem device type of /var/lib/longhorn/\" func=\"controller.(*ClusterInfo).collectNodeDiskCount\" file=\"setting_controller.go:2"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-18T04:00:02.118Z",
+      "rangeStart": "2026-10-17T22:00:02.118Z",
+      "rangeEnd": "2026-10-18T04:00:02.118Z",
+      "labels": {
+        "ac": "WARNING",
+        "adjudicated": "WARNING"
+      },
+      "groups": [
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-manager-w87vq",
+          "container": "longhorn-manager",
+          "count": 2,
+          "sample": "time=\"2026-10-18T03:35:38.290943323Z\" level=warning msg=\"Failed to get filesystem device type of /var/lib/longhorn/\" func=\"controller.(*ClusterInfo).collectNodeDiskCount\" file=\"setting_controller.go:2"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "nightly-backup-29871600-cb9fv",
+          "container": "nightly-backup",
+          "count": 1,
+          "sample": "time=\"2026-10-18T04:00:01.199499205Z\" level=warning msg=\"Cannot create job for pvc-0002 volume in state detached\" func=recurringjob.filterVolumesForJob file=\"util.go:14"
+        },
+        {
+          "ns": "autoscaler",
+          "pod": "unknown",
+          "container": "",
+          "count": 1,
+          "sample": "E1018 03:45:00.119665       1 matcher.go:57] \"Failed to get parent controller for pod\" err=\"Job app-b/app-b-29871585 does not exist\" pod=\"applicationset",
+          "resourceId": {
+            "kind": "Pod",
+            "namespace": "autoscaler",
+            "name": "app-b"
+          }
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-19T16:00:01.524Z",
+      "rangeStart": "2026-10-19T10:00:01.524Z",
+      "rangeEnd": "2026-10-19T16:00:01.524Z",
+      "labels": {
+        "ac": "WARNING",
+        "adjudicated": "WARNING"
+      },
+      "groups": [
+        {
+          "ns": "harbor",
+          "pod": "harbor-jobservice-767ff78b56-4kgsz",
+          "container": "jobservice",
+          "count": 7,
+          "sample": "panic: failed to load configuration, error: failed to load rest config\n"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 3,
+          "sample": "E1019 15:46:14.635162       1 replica_set.go:640] \"Unhandled Error\" err=\"sync \\\"harbor/harbor-registry-6599f6f967\\\" failed with read version: 413819561 is not as new as written version: 413819565 for "
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 2,
+          "sample": "E1019 15:46:22.069532       1 replica_set.go:640] \"Unhandled Error\" err=\"sync \\\"harbor/harbor-registry-7964d6f5cb\\\" failed with read version: 413820147 is not as new as written version: 413820149 for "
+        },
+        {
+          "ns": "reloader",
+          "pod": "reloader-reloader-89d4f9fbf-5jbd2",
+          "container": "reloader-reloader",
+          "count": 1,
+          "sample": "time=\"2026-10-19T15:46:15Z\" level=error msg=\"Error syncing events: Operation cannot be fulfilled on deployments.apps \\\"harbor-registry\\\": the object has been modified; please apply your changes to the"
+        },
+        {
+          "ns": "reloader",
+          "pod": "reloader-reloader-89d4f9fbf-5jbd2",
+          "container": "reloader-reloader",
+          "count": 1,
+          "sample": "time=\"2026-10-19T15:46:15Z\" level=error msg=\"Rolling upgrade for 'harbor-jobservice' failed with error = Operation cannot be fulfilled on deployments.apps \\\"harbor-registry\\\": the object has been modi"
+        },
+        {
+          "ns": "reloader",
+          "pod": "reloader-reloader-89d4f9fbf-5jbd2",
+          "container": "reloader-reloader",
+          "count": 1,
+          "sample": "time=\"2026-10-19T15:46:15Z\" level=error msg=\"Update for 'harbor-registry' of type 'Deployment' in namespace 'harbor' failed with error Operation cannot be fulfilled on deployments.apps \\\"harbor-regist"
+        },
+        {
+          "ns": "ollama",
+          "pod": "ollama-574b656fd4-mld5g",
+          "container": "ollama",
+          "count": 1,
+          "sample": "time=2026-10-19T15:50:02.679Z level=WARN source=server.go:112 msg=\"requested context size too large for model\" num_ctx=262144 n_ctx_train=131072\n"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1019 15:46:40.005197       1 replica_set.go:640] \"Unhandled Error\" err=\"sync \\\"harbor/harbor-portal-b64c48554\\\" failed with read version: 413820632 is not as new as written version: 413820639 for gro"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1019 15:46:23.360092       1 stateful_set.go:509] \"Error syncing StatefulSet, requeuing\" err=\"read version: 413820245 is not as new as written version: 413820252 for group resource statefulsets.apps\""
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1019 15:46:15.756575       1 replica_set.go:640] \"Unhandled Error\" err=\"sync \\\"harbor/harbor-core-77c8479c4\\\" failed with read version: 413819679 is not as new as written version: 413819682 for group"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1019 15:46:15.361942       1 replica_set.go:640] \"Unhandled Error\" err=\"sync \\\"harbor/harbor-registry-78c64795f7\\\" failed with read version: 413819650 is not as new as written version: 413819655 for "
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1019 15:46:14.167074       1 replica_set.go:640] \"Unhandled Error\" err=\"sync \\\"harbor/harbor-nginx-64b59864c\\\" failed with read version: 413819525 is not as new as written version: 413819529 for grou"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-21T04:00:01.507Z",
+      "rangeStart": "2026-10-20T22:00:01.507Z",
+      "rangeEnd": "2026-10-21T04:00:01.507Z",
+      "labels": {
+        "ac": "WARNING",
+        "adjudicated": "WARNING"
+      },
+      "groups": [
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-csi-plugin-pmvmf",
+          "container": "longhorn-csi-plugin",
+          "count": 2,
+          "sample": "time=\"2026-10-21T03:32:53.650458294Z\" level=error msg=\"NodeGetVolumeStats: req: {\\\"volume_id\\\":\\\"pvc-0003\\\",\\\"volume_path\\\":\\\"/var/lib/kubelet/pods/0004"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-21T10:00:01.367Z",
+      "rangeStart": "2026-10-21T04:00:01.367Z",
+      "rangeEnd": "2026-10-21T10:00:01.367Z",
+      "labels": {
+        "ac": "WARNING",
+        "adjudicated": "WARNING"
+      },
+      "groups": [
+        {
+          "ns": "cert-manager",
+          "pod": "cert-manager-cainjector-6468bc96c7-xzwpk",
+          "container": "cert-manager-cainjector",
+          "count": 8,
+          "sample": "E1021 09:54:27.727600       1 indexers.go:67] \"unable to fetch certificate that owns the secret\" err=\"Certificate.cert-manager.io \\\"ingress-cert-production\\\" not found\" logger=\"cert-manager\" kind=\"val"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-manager-w87vq",
+          "container": "longhorn-manager",
+          "count": 2,
+          "sample": "time=\"2026-10-21T09:35:45.709943178Z\" level=warning msg=\"Failed to get filesystem device type of /var/lib/longhorn/\" func=\"controller.(*ClusterInfo).collectNodeDiskCount\" file=\"setting_controller.go:2"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-23T04:00:01.723Z",
+      "rangeStart": "2026-10-22T22:00:01.723Z",
+      "rangeEnd": "2026-10-23T04:00:01.723Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": "NOISE"
+      },
+      "groups": [
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-a",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "W1023 03:57:53.629978       1 controller.go:139] slow openapi aggregation of \"applicationsets.argoproj.io\": 1.232031855s\n"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-24T04:00:03.244Z",
+      "rangeStart": "2026-10-23T22:00:03.244Z",
+      "rangeEnd": "2026-10-24T04:00:03.244Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": "NOISE"
+      },
+      "groups": [
+        {
+          "ns": "longhorn-system",
+          "pod": "nightly-backup-29880240-tk5mc",
+          "container": "nightly-backup",
+          "count": 1,
+          "sample": "time=\"2026-10-24T04:00:01.190744131Z\" level=warning msg=\"Cannot create job for pvc-0002 volume in state detached\" func=recurringjob.filterVolumesForJob file=\"util.go:14"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-24T16:00:01.308Z",
+      "rangeStart": "2026-10-24T10:00:01.308Z",
+      "rangeEnd": "2026-10-24T16:00:01.308Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": null
+      },
+      "groups": [
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 3,
+          "sample": "time=\"2026-10-24T15:45:26.992138292Z\" level=warning msg=\"Failed to write\" func=\"dataconn.(*Server).write\" file=\"server.go:141\" error=\"write tcp 192.0.2.1:10001->192.0.2.1:39098: use of closed ne"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 2,
+          "sample": "time=\"2026-10-24T15:45:26.991035682Z\" level=error msg=\"Error reading from wire 192.0.2.1:10001\" func=\"dataconn.(*Client).read.func1\" file=\"client.go:303\" error=\"failed to read message header: read "
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 2,
+          "sample": "time=\"2026-10-24T15:45:26.980779332Z\" level=error msg=\"Error reading from wire 192.0.2.2:10031\" func=\"dataconn.(*Client).read.func1\" file=\"client.go:303\" error=\"failed to read message header: read "
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 2,
+          "sample": "time=\"2026-10-24T15:45:26.974730286Z\" level=error msg=\"Error reading from wire 192.0.2.3:10211\" func=\"dataconn.(*Client).read.func1\" file=\"client.go:303\" error=\"failed to read message header: read "
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-attacher-868966bc6f-hvmzx",
+          "container": "csi-attacher",
+          "count": 1,
+          "sample": "E1024 15:45:34.029023       1 csi_handler.go:715] \"Failed to remove finalizer from PersistentVolume\" err=\"the server rejected our request due to an error in our request\" PersistentVolume=\"pvc-0005"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-provisioner-754c858db5-mvrxq",
+          "container": "csi-provisioner",
+          "count": 1,
+          "sample": "E1024 15:45:25.473211       1 controller.go:1054] \"Unhandled Error\" err=\"error syncing volume \\\"pvc-0005\\\": persistentvolume pvc-0005 is"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-provisioner-754c858db5-mvrxq",
+          "container": "csi-provisioner",
+          "count": 1,
+          "sample": "E1024 15:45:25.472506       1 controller.go:1633] \"Volume deletion failed\" err=\"persistentvolume pvc-0005 is still attached to node node-e\" PV=\"pvc-0005"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-provisioner-754c858db5-mvrxq",
+          "container": "csi-provisioner",
+          "count": 1,
+          "sample": "E1024 15:45:21.471368       1 controller.go:1054] \"Unhandled Error\" err=\"error syncing volume \\\"pvc-0005\\\": persistentvolume pvc-0005 is"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-provisioner-754c858db5-mvrxq",
+          "container": "csi-provisioner",
+          "count": 1,
+          "sample": "E1024 15:45:21.471259       1 controller.go:1633] \"Volume deletion failed\" err=\"persistentvolume pvc-0005 is still attached to node node-e\" PV=\"pvc-0005"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-provisioner-754c858db5-mvrxq",
+          "container": "csi-provisioner",
+          "count": 1,
+          "sample": "E1024 15:45:19.470371       1 controller.go:1054] \"Unhandled Error\" err=\"error syncing volume \\\"pvc-0005\\\": persistentvolume pvc-0005 is"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-provisioner-754c858db5-mvrxq",
+          "container": "csi-provisioner",
+          "count": 1,
+          "sample": "E1024 15:45:19.465534       1 controller.go:1633] \"Volume deletion failed\" err=\"persistentvolume pvc-0005 is still attached to node node-e\" PV=\"pvc-0005"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-25T04:00:01.304Z",
+      "rangeStart": "2026-10-24T22:00:01.304Z",
+      "rangeEnd": "2026-10-25T04:00:01.304Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": null
+      },
+      "groups": [
+        {
+          "ns": "ollama",
+          "pod": "ollama-67f4b568f8-2t9w6",
+          "container": "ollama",
+          "count": 1,
+          "sample": "time=2026-10-25T03:40:02.706Z level=WARN source=server.go:112 msg=\"requested context size too large for model\" num_ctx=262144 n_ctx_train=131072\n"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-26T16:00:01.744Z",
+      "rangeStart": "2026-10-26T10:00:01.744Z",
+      "rangeEnd": "2026-10-26T16:00:01.744Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": "NOISE"
+      },
+      "groups": [
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-manager-jhwtt",
+          "container": "longhorn-manager",
+          "count": 3,
+          "sample": "time=\"2026-10-26T15:58:33.22007469Z\" level=warning msg=\"pvc-0006-e-0: time=\\\"2026-10-25T08:16:00.93303416Z\\\" level=error msg=\\\"Error reading from wire 192.0.2.4:10331"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-10-27T16:00:02.374Z",
+      "rangeStart": "2026-10-27T10:00:02.374Z",
+      "rangeEnd": "2026-10-27T16:00:02.374Z",
+      "labels": {
+        "ac": null,
+        "adjudicated": null
+      },
+      "groups": [
+        {
+          "ns": "longhorn-system",
+          "pod": "unknown",
+          "container": "",
+          "count": 88,
+          "sample": "time=\"2026-10-27T15:59:55.748484367Z\" level=warning msg=\"Instance manager pod instance-manager-h03 is deleted or not running, recreating the pod\" func=\"controller.(*Instan",
+          "resourceId": {
+            "kind": "Pod",
+            "namespace": "longhorn-system",
+            "name": "instance-manager-h03"
+          }
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "unknown",
+          "container": "",
+          "count": 87,
+          "sample": "time=\"2026-10-27T15:59:55.748403243Z\" level=warning msg=\"Instance manager pod instance-manager-h03 is being deleted, updating the instance manager state from error to erro",
+          "resourceId": {
+            "kind": "Pod",
+            "namespace": "longhorn-system",
+            "name": "instance-manager-h03"
+          }
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-manager-cqwvs",
+          "container": "longhorn-manager",
+          "count": 1,
+          "sample": "time=\"2026-10-27T15:59:55.974177894Z\" level=warning msg=\"Precheck failed for creating new replica pvc-0007-r-96d9dbd5: disks are unavailable: no disks found on node k8s"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-manager-cqwvs",
+          "container": "longhorn-manager",
+          "count": 1,
+          "sample": "time=\"2026-10-27T15:59:55.920962356Z\" level=warning msg=\"Precheck failed for creating new replica pvc-0007-r-b261ec03: disks are unavailable: no disks found on node k8s"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-11-03T05:00:02.234Z",
+      "rangeStart": "2026-11-02T23:00:02.234Z",
+      "rangeEnd": "2026-11-03T05:00:02.234Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": "WARNING"
+      },
+      "groups": [
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-manager-jhwtt",
+          "container": "longhorn-manager",
+          "count": 3,
+          "sample": "E1103 04:30:06.928670       1 engine_controller.go:1011] \"Unhandled Error\" err=\"failed to update status for engine pvc-0006-e-0: failed to get engine client proxy: fail"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-csi-plugin-bcqw7",
+          "container": "longhorn-liveness-probe",
+          "count": 1,
+          "sample": "E1103 04:29:56.786018       1 connection.go:208] \"Lost connection\" address=\"unix:///csi/csi.sock\"\n"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "unknown",
+          "container": "",
+          "count": 1,
+          "sample": "time=\"2026-11-03T04:54:47.971551297Z\" level=warning msg=\"Failed to sync log settings to instance manager pod instance-manager-h04\" func=\"controller.(*InstanceManagerContro",
+          "resourceId": {
+            "kind": "Pod",
+            "namespace": "longhorn-system",
+            "name": "instance-manager-h04"
+          }
+        },
+        {
+          "ns": "ollama",
+          "pod": "ollama-778f5686cb-jtdl2",
+          "container": "ollama",
+          "count": 1,
+          "sample": "time=2026-11-03T04:34:29.571Z level=WARN source=server.go:112 msg=\"requested context size too large for model\" num_ctx=262144 n_ctx_train=131072\n"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-11-06T23:00:02.982Z",
+      "rangeStart": "2026-11-06T17:00:02.982Z",
+      "rangeEnd": "2026-11-06T23:00:02.982Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": "NOISE"
+      },
+      "groups": [
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-manager-cqwvs",
+          "container": "longhorn-manager",
+          "count": 6,
+          "sample": "time=\"2026-11-06T22:44:55.174343319Z\" level=warning msg=\"Failed to get volume attachment for volume pvc-0008\" func=\"controller.(*SnapshotController).enqueueVolumeChange"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 4,
+          "sample": "time=\"2026-11-06T22:45:52.213916757Z\" level=warning msg=\"Failed to write\" func=\"dataconn.(*Server).write\" file=\"server.go:141\" error=\"write tcp 192.0.2.1:10401->192.0.2.1:49108: use of closed ne"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h04",
+          "container": "instance-manager",
+          "count": 3,
+          "sample": "[longhorn-instance-manager] time=\"2026-11-06T22:45:55.659860507Z\" level=error msg=\"Failed to watch instances\" func=\"instance.(*Server).InstanceWatch\" file=\"instance.go:788\" error=\"failed to send insta"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h04",
+          "container": "instance-manager",
+          "count": 3,
+          "sample": "[longhorn-instance-manager] time=\"2026-11-06T22:45:55.658753525Z\" level=error msg=\"Failed to handle notify\" func=\"instance.(*Server).InstanceWatch.func2\" file=\"instance.go:756\" error=\"failed to send i"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h04",
+          "container": "instance-manager",
+          "count": 3,
+          "sample": "[longhorn-instance-manager] time=\"2026-11-06T22:45:55.659483869Z\" level=warning msg=\"Process watch is canceled\" func=\"instance.(*Server).watchProcess\" file=\"instance.go:1004\" error=\"rpc error: code = "
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 3,
+          "sample": "time=\"2026-11-06T22:45:53.251602606Z\" level=warning msg=\"Starting to execute registered shutdown func github.com/longhorn/longhorn-engine/app/cmd.startReplica.func5\" func=cmd.registerShutdown.func1 fi"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 2,
+          "sample": "time=\"2026-11-06T22:45:52.211768818Z\" level=error msg=\"Error reading from wire 192.0.2.1:10401\" func=\"dataconn.(*Client).read.func1\" file=\"client.go:303\" error=\"failed to read message header: read "
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 2,
+          "sample": "time=\"2026-11-06T22:45:52.202008852Z\" level=error msg=\"Error reading from wire 192.0.2.5:10606\" func=\"dataconn.(*Client).read.func1\" file=\"client.go:303\" error=\"failed to read message header: read "
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 2,
+          "sample": "time=\"2026-11-06T22:45:52.195902405Z\" level=error msg=\"Error reading from wire 192.0.2.3:10711\" func=\"dataconn.(*Client).read.func1\" file=\"client.go:303\" error=\"failed to read message header: read "
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-manager-cqwvs",
+          "container": "longhorn-manager",
+          "count": 2,
+          "sample": "time=\"2026-11-06T22:45:54.425054674Z\" level=warning msg=\"Failed to sync Longhorn VolumeAttachment\" func=controller.handleReconcileErrorLogging file=\"utils.go:309\" LonghornVolumeAttachment=longhorn-sys"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 1,
+          "sample": "[pvc-0008-r-d14e4f4e] time=\"2026-11-06T22:45:53.251553856Z\" level=warning msg=\"Received signal interrupt to shutdown\" func=cmd.registerShutdown.func1 file=\"shutdown.go:"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 1,
+          "sample": "time=\"2026-11-06T22:45:52.187020294Z\" level=warning msg=\"Failed to write\" func=\"dataconn.(*Server).write\" file=\"server.go:141\" error=\"write unix /var/run/longhorn-pvc-0008"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 1,
+          "sample": "[pvc-0008-e-0] time=\"2026-11-06T22:45:52.186918434Z\" level=warning msg=\"Socket server connection closed\" func=\"socket.(*Socket).handleServerConnection\" file=\"frontend.g"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-11-11T02:00:00.737Z",
+      "rangeStart": "2026-11-10T20:00:00.737Z",
+      "rangeEnd": "2026-11-11T02:00:00.737Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": "NOISE"
+      },
+      "groups": [
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 3,
+          "sample": "time=\"2026-11-11T01:38:08.700823188Z\" level=warning msg=\"Starting to execute registered shutdown func github.com/longhorn/longhorn-engine/app/cmd.startReplica.func5\" func=cmd.registerShutdown.func1 fi"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 3,
+          "sample": "time=\"2026-11-11T01:38:07.366615151Z\" level=warning msg=\"Failed to write\" func=\"dataconn.(*Server).write\" file=\"server.go:141\" error=\"write tcp 192.0.2.1:10916->192.0.2.5:45615: use of closed ne"
+        },
+        {
+          "ns": "homeassistant",
+          "pod": "home-assistant-postgres-pooler-rw-69fdc4c457-n6n2t",
+          "container": "pgbouncer",
+          "count": 3,
+          "sample": "{\"level\":\"error\",\"ts\":\"2026-11-11T01:37:52.914018575Z\",\"msg\":\"Error calling Watch\",\"logger\":\"pgbouncer-manager\",\"error\":\"error watching pooler: poolers.postgresql.cnpg.io \\\"home-assistant-postgres-poo"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h03",
+          "container": "instance-manager",
+          "count": 2,
+          "sample": "time=\"2026-11-11T01:38:07.366913457Z\" level=error msg=\"Error reading from wire 192.0.2.3:11331\" func=\"dataconn.(*Client).read.func1\" file=\"client.go:303\" error=\"failed to read message header: read "
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-d",
+          "container": "kube-controller-manager",
+          "count": 2,
+          "sample": "E1111 01:37:54.816313       1 pvc_protection_controller.go:239] \"Unhandled Error\" err=\"PVC homeassistant-pv-config/homeassistant failed with: persistentvolumeclaims \\\"homeassistant-pv-config\\\" not fou"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "csi-attacher-868966bc6f-nsvzf",
+          "container": "csi-attacher",
+          "count": 1,
+          "sample": "E1111 01:38:36.446601       1 csi_handler.go:715] \"Failed to remove finalizer from PersistentVolume\" err=\"the server rejected our request due to an error in our request\" PersistentVolume=\"pvc-0009"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h03",
+          "container": "instance-manager",
+          "count": 1,
+          "sample": "time=\"2026-11-11T01:38:07.374763977Z\" level=error msg=\"Error reading from wire 192.0.2.1:10916\" func=\"dataconn.(*Client).read.func1\" file=\"client.go:303\" error=\"failed to read message header: read "
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h03",
+          "container": "instance-manager",
+          "count": 1,
+          "sample": "[pvc-0009-e-0] time=\"2026-11-11T01:38:07.374513996Z\" level=error msg=\"Error reading from wire 192.0.2.1:10916\" func=\"dataconn.(*Client).read.func1\" file=\"client.go:3"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h03",
+          "container": "instance-manager",
+          "count": 1,
+          "sample": "time=\"2026-11-11T01:38:07.36439333Z\" level=error msg=\"Error reading from wire 192.0.2.5:11392\" func=\"dataconn.(*Client).read.func1\" file=\"client.go:303\" error=\"failed to read message header: read t"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h03",
+          "container": "instance-manager",
+          "count": 1,
+          "sample": "[pvc-0009-e-0] time=\"2026-11-11T01:38:07.364353274Z\" level=error msg=\"Error reading from wire 192.0.2.5:11392\" func=\"dataconn.(*Client).read.func1\" file=\"client.go:3"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 1,
+          "sample": "[pvc-0009-r-ecf346dd] time=\"2026-11-11T01:38:08.70064568Z\" level=warning msg=\"Received signal interrupt to shutdown\" func=cmd.registerShutdown.func1 file=\"shutdown.go:3"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h02",
+          "container": "instance-manager",
+          "count": 1,
+          "sample": "[pvc-0009-r-ecf346dd] time=\"2026-11-11T01:38:07.366514812Z\" level=warning msg=\"Failed to write\" func=\"dataconn.(*Server).write\" file=\"server.go:141\" error=\"write tcp 10"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h03",
+          "container": "instance-manager",
+          "count": 1,
+          "sample": "[pvc-0009-r-2fa27261] time=\"2026-11-11T01:38:08.557466863Z\" level=warning msg=\"Received signal interrupt to shutdown\" func=cmd.registerShutdown.func1 file=\"shutdown.go:"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h03",
+          "container": "instance-manager",
+          "count": 1,
+          "sample": "time=\"2026-11-11T01:38:07.360761758Z\" level=warning msg=\"Failed to write\" func=\"dataconn.(*Server).write\" file=\"server.go:141\" error=\"write unix /var/run/longhorn-pvc-0009"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h03",
+          "container": "instance-manager",
+          "count": 1,
+          "sample": "[pvc-0009-e-0] time=\"2026-11-11T01:38:07.360671568Z\" level=warning msg=\"Socket server connection closed\" func=\"socket.(*Socket).handleServerConnection\" file=\"frontend.g"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-11-13T02:00:02.496Z",
+      "rangeStart": "2026-11-12T20:00:02.496Z",
+      "rangeEnd": "2026-11-13T02:00:02.496Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": "NOISE"
+      },
+      "groups": [
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-manager-cqwvs",
+          "container": "longhorn-manager",
+          "count": 23,
+          "sample": "time=\"2026-11-13T01:24:50.432728603Z\" level=warning msg=\"Replica rebuildings for map[pvc-0010-r-3e74f3df:{} pvc-0011-r-cfe52b18:{} pvc-9"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-manager-jhwtt",
+          "container": "longhorn-manager",
+          "count": 17,
+          "sample": "time=\"2026-11-13T01:25:33.117328883Z\" level=warning msg=\"Failed to get CLI API version for engine pvc-0002-e-0\" func=\"controller.(*SnapshotConcurrentLimiter).checkEngin"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-manager-jhwtt",
+          "container": "longhorn-manager",
+          "count": 17,
+          "sample": "time=\"2026-11-13T01:25:33.117251124Z\" level=warning msg=\"Failed to get purge status for engine pvc-0002-e-0\" func=\"controller.(*SnapshotConcurrentLimiter).checkEnginePu"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h03",
+          "container": "instance-manager",
+          "count": 10,
+          "sample": "time=\"2026-11-13T01:26:36.648259929Z\" level=warning msg=\"Failed to get change time and checksum of local file volume-snap-0012.img\" func=sparse.syncContentWithContextAn"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-manager-cqwvs",
+          "container": "longhorn-manager",
+          "count": 6,
+          "sample": "time=\"2026-11-13T01:25:04.155916447Z\" level=warning msg=\"Replica rebuildings for map[pvc-0011-r-cfe52b18:{} pvc-0006-r-d5e9e532:{} pvc-9"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-b",
+          "container": "kube-apiserver",
+          "count": 4,
+          "sample": "E1113 01:29:49.847776       1 status.go:71] \"Unhandled Error\" err=\"apiserver received an error that is not an metav1.Status: &url.Error{Op:\\\"Get\\\", URL:\\\"https://198.51.100.1:10250/containerLogs/isti"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "longhorn-manager-jhwtt",
+          "container": "longhorn-manager",
+          "count": 4,
+          "sample": "time=\"2026-11-13T01:25:39.084338429Z\" level=warning msg=\"Failed to sync Longhorn snapshot\" func=controller.handleReconcileErrorLogging file=\"utils.go:309\" Snapshot=longhorn-system/0014"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h05",
+          "container": "instance-manager",
+          "count": 3,
+          "sample": "[pvc-0015-r-b781edad] time=\"2026-11-13T01:25:39.911902336Z\" level=warning msg=\"Failed to get change time and checksum of local file volume-snap-0016"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h05",
+          "container": "instance-manager",
+          "count": 3,
+          "sample": "[pvc-0003-r-db5dd10f] time=\"2026-11-13T01:25:00.837579243Z\" level=warning msg=\"Failed to get change time and checksum of local file volume-snap-0017"
+        },
+        {
+          "ns": "cert-manager",
+          "pod": "cert-manager-5ccf4bb6b5-4cmsw",
+          "container": "cert-manager-controller",
+          "count": 2,
+          "sample": "E1113 01:31:50.534653       1 controller.go:155] \"re-queuing item due to error processing\" err=\"secrets \\\"ca-key-i\\\" not found\" logger=\"cert-manager.controller\"\n"
+        },
+        {
+          "ns": "cert-manager",
+          "pod": "cert-manager-5ccf4bb6b5-4cmsw",
+          "container": "cert-manager-controller",
+          "count": 2,
+          "sample": "E1113 01:31:50.534480       1 setup.go:50] \"error getting signing CA TLS certificate\" err=\"secrets \\\"ca-key-i\\\" not found\" logger=\"cert-manager.controller.setup\" resource_name=\"ca-key-i\" resource_"
+        },
+        {
+          "ns": "cert-manager",
+          "pod": "cert-manager-5ccf4bb6b5-4cmsw",
+          "container": "cert-manager-controller",
+          "count": 2,
+          "sample": "E1113 01:30:47.856628       1 controller.go:155] \"re-queuing item due to error processing\" err=\"secrets \\\"ca-key-i\\\" not found\" logger=\"cert-manager.controller\"\n"
+        },
+        {
+          "ns": "cert-manager",
+          "pod": "cert-manager-5ccf4bb6b5-4cmsw",
+          "container": "cert-manager-controller",
+          "count": 2,
+          "sample": "E1113 01:30:47.856578       1 setup.go:50] \"error getting signing CA TLS certificate\" err=\"secrets \\\"ca-key-i\\\" not found\" logger=\"cert-manager.controller.setup\" resource_name=\"ca-key-i\" resource_"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-11-13T14:00:01.763Z",
+      "rangeStart": "2026-11-13T08:00:01.763Z",
+      "rangeEnd": "2026-11-13T14:00:01.763Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": null
+      },
+      "groups": [
+        {
+          "ns": "arc-runner",
+          "pod": "homelab-runner-runner-kxjs7",
+          "container": "runner",
+          "count": 3,
+          "sample": "[WORKER 2026-11-13 13:33:23Z INFO ResultServer] Websocket is not open, let's attempt to connect back again with random backoff 00:00:00.3720000 ms.\n"
+        },
+        {
+          "ns": "redis",
+          "pod": "redis-1",
+          "container": "redis-exporter",
+          "count": 2,
+          "sample": "time=\"2026-11-13T11:43:04Z\" level=error msg=\"Couldn't connect to redis instance (redis://localhost:6379)\"\n"
+        },
+        {
+          "ns": "argocd",
+          "pod": "argocd-image-updater-controller-7b7d55d4cd-25jxv",
+          "container": "argocd-image-updater-controller",
+          "count": 1,
+          "sample": "time=\"2026-11-13T11:12:49Z\" level=error msg=\"Could not get tags from registry: toomanyrequests: retry-after: 487.864µs, allowed: 44000/minute\" application=argocd/immich controller=imageupdater control"
+        },
+        {
+          "ns": "argocd",
+          "pod": "argocd-image-updater-controller-7b7d55d4cd-25jxv",
+          "container": "argocd-image-updater-controller",
+          "count": 1,
+          "sample": "time=\"2026-11-13T09:10:17Z\" level=error msg=\"Could not get tags from registry: toomanyrequests: retry-after: 187.933µs, allowed: 44000/minute\" application=argocd/immich controller=imageupdater control"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1113 13:00:20.570619       1 pvc_protection_controller.go:245] \"Unhandled Error\" err=\"PVC claim-h/arc-runner failed with: Operation cannot be fulfilled on persistentvolumeclaims \\\"benchmark"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1113 13:00:20.570183       1 pvc_protection_controller.go:365] \"Error updating Unused condition in PVC status\" err=\"Operation cannot be fulfilled on persistentvolumeclaims \\\"claim-h\\\": the "
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1113 12:00:19.522751       1 pvc_protection_controller.go:245] \"Unhandled Error\" err=\"PVC claim-h/arc-runner failed with: Operation cannot be fulfilled on persistentvolumeclaims \\\"benchmark"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-a",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1113 12:00:19.522552       1 pvc_protection_controller.go:365] \"Error updating Unused condition in PVC status\" err=\"Operation cannot be fulfilled on persistentvolumeclaims \\\"claim-h\\\": the "
+        }
+      ]
+    },
+    {
+      "id": "run-2026-11-14T02:00:00.494Z",
+      "rangeStart": "2026-11-13T20:00:00.494Z",
+      "rangeEnd": "2026-11-14T02:00:00.494Z",
+      "labels": {
+        "ac": "NOISE",
+        "adjudicated": null
+      },
+      "groups": [
+        {
+          "ns": "harbor",
+          "pod": "harbor-registry-588b59f855-h9cwc",
+          "container": "registry",
+          "count": 40,
+          "sample": "time=\"2026-11-14T01:41:35.910696299Z\" level=error msg=\"redis: error connecting: EOF\" go.version=go1.26.7 instance.id=0018 redis.connect.duration=\"841.002µs\" service=reg"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "unknown",
+          "container": "",
+          "count": 15,
+          "sample": "time=\"2026-11-14T01:44:02.571268423Z\" level=warning msg=\"Instance manager pod instance-manager-h06 is deleted or not running, recreating the pod\" func=\"controller.(*Instan",
+          "resourceId": {
+            "kind": "Pod",
+            "namespace": "longhorn-system",
+            "name": "instance-manager-h06"
+          }
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "unknown",
+          "container": "",
+          "count": 11,
+          "sample": "time=\"2026-11-14T01:44:02.571174713Z\" level=warning msg=\"Instance manager pod instance-manager-h06 is not found, updating the instance manager state from error to error\" f",
+          "resourceId": {
+            "kind": "Pod",
+            "namespace": "longhorn-system",
+            "name": "instance-manager-h06"
+          }
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "unknown",
+          "container": "",
+          "count": 4,
+          "sample": "time=\"2026-11-14T01:43:28.559222043Z\" level=warning msg=\"Instance manager pod instance-manager-h06 is being deleted, updating the instance manager state from error to erro",
+          "resourceId": {
+            "kind": "Pod",
+            "namespace": "longhorn-system",
+            "name": "instance-manager-h06"
+          }
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h04",
+          "container": "instance-manager",
+          "count": 3,
+          "sample": "time=\"2026-11-14T01:43:23.832780389Z\" level=warning msg=\"Failed to write\" func=\"dataconn.(*Server).write\" file=\"server.go:141\" error=\"write tcp 192.0.2.6:10051->192.0.2.7:41552: use of closed net"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-b",
+          "container": "kube-apiserver",
+          "count": 3,
+          "sample": "E1114 01:41:50.154512       1 status.go:71] \"Unhandled Error\" err=\"apiserver received an error that is not an metav1.Status: &errors.errorString{s:\\\"http: Handler timeout\\\"}: http: Handler timeout\" lo"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-b",
+          "container": "kube-apiserver",
+          "count": 3,
+          "sample": "E1114 01:41:49.939790       1 status.go:71] \"Unhandled Error\" err=\"apiserver received an error that is not an metav1.Status: &errors.errorString{s:\\\"http: Handler timeout\\\"}: http: Handler timeout\" lo"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h06",
+          "container": "instance-manager",
+          "count": 2,
+          "sample": "time=\"2026-11-14T01:43:23.828903689Z\" level=error msg=\"Error reading from wire 192.0.2.8:10401\" func=\"dataconn.(*Client).read.func1\" file=\"client.go:303\" error=\"failed to read message header: read t"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h06",
+          "container": "instance-manager",
+          "count": 2,
+          "sample": "time=\"2026-11-14T01:43:23.82435931Z\" level=error msg=\"Error reading from wire 192.0.2.6:10051\" func=\"dataconn.(*Client).read.func1\" file=\"client.go:303\" error=\"failed to read message header: read tc"
+        },
+        {
+          "ns": "longhorn-system",
+          "pod": "instance-manager-h06",
+          "container": "instance-manager",
+          "count": 2,
+          "sample": "time=\"2026-11-14T01:43:23.820107511Z\" level=error msg=\"Error reading from wire 192.0.2.9:10382\" func=\"dataconn.(*Client).read.func1\" file=\"client.go:303\" error=\"failed to read message header: read "
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-d",
+          "container": "kube-apiserver",
+          "count": 2,
+          "sample": "E1114 01:42:58.234760       1 status.go:71] \"Unhandled Error\" err=\"apiserver received an error that is not an metav1.Status: &errors.errorString{s:\\\"http: Handler timeout\\\"}: http: Handler timeout\" lo"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-11-19T02:00:00.311Z",
+      "rangeStart": "2026-11-18T20:00:00.311Z",
+      "rangeEnd": "2026-11-19T02:00:00.311Z",
+      "labels": {
+        "ac": null,
+        "adjudicated": null
+      },
+      "groups": [
+        {
+          "ns": "arc-runner",
+          "pod": "homelab-runner-runner-6gbp9",
+          "container": "dind",
+          "count": 6,
+          "sample": "time=\"2026-11-19T01:49:33.420476920Z\" level=warning msg=\"Host doesn't match\" cfgHost=registry-1.docker.io host=harbor-core.harbor.svc.cluster.lan\n"
+        },
+        {
+          "ns": "arc-runner",
+          "pod": "homelab-runner-runner-jkwzx",
+          "container": "dind",
+          "count": 1,
+          "sample": "time=\"2026-11-19T01:46:51.146868539Z\" level=error msg=\"Error running exec h07 in container: exec attach failed: error attaching stdout stre"
+        },
+        {
+          "ns": "arc-runner",
+          "pod": "homelab-runner-runner-xfpwt",
+          "container": "dind",
+          "count": 1,
+          "sample": "time=\"2026-11-19T01:46:41.406151449Z\" level=error msg=\"Error running exec h08 in container: exec attach failed: error attaching stdout stre"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-11-19T08:00:00.466Z",
+      "rangeStart": "2026-11-19T02:00:00.466Z",
+      "rangeEnd": "2026-11-19T08:00:00.466Z",
+      "labels": {
+        "ac": null,
+        "adjudicated": null
+      },
+      "groups": [
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 2,
+          "sample": "E1119 07:47:29.336509       1 status.go:71] \"Unhandled Error\" err=\"apiserver received an error that is not an metav1.Status: &errors.errorString{s:\\\"http: Handler timeout\\\"}: http: Handler timeout\" lo"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 2,
+          "sample": "E1119 07:40:26.322653       1 status.go:71] \"Unhandled Error\" err=\"apiserver received an error that is not an metav1.Status: &errors.errorString{s:\\\"http: Handler timeout\\\"}: http: Handler timeout\" lo"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-c",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1119 08:00:00.299151       1 pvc_protection_controller.go:245] \"Unhandled Error\" err=\"PVC claim-g/ns-g failed with: Operation cannot be fulfilled on persistentvolumeclaims \\\"ns-g-wor"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-c",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1119 08:00:00.299097       1 pvc_protection_controller.go:365] \"Error updating Unused condition in PVC status\" err=\"Operation cannot be fulfilled on persistentvolumeclaims \\\"claim-g\\\": the obj"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "E1119 07:47:29.336547       1 writers.go:144] \"Unhandled Error\" err=\"apiserver was unable to write a fallback application/json response: http: Handler timeout\" logger=\"UnhandledError\"\n"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "E1119 07:47:29.335395       1 writers.go:130] \"Unhandled Error\" err=\"apiserver was unable to write a application/json response: http: Handler timeout\" logger=\"UnhandledError\"\n"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "E1119 07:40:26.322683       1 writers.go:144] \"Unhandled Error\" err=\"apiserver was unable to write a fallback application/json response: http: Handler timeout\" logger=\"UnhandledError\"\n"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "E1119 07:40:26.321554       1 writers.go:130] \"Unhandled Error\" err=\"apiserver was unable to write a application/json response: http: Handler timeout\" logger=\"UnhandledError\"\n"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "E1119 07:47:29.337670       1 timeout.go:140] \"Post-timeout activity\" logger=\"UnhandledError\" timeElapsed=\"2.399933ms\" method=\"GET\" path=\"/apis/postgresql.cnpg.io/v1/namespaces/open-webui/clusters/owu"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "E1119 07:40:26.323790       1 timeout.go:140] \"Post-timeout activity\" logger=\"UnhandledError\" timeElapsed=\"2.374283ms\" method=\"GET\" path=\"/apis/postgresql.cnpg.io/v1/namespaces/infisical/clusters/infi"
+        },
+        {
+          "ns": "argocd",
+          "pod": "argocd-image-updater-controller-7b7d55d4cd-dc9bh",
+          "container": "argocd-image-updater-controller",
+          "count": 1,
+          "sample": "time=\"2026-11-19T07:32:44Z\" level=error msg=\"Could not get tags from registry: toomanyrequests: retry-after: 224.292µs, allowed: 44000/minute\" application=argocd/immich controller=imageupdater control"
+        }
+      ]
+    },
+    {
+      "id": "run-2026-11-19T14:00:00.222Z",
+      "rangeStart": "2026-11-19T08:00:00.222Z",
+      "rangeEnd": "2026-11-19T14:00:00.222Z",
+      "labels": {
+        "ac": null,
+        "adjudicated": null
+      },
+      "groups": [
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 2,
+          "sample": "E1119 13:41:08.885767       1 status.go:71] \"Unhandled Error\" err=\"apiserver received an error that is not an metav1.Status: &errors.errorString{s:\\\"http: Handler timeout\\\"}: http: Handler timeout\" lo"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 2,
+          "sample": "E1119 13:30:08.886163       1 status.go:71] \"Unhandled Error\" err=\"apiserver received an error that is not an metav1.Status: &errors.errorString{s:\\\"http: Handler timeout\\\"}: http: Handler timeout\" lo"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-c",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1119 13:55:00.140388       1 pvc_protection_controller.go:245] \"Unhandled Error\" err=\"PVC claim-g/ns-g failed with: Operation cannot be fulfilled on persistentvolumeclaims \\\"ns-g-wor"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-controller-manager-node-c",
+          "container": "kube-controller-manager",
+          "count": 1,
+          "sample": "E1119 13:55:00.140353       1 pvc_protection_controller.go:365] \"Error updating Unused condition in PVC status\" err=\"Operation cannot be fulfilled on persistentvolumeclaims \\\"claim-g\\\": the obj"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "E1119 13:41:08.885809       1 writers.go:144] \"Unhandled Error\" err=\"apiserver was unable to write a fallback application/json response: http: Handler timeout\" logger=\"UnhandledError\"\n"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "E1119 13:41:08.884776       1 writers.go:130] \"Unhandled Error\" err=\"apiserver was unable to write a application/json response: http: Handler timeout\" logger=\"UnhandledError\"\n"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "E1119 13:30:08.886193       1 writers.go:144] \"Unhandled Error\" err=\"apiserver was unable to write a fallback application/json response: http: Handler timeout\" logger=\"UnhandledError\"\n"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "E1119 13:30:08.884270       1 writers.go:130] \"Unhandled Error\" err=\"apiserver was unable to write a application/json response: http: Handler timeout\" logger=\"UnhandledError\"\n"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "E1119 13:41:08.886968       1 timeout.go:140] \"Post-timeout activity\" logger=\"UnhandledError\" timeElapsed=\"2.336019ms\" method=\"GET\" path=\"/apis/postgresql.cnpg.io/v1/namespaces/ns-f/clusters/n"
+        },
+        {
+          "ns": "kube-system",
+          "pod": "kube-apiserver-node-c",
+          "container": "kube-apiserver",
+          "count": 1,
+          "sample": "E1119 13:30:08.887364       1 timeout.go:140] \"Post-timeout activity\" logger=\"UnhandledError\" timeElapsed=\"3.26343ms\" method=\"GET\" path=\"/apis/postgresql.cnpg.io/v1/namespaces/ns-f/clusters/n8"
+        },
+        {
+          "ns": "argocd",
+          "pod": "argocd-image-updater-controller-7b7d55d4cd-dc9bh",
+          "container": "argocd-image-updater-controller",
+          "count": 1,
+          "sample": "time=\"2026-11-19T13:10:20Z\" level=error msg=\"Could not get tags from registry: toomanyrequests: retry-after: 220.298µs, allowed: 44000/minute\" application=argocd/immich controller=imageupdater control"
+        }
+      ]
+    }
+  ]
+}

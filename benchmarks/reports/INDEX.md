@@ -46,6 +46,11 @@ OWUI in-chat rendering tools (Inline Visualizer, OpenUI) × local models. Harnes
 Picks for OWUI's `TASK_MODEL` env (handles follow-up suggestions, title
 generation, and similar small background classification calls).
 
+- [2026-11-19 — log-triage-replay](task-model/2026-11-19-log-triage-replay/README.md)
+  Log Analysis Agent's `Ollama Triage` call replayed on 31 real (redacted) runs, 2 reps,
+  `gemma4:26b-a4b-it-qat` vs `qwen3.6:35b` → gemma is **not better on missed real problems**
+  (0 vs 0 / 1 vs 0 by label set). qwen 1/62 invalid JSON, and neither model filters noise. Decision: homelab D-050.
+  On-demand payload `log_triage_replay`. (n8n-workflow#348)
 - [2026-07-27 — fix-proposal-reasoner-pick](task-model/2026-07-27-fix-proposal-reasoner-pick/README.md)
   `gemma4:26b-a4b-it-qat` vs `qwen3.6:35b` for Health Event Fix Proposal /
   Log Analysis Agent's JSON-reasoning role → **winner: gemma4:26b-a4b-it-qat**
