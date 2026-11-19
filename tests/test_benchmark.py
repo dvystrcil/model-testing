@@ -552,3 +552,84 @@ def test_per_run_entries_carry_every_field_and_total_duration_has_an_sd(monkeypa
                                       "eval_duration", "total_duration"}
     assert row["total_duration_sd"] == round(rb.stddev([2 * 10**9, 4 * 10**9]))
     assert row["total_duration_sd"] > 0
+
+
+# ---------------------------------------------------------------------------
+# A timed-out request is a result (model-testing#176).
+#
+# Run 44602629787: ripple-preview:65b-q4_K_M logged "ERROR: timed out" at
+# 722s on two surgical-edit payloads and run_once returned None, so the
+# single-model sweep wrote NO row for either payload. analyze could not tell
+# "the job never ran" from "the model ran out of time", and ANALYZE-COVERAGE
+# failed the whole run. #94 already graded timed-out CELLS as a result; this
+# is the same fact reaching the payload level, which needs a row to exist.
+# ---------------------------------------------------------------------------
+
+import urllib.error
+
+
+def _spec():
+    return {"name": "p", "payload": {"messages": [{"role": "user", "content": "x"}]}}
+
+
+def test_a_timed_out_request_writes_a_timed_out_row(monkeypatch):
+    def boom(url, payload):
+        raise TimeoutError("timed out")
+    monkeypatch.setattr(rb, "ollama_chat", boom)
+    row = rb.run_one(_spec(), "http://x", "ripple", 1, 0, False)
+    assert row is not None, "a timeout must leave a row, not nothing"
+    assert row["status"] == "timed_out"
+    assert row["payload"] == "p" and row["model"] == "ripple"
+    assert isinstance(row["elapsed_seconds"], float)
+    assert row["elapsed_seconds"] >= 0
+    assert row["timed_out_runs"] == 1
+    # The budget that was exceeded travels with the row, so a reader can see
+    # whether the cap or the wall-clock was the binding limit.
+    assert row["timeout_seconds"] == rb.http_timeout_for(
+        rb.apply_generation_limit({"messages": []}))
+
+
+def test_a_socket_timeout_wrapped_in_urlerror_is_still_a_timeout(monkeypatch):
+    """A connect-phase timeout arrives as URLError(reason=TimeoutError)."""
+    def boom(url, payload):
+        raise urllib.error.URLError(TimeoutError("timed out"))
+    monkeypatch.setattr(rb, "ollama_chat", boom)
+    row = rb.run_one(_spec(), "http://x", "m", 1, 0, False)
+    assert row is not None and row["status"] == "timed_out"
+
+
+def test_a_non_timeout_error_still_writes_no_row(monkeypatch):
+    """Only a timeout is a measurement. A refused connection says nothing
+    about the model, and dressing it up as timed_out would invent a finding."""
+    def boom(url, payload):
+        raise urllib.error.URLError(ConnectionRefusedError("refused"))
+    monkeypatch.setattr(rb, "ollama_chat", boom)
+    assert rb.run_one(_spec(), "http://x", "m", 1, 0, False) is None
+
+
+def test_a_cell_with_some_runs_timed_out_keeps_its_row_and_counts_them(monkeypatch):
+    it = iter([_fake_run(), {"timed_out": True, "elapsed_seconds": 722.0,
+                             "timeout_seconds": 722.0}])
+    monkeypatch.setattr(rb, "run_once", lambda *a, **k: next(it))
+    spec = {"name": "p", "payload": {"messages": []}}
+    row = rb.run_one(spec, "http://x", "m", 2, 0, False)
+    assert "status" not in row or row["status"] != "timed_out"
+    assert row["timed_out_runs"] == 1
+    assert row["facts_score"] == 1.0
+
+
+def test_every_run_timed_out_reports_the_longest_elapsed(monkeypatch):
+    it = iter([{"timed_out": True, "elapsed_seconds": 700.5, "timeout_seconds": 722.0},
+               {"timed_out": True, "elapsed_seconds": 722.1, "timeout_seconds": 722.0}])
+    monkeypatch.setattr(rb, "run_once", lambda *a, **k: next(it))
+    row = rb.run_one(_spec(), "http://x", "m", 2, 0, False)
+    assert row["status"] == "timed_out"
+    assert row["timed_out_runs"] == 2
+    assert row["elapsed_seconds"] == 722.1
+
+
+def test_print_summary_survives_a_timed_out_row(capsys):
+    rb.print_summary([{"payload": "p", "model": "m", "status": "timed_out",
+                       "elapsed_seconds": 722.0, "timeout_seconds": 722.0,
+                       "timed_out_runs": 1, "runs": 1}])
+    assert "timed out" in capsys.readouterr().out.lower()

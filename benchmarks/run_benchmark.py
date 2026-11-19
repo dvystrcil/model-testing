@@ -20,6 +20,7 @@ import subprocess
 import sys
 import time
 import textwrap
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -1053,6 +1054,18 @@ def warmup_model(ollama_url: str, model: str, attempts: int = 3) -> bool:
     return False
 
 
+def is_timeout(e: BaseException) -> bool:
+    """True when the request ran out of wall-clock, as opposed to failing.
+
+    A read timeout surfaces as TimeoutError (socket.timeout is an alias); a
+    connect-phase one arrives wrapped, as URLError(reason=TimeoutError).
+    """
+    if isinstance(e, TimeoutError):
+        return True
+    return (isinstance(e, urllib.error.URLError)
+            and isinstance(e.reason, TimeoutError))
+
+
 def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
     payload = json.loads(json.dumps(spec["payload"]))
     payload["model"] = model
@@ -1060,10 +1073,19 @@ def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
     payload.setdefault("options", {})["num_gpu"] = -1
     apply_generation_limit(payload)
 
+    t0 = time.monotonic()
     try:
         resp = ollama_chat(ollama_url, payload)
     except Exception as e:
         print(f"  ERROR: {e}", file=sys.stderr)
+        if is_timeout(e):
+            # model-testing#176: a timeout is a measurement ("this model
+            # could not answer inside the budget"), not a missing job. Run
+            # 44602629787 returned None here, wrote no row, and
+            # ANALYZE-COVERAGE failed the sweep as if the job never ran.
+            return {"timed_out": True,
+                    "elapsed_seconds": round(time.monotonic() - t0, 1),
+                    "timeout_seconds": http_timeout_for(payload)}
         return None
 
     content = strip_think(resp.get("message", {}).get("content", ""))
@@ -1153,11 +1175,15 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         return None
 
     raw_results = []
+    timeouts = []
     for i in range(runs):
         run_label = f"run {i+1}/{runs}  " if runs > 1 else ""
         info(f"{run_label}sending request → ollama ({ollama_url})")
         r = run_once(spec, ollama_url, model)
         if r is None:
+            continue
+        if r.get("timed_out"):
+            timeouts.append(r)
             continue
         raw_results.append(r)
         if runs > 1:
@@ -1175,6 +1201,8 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
                 print(f"         SCHEMA VIOLATIONS: {r['schema_violations']}")
 
     if not raw_results:
+        if timeouts:
+            return timed_out_row(name, model, runs, timeouts)
         return None
 
     pec  = raw_results[0]["pec"]
@@ -1244,6 +1272,10 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         "total_duration": round(avg_td),
         "total_duration_sd": round(stddev(tds)),
         "clean_runs": clean_runs,
+        # Runs that hit the wall-clock and are therefore NOT in the averages
+        # above (model-testing#176). 0 is stated, not omitted: absent means
+        # the row predates the field.
+        "timed_out_runs": len(timeouts),
         "per_run": per_run,
         "prompt_tps": round(prompt_tps, 1),
         "gen_tps": round(gen_tps, 1),
@@ -1262,12 +1294,43 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
     }
 
 
+def timed_out_row(name: str, model: str, runs: int,
+                  timeouts: list[dict]) -> dict:
+    """The row for a cell where EVERY run ran out of wall-clock.
+
+    It carries no score fields on purpose: there is nothing to average, and a
+    zero would read as a measured failure. analyze.py keeps these out of the
+    results table and reports them in their own section (model-testing#176).
+    """
+    return {
+        "ts": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "payload": name,
+        "model": model,
+        "runs": runs,
+        "status": "timed_out",
+        "timed_out_runs": len(timeouts),
+        "elapsed_seconds": max(t["elapsed_seconds"] for t in timeouts),
+        "timeout_seconds": timeouts[0]["timeout_seconds"],
+        "per_run": [{"status": "timed_out",
+                     "elapsed_seconds": t["elapsed_seconds"]}
+                    for t in timeouts],
+    }
+
+
 def print_summary(results: list[dict]) -> None:
     if not results:
         return
 
     agentic = [r for r in results if r.get("type") == "agentic"]
-    standard = [r for r in results if r.get("type") != "agentic"]
+    timed_out = [r for r in results if r.get("status") == "timed_out"]
+    standard = [r for r in results
+                if r.get("type") != "agentic" and r.get("status") != "timed_out"]
+
+    for r in timed_out:
+        print(f"TIMED OUT  {r['model']}  {r['payload']}  "
+              f"after {r['elapsed_seconds']:.0f}s "
+              f"(budget {r['timeout_seconds']:.0f}s, "
+              f"{r['timed_out_runs']}/{r['runs']} runs)")
 
     if agentic:
         print("\n" + "=" * 90)

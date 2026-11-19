@@ -139,5 +139,118 @@ class MarkerTest(unittest.TestCase):
         self.assertNotIn("missing=none", m)
 
 
+
+class TimedOutPayloadTest(unittest.TestCase):
+    """Run 44602629787 (model-testing#176): a single-model sweep of
+    ripple-preview:65b-q4_K_M timed out at 722s on two surgical-edit
+    payloads. Those jobs wrote no result row, so ANALYZE-COVERAGE read
+    `expected=35 analyzed=33 missing=surgical_edit_kroger_pip_removal,
+    surgical_edit_open_terminal_constraint` and failed the run -- the same
+    "a timeout is a result" call #94 made for cells, lost one level up.
+
+    Reproduced end to end through main(), with the summariser stubbed: the
+    marker CI greps is the thing under test, not a re-derivation of it.
+    """
+
+    MODEL = "ripple-preview:65b-q4_K_M"
+    DONE = "factual_recall"
+    TIMED_OUT = ["surgical_edit_kroger_pip_removal",
+                 "surgical_edit_open_terminal_constraint"]
+
+    def _row(self, payload):
+        return {"ts": "2026-11-19T21:54:30Z", "payload": payload,
+                "model": self.MODEL, "runs": 1, "facts_score": 1.0,
+                "eval_count": 100, "eval_duration": 10**10, "gen_tps": 5.7,
+                "prompt_eval_duration": 10**8, "forbidden_violations": [],
+                "schema_violations": None, "done_reasons": ["stop"],
+                "answer_words": 80}
+
+    def _timed_out(self, payload):
+        return {"ts": "2026-11-19T21:54:30Z", "payload": payload,
+                "model": self.MODEL, "runs": 1, "status": "timed_out",
+                "timed_out_runs": 1, "elapsed_seconds": 722.1,
+                "timeout_seconds": 722.0}
+
+    def _run_main(self, rows_by_file):
+        import contextlib, io, json, tempfile
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            files = []
+            for i, rows in enumerate(rows_by_file):
+                f = Path(d) / f"sweep_{i}.jsonl"
+                meta = {"type": "metadata", "ts": "x", "ollama_version": "v",
+                        "hostname": "h", "git_commit": "c"}
+                f.write_text("\n".join(json.dumps(r) for r in [meta, *rows]) + "\n")
+                files.append(str(f))
+            out = Path(d) / "report.md"
+            argv = ["analyze.py", *files, "--out", str(out),
+                    "--expect", ",".join([self.DONE, *self.TIMED_OUT]),
+                    "--expect-models", self.MODEL]
+            err = io.StringIO()
+            with mock.patch.object(sys, "argv", argv), \
+                 mock.patch.object(analyze, "ollama_chat",
+                                   return_value="No recommendation."), \
+                 contextlib.redirect_stderr(err):
+                analyze.main()
+            return err.getvalue(), out.read_text()
+
+    def _the_44602629787_shape(self):
+        return self._run_main([[self._row(self.DONE)],
+                               [self._timed_out(self.TIMED_OUT[0])],
+                               [self._timed_out(self.TIMED_OUT[1])]])
+
+    def test_a_timed_out_payload_does_not_fail_coverage(self):
+        err, _ = self._the_44602629787_shape()
+        marker = next(l for l in err.splitlines()
+                      if l.startswith("ANALYZE-COVERAGE"))
+        self.assertIn("analyzed=3", marker)
+        self.assertIn("missing=none", marker)
+        self.assertIn("unexpected=none", marker)
+
+    def test_the_timeout_is_stated_not_swallowed(self):
+        """Passing coverage must not hide that two cells have no numbers."""
+        err, report = self._the_44602629787_shape()
+        marker = next(l for l in err.splitlines()
+                      if l.startswith("ANALYZE-TIMEOUTS"))
+        self.assertIn(f"{self.MODEL}:2", marker)
+        self.assertIn("## Timed Out", report)
+        for p in self.TIMED_OUT:
+            self.assertIn(p, report)
+        self.assertIn("722", report)
+
+    def test_a_timed_out_cell_is_not_counted_as_measured(self):
+        """Payload coverage asks "did the job run"; cell coverage asks "did
+        this model produce numbers". A timeout answers yes to the first and
+        no to the second, so the CELLS warning still fires -- as a partial
+        gap, not as a wholly absent model."""
+        err, _ = self._the_44602629787_shape()
+        cells = next(l for l in err.splitlines()
+                     if l.startswith("ANALYZE-CELLS"))
+        self.assertIn(f"missing_by_model={self.MODEL}:2", cells)
+        self.assertIn("wholly_absent=none", cells)
+
+    def test_a_model_that_timed_out_everywhere_is_still_wholly_absent(self):
+        """The #82 guard stays fatal: a model with no numbers anywhere means
+        the comparison never happened, however its rows are labelled."""
+        err, _ = self._run_main([[self._timed_out(p)]
+                                 for p in [self.DONE, *self.TIMED_OUT]])
+        cells = next(l for l in err.splitlines()
+                     if l.startswith("ANALYZE-CELLS"))
+        self.assertIn(f"wholly_absent={self.MODEL}", cells)
+
+    def test_timed_out_rows_stay_out_of_the_results_table(self):
+        """load_results feeds the table, the safety gate and analyze_claude;
+        a row with no facts_score would crash all three."""
+        import json, tempfile
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "s.jsonl"
+            f.write_text(json.dumps(self._row(self.DONE)) + "\n"
+                         + json.dumps(self._timed_out(self.TIMED_OUT[0])) + "\n")
+            _, standard, _ = analyze.load_results(f)
+            self.assertEqual([r["payload"] for r in standard], [self.DONE])
+            self.assertEqual([r["payload"] for r in analyze.load_timed_out(f)],
+                             [self.TIMED_OUT[0]])
+
+
 if __name__ == "__main__":
     unittest.main()
