@@ -218,7 +218,12 @@ def load_payloads(name: str) -> list[dict]:
     if not files:
         print(f"ERROR: No payloads selected for '{name}' in {PAYLOADS_DIR}", file=sys.stderr)
         sys.exit(1)
-    return [json.loads(f.read_text()) for f in files]
+    specs = [json.loads(f.read_text()) for f in files]
+    if name == "all":
+        # "on_demand": true keeps a payload out of every default sweep; it
+        # still runs when named (log_triage_replay, n8n-workflow#348).
+        specs = [s for s in specs if not s.get("on_demand")]
+    return specs
 
 
 def apply_temperature_override(specs: list, temperature: float) -> None:
@@ -702,6 +707,187 @@ def run_agentic_one(spec: dict, ollama_url: str, model: str, runs: int, dry_run:
     }
 
 
+# ---------------------------------------------------------------- log_triage_replay
+# n8n-workflow#348: the Log Analysis Agent's `Ollama Triage` call replayed over
+# real (redacted) triage runs, scored against hand labels. The prompt is
+# rendered from the node's own jsCode, vendored verbatim into the payload's
+# prompt_source, so nothing about it is retyped here.
+
+_TRIAGE_PROMPT_RE = re.compile(r"const prompt = `(.*?)`;", re.DOTALL)
+_TRIAGE_VARS = ("rangeStart", "rangeEnd", "errorList", "errorGroups.length")
+
+
+def _triage_error_line(i: int, g: dict) -> str:
+    # Port of the node's errorGroups.map(...) line; the payload test pins the
+    # vendored JS line this mirrors.
+    loc = f"{g['pod']}/{g['container']}" if g.get("container") else g["pod"]
+    r = g.get("resourceId")
+    res_hint = f" resource={r['kind']}/{r['namespace']}/{r['name']}" if r else ""
+    rbac_hint = (f" rbac:SA={g['saNs']}/{g['saName']} verb={g['verb']} "
+                 f"resources={','.join(g.get('rbacResources') or [])}") if g.get("rbac") else ""
+    return (f"{i + 1}. [{g['ns']}] {loc} (x{g['count']} occurrences):{res_hint}{rbac_hint}\n"
+            f"   {g['sample'][:200]}")
+
+
+def render_triage_prompt(spec: dict, case: dict) -> str:
+    """The `Build Triage Prompt` node's output for one replay case."""
+    m = _TRIAGE_PROMPT_RE.search(spec["prompt_source"]["prompt_js"])
+    if not m:
+        raise ValueError("prompt_js has no `const prompt = `...`;` template")
+    template = m.group(1)
+    unknown = set(re.findall(r"\$\{([^}]*)\}", template)) - set(_TRIAGE_VARS)
+    if unknown or re.search(r"\\[^n]", template):
+        # A re-vendored node that interpolates or escapes something new must
+        # fail loudly, not render a prompt with a hole in it.
+        raise ValueError(f"prompt_js template changed shape: {sorted(unknown) or 'escape'}")
+    groups = case["groups"]
+    values = {
+        "rangeStart": case["rangeStart"],
+        "rangeEnd": case["rangeEnd"],
+        "errorList": "\n\n".join(_triage_error_line(i, g) for i, g in enumerate(groups)),
+        "errorGroups.length": str(len(groups)),
+    }
+    # One pass, so a log sample containing "${...}" is never re-expanded.
+    return re.sub(r"\$\{([^}]*)\}|\\n",
+                  lambda x: values[x.group(1)] if x.group(1) else "\n", template)
+
+
+def _reject_constant(name: str):
+    raise ValueError(name)  # JSON.parse has no NaN/Infinity
+
+
+def triage_overall(content: str) -> str:
+    """overall_severity as the node `Format Issue` reads it, or UNKNOWN.
+
+    Same cleaning as the node: <think> blocks and ```lowercase fences removed,
+    then JSON.parse. Anything unparsable, non-object or without the field is
+    UNKNOWN, which `Decide Action` files (only NOISE is dropped).
+    """
+    cleaned = re.sub(r"<think>[\s\S]*?</think>", "", content or "")
+    cleaned = re.sub(r"```[a-z]*\n?", "", cleaned).strip()
+    try:
+        parsed = json.loads(cleaned, parse_constant=_reject_constant)
+    except ValueError:
+        return "UNKNOWN"
+    overall = parsed.get("overall_severity") if isinstance(parsed, dict) else None
+    return overall if overall else "UNKNOWN"
+
+
+def score_log_triage(calls: list[dict], cases: list[dict]) -> dict:
+    """Per label set: missed real problems, NOISE runs filed, invalid JSON.
+
+    `calls` are {case, rep, overall, wall_ms}. A run is filed unless overall is
+    NOISE (Decide Action). Calls on a case a label set excludes (null label)
+    are left out of that set but counted in calls/invalid_json/wall time.
+    Median is the lower median and p90 nearest-rank, as the original
+    n8n-side replay computed them.
+    """
+    labels = {c["id"]: c["labels"] for c in cases}
+    out: dict = {"calls": len(calls),
+                 "invalid_json": sum(c["overall"] == "UNKNOWN" for c in calls),
+                 "labels": {}}
+    for key in ("ac", "adjudicated"):
+        s = dict(calls=0, exact=0, filed_agree=0, noise_n=0, noise_filed=0,
+                 real_n=0, real_missed=0, invalid_json=0)
+        for c in calls:
+            label = labels[c["case"]][key]
+            if label is None:
+                continue
+            real, filed = label != "NOISE", c["overall"] != "NOISE"
+            s["calls"] += 1
+            s["exact"] += c["overall"] == label
+            s["filed_agree"] += filed == real
+            s["invalid_json"] += c["overall"] == "UNKNOWN"
+            if real:
+                s["real_n"] += 1
+                s["real_missed"] += not filed
+            else:
+                s["noise_n"] += 1
+                s["noise_filed"] += filed
+        out["labels"][key] = s
+    ms = sorted(c["wall_ms"] for c in calls)
+    out["wall_s"] = ({"median": ms[(len(ms) - 1) // 2] / 1000,
+                      "p90": ms[math.ceil(0.9 * len(ms)) - 1] / 1000,
+                      "max": ms[-1] / 1000, "total": sum(ms) / 1000} if ms else None)
+    return out
+
+
+def run_log_triage_one(spec: dict, ollama_url: str, model: str, runs: int,
+                       snippet_len: int, dry_run: bool,
+                       save_responses: bool = False) -> dict | None:
+    name, cases = spec["name"], spec["cases"]
+    info(f"payload={name}  model={model}  type=log_triage_replay  cases={len(cases)}  runs={runs}")
+    if dry_run:
+        print(f"  [dry-run] would POST {len(cases) * runs} requests to {ollama_url}/api/chat")
+        return None
+
+    calls, raw = [], []
+    for rep in range(1, runs + 1):
+        for case in cases:
+            payload = json.loads(json.dumps(spec["payload"]))
+            payload["model"] = model
+            payload["stream"] = False
+            payload["messages"] = payload.get("messages", []) + [
+                {"role": "user", "content": render_triage_prompt(spec, case)}]
+            apply_generation_limit(payload)
+            t0 = time.monotonic()
+            try:
+                resp = ollama_chat(ollama_url, payload)
+            except Exception as e:                     # noqa: BLE001 - recorded
+                info(f"rep {rep} {case['id']} ERROR: {e}")
+                continue
+            wall_ms = round((time.monotonic() - t0) * 1000)
+            content = strip_think(resp.get("message", {}).get("content", ""))
+            overall = triage_overall(content)
+            info(f"rep {rep} {case['id']} overall={overall} {wall_ms}ms")
+            raw.append(resp)
+            call = {"case": case["id"], "rep": rep, "overall": overall, "wall_ms": wall_ms,
+                    "done_reason": resp.get("done_reason", ""), "eval_count": resp.get("eval_count", 0)}
+            if save_responses:
+                call["content"] = content
+            elif snippet_len > 0:
+                call["response_snippet"] = content[:snippet_len]
+            calls.append(call)
+    if not calls:
+        return None
+
+    score = score_log_triage(calls, cases)
+    violations = []
+    if score["invalid_json"]:
+        violations.append(f"invalid_json: {score['invalid_json']}/{score['calls']} calls")
+    for key, s in score["labels"].items():
+        if s["real_missed"]:
+            violations.append(f"missed_real({key}): {s['real_missed']}/{s['real_n']}")
+    adj = score["labels"]["adjudicated"]
+
+    def avg(k):
+        return sum(r.get(k, 0) for r in raw) / len(raw)
+    ec, ed, ped = avg("eval_count"), avg("eval_duration"), avg("prompt_eval_duration")
+    return {
+        "ts": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "payload": name,
+        "model": model,
+        "runs": runs,
+        "payload_messages": 1,
+        "prompt_eval_count": round(avg("prompt_eval_count")),
+        "prompt_eval_duration": round(ped),
+        "eval_count": round(ec),
+        "eval_duration": round(ed),
+        "total_duration": round(avg("total_duration")),
+        "done_reasons": sorted({c["done_reason"] for c in calls if c["done_reason"]}),
+        "prompt_tps": round(avg("prompt_eval_count") / (ped / 1e9), 1) if ped > 0 else 0,
+        "gen_tps": round(ec / (ed / 1e9), 1) if ed > 0 else 0,
+        # Share of labelled calls whose filed/not-filed decision matches the
+        # adjudicated label: the closest thing to a facts score this has.
+        "facts_score": round(adj["filed_agree"] / adj["calls"], 4) if adj["calls"] else 0.0,
+        "quality_hits": [],
+        "quality_misses": [],
+        "forbidden_violations": [],
+        "schema_violations": violations,
+        "log_triage": {**score, "per_call": calls},
+    }
+
+
 FACTS_MODES = ("all", "any")
 
 
@@ -929,6 +1115,9 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
             snippet_len: int, dry_run: bool, save_responses: bool = False) -> dict | None:
     if spec.get("type") == "agentic":
         return run_agentic_one(spec, ollama_url, model, runs, dry_run)
+    if spec.get("type") == "log_triage_replay":
+        return run_log_triage_one(spec, ollama_url, model, runs, snippet_len, dry_run,
+                                  save_responses)
 
     name = spec["name"]
     facts = spec.get("quality_facts", [])

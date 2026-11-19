@@ -1,0 +1,29 @@
+topic: task-model
+date: 2026-11-19
+slug: log-triage-replay
+title: Log Analysis Agent triage replay — gemma4:26b-a4b-it-qat is not better than qwen3.6:35b on missed real problems
+trigger: replay the n8n Log Analysis Agent's Ollama Triage prompt on real log groups to decide which model the triage node should run (n8n-workflow#348)
+method: 31 real triage runs (redacted) × 2 reps × 2 models through the node's own request (/v1, temperature 0.1, max_tokens 2048, reasoning_effort none), scored against two hand-label sets; now the on-demand payload log_triage_replay (native /api/chat approximation)
+hardware: gfx1151 (Strix Halo), in-cluster ollama
+models:
+  - gemma4:26b-a4b-it-qat
+  - qwen3.6:35b
+payloads:
+  - log_triage_replay
+outcome:
+  winner: "qwen3.6:35b — decision recorded as homelab D-050"
+  evidence:
+    - "real problems missed: ac 0/18 vs 0/18; adjudicated gemma 1/28 vs qwen 0/28"
+    - "NOISE runs filed: ac gemma 31/36, qwen 30/36; adjudicated 14/18 each"
+    - "invalid JSON: gemma 0/62, qwen 1/62"
+    - "wall time median 10.9 s both; p90 gemma 27.0 s, qwen 23.7 s"
+    - "invented details (hand-read): gemma 2, qwen 5"
+  action_taken:
+    - "decision recorded in homelab D-050; the model change is a separate PR there"
+raw_artifacts:
+  - raw/gemma4-26b-a4b-it-qat.jsonl
+  - raw/qwen3.6-35b.jsonl
+links:
+  related_issues:
+    - https://github.com/dvystrcil/homelab/pull/2419
+  related_commits: []

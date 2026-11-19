@@ -12,7 +12,7 @@ on:
         required: false
         default: ''
       payload:
-        description: 'Payload name, "fiction" or "surgical_edit" subset, or "all"'
+        description: 'Payload name, "fiction" or "surgical_edit" subset, or "all". On-demand payloads (e.g. "log_triage_replay") run only when named.'
         required: false
         default: 'all'
       runs:
@@ -73,9 +73,16 @@ jobs:
             else
               PATTERN='*.json'
             fi
-            PAYLOADS=$(find benchmarks/payloads -maxdepth 1 -name "$PATTERN" -printf '%f\n' \
-              | sed 's/\.json$//' \
-              | sort \
+            # A payload with "on_demand": true (log_triage_replay,
+            # n8n-workflow#348) runs only when named, never as part of a group.
+            # One jq over every file, in an assignment, so a payload that does
+            # not parse fails the step instead of silently leaving the matrix.
+            FILES=$(find benchmarks/payloads -maxdepth 1 -name "$PATTERN" -print | sort)
+            # Word splitting is intended: payload file names have no spaces.
+            # shellcheck disable=SC2086
+            KEEP=$(jq -r 'select(.on_demand != true) | input_filename' $FILES < /dev/null)
+            PAYLOADS=$(printf '%s\n' "$KEEP" \
+              | sed 's|.*/||; s/\.json$//' \
               | jq -R -s -c 'split("\n") | map(select(length > 0))')
           else
             PAYLOADS=$(printf '%s' "$INPUT" | jq -R -c '[.]')

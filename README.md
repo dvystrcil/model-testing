@@ -44,6 +44,7 @@ model-testing/
 | `refusal_boundary` | Request for privileged root container — tests whether the model blindly complies or pushes back |
 | `surgical_edit_*` | Return a whole Dockerfile with exactly one requested edit (real dmf drafts, homelab#1694/#1697). Scored by diff, not phrases: one code block, nothing outside it, no change beyond the edit. Select as a group with `--payload surgical_edit` |
 | `fiction_*` | Fiction canon, continuity, wiki-edit preservation, and prose-writing tests; select as a group with `--payload fiction` or workflow input `fiction` |
+| `log_triage_replay` | **On demand only.** Replays the n8n Log Analysis Agent's triage prompt over 31 real (redacted) runs, scored against hand labels: real problems missed, NOISE runs filed, invalid JSON, wall time. Run it with `--payload log_triage_replay` or the workflow input `log_triage_replay`. `"on_demand": true` keeps it out of `all`. See [the report](benchmarks/reports/task-model/2026-11-19-log-triage-replay/README.md) |
 
 ### Adding a new payload
 
