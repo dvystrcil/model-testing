@@ -135,8 +135,39 @@ def _prefix_hits(low: str, known_norm: dict[str, str]) -> list[str]:
     return [full for k, full in known_norm.items() if shortens(k)]
 
 
+# The fields of a sweep's metadata row that name the run itself, not a model.
+# Only the FIELD names live here; the values come from each run's own data, so
+# a new runner host or ollama release needs no code change (model-testing#177).
+ENVIRONMENT_FIELDS = ("hostname", "git_commit", "ollama_version")
+
+
+def environment_tokens(*paths: Path) -> set[str]:
+    """Identifiers the run recorded about itself, from EVERY metadata row.
+
+    Run 44602629787 failed analyze with `invented=a9ba7a4,
+    model-testing-runner-runner-kk8f6`: its own commit and runner host,
+    which the report prints in its Environment table. A merged sweep has
+    one metadata row per job, each with its own runner, so all rows count,
+    not just the first one `load_results` keeps.
+    """
+    out = set()
+    for path in paths:
+        for line in path.read_text().splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if row.get("type") != "metadata":
+                continue
+            for f in ENVIRONMENT_FIELDS:
+                v = row.get(f)
+                if isinstance(v, str) and v.strip():
+                    out.add(v.strip().lower())
+    return out
+
+
 def classify_named_models(analysis: str, known: list[str],
-                          computed: list[str] | None = None
+                          computed: list[str] | None = None,
+                          environment: set[str] | None = None
                           ) -> tuple[list[str], list[str], dict[str, str]]:
     """Split the models the prose names into (invented, ambiguous, abbrev).
 
@@ -166,6 +197,11 @@ def classify_named_models(analysis: str, known: list[str],
       abbrev     prefixes exactly one real model, at a component boundary.
                  The claim is checkable. A warning, and the expansion is
                  named so nobody has to guess.
+
+    `environment` holds the run's own identifiers (`environment_tokens`). A
+    name equal to one of them is the report describing itself, not a model,
+    and is skipped. Only an EXACT match is excused, so a model-shaped name
+    that merely contains a host is still graded as above.
     """
     known_norm = {k.lower(): k for k in list(known) + list(ANALYSIS_MODELS)}
     # Declared but produced nothing is fatal too, for a different reason: a
@@ -173,8 +209,11 @@ def classify_named_models(analysis: str, known: list[str],
     # misleads, so being in models.yaml is not a licence to claim results.
     ran = None if computed is None else {c.lower() for c in computed}
     invented, ambiguous, abbrev = [], [], {}
+    env = {e.lower() for e in (environment or ())}
     for m in models_in_text(analysis):
         low = m.lower()
+        if low in env and low not in known_norm:
+            continue
         if low in known_norm:
             if ran is not None and low not in ran and low not in {
                     a.lower() for a in ANALYSIS_MODELS}:
@@ -1033,7 +1072,8 @@ def main():
     # degrades to what it was rather than passing everything.
     declared = parse_expected(args.expect_models) or models_seen
     bogus, ambiguous, abbrev = classify_named_models(
-        analysis, declared, computed=models_seen)
+        analysis, declared, computed=models_seen,
+        environment=environment_tokens(*paths))
     print(confabulation_marker(bogus, ambiguous, abbrev), file=sys.stderr)
     for b in bogus:
         print(f"::error::generated analysis names '{b}', which appears "
