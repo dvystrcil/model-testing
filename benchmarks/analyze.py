@@ -657,14 +657,72 @@ def coverage_marker(c: dict) -> str:
             f"unexpected={','.join(c['unexpected']) if c['unexpected'] else 'none'}")
 
 
-def load_results(*paths: Path) -> tuple[dict | None, list[dict], list[dict]]:
+def _read_rows(*paths: Path) -> list[dict]:
     rows = []
     for path in paths:
         rows.extend(json.loads(line) for line in path.read_text().splitlines() if line.strip())
+    return rows
+
+
+def load_results(*paths: Path) -> tuple[dict | None, list[dict], list[dict]]:
+    """Metadata, scored standard rows, agentic rows.
+
+    Timed-out rows (model-testing#176) are left out: they carry no scores,
+    and the table, the safety gate and analyze_claude.py all read a score
+    off every row they are given. load_timed_out returns them.
+    """
+    rows = _read_rows(*paths)
     meta = next((r for r in rows if r.get("type") == "metadata"), None)
     agentic = [r for r in rows if r.get("type") == "agentic"]
-    standard = [r for r in rows if r.get("type") not in ("metadata", "agentic")]
+    standard = [r for r in rows if r.get("type") not in ("metadata", "agentic")
+                and not is_timed_out(r)]
     return meta, standard, agentic
+
+
+def is_timed_out(row: dict) -> bool:
+    return row.get("status") == "timed_out"
+
+
+def load_timed_out(*paths: Path) -> list[dict]:
+    """Cells where every run hit the wall-clock (model-testing#176)."""
+    return [r for r in _read_rows(*paths) if is_timed_out(r)]
+
+
+def timeouts_by_model(timed_out: list[dict]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for r in timed_out:
+        out[r["model"]] = out.get(r["model"], 0) + 1
+    return out
+
+
+def timeouts_marker(timed_out: list[dict]) -> str:
+    detail = ",".join(f"{m}:{n}" for m, n
+                      in sorted(timeouts_by_model(timed_out).items()))
+    return "ANALYZE-TIMEOUTS timed_out=" + (detail or "none")
+
+
+def render_timeouts(timed_out: list[dict]) -> str:
+    """The report section for cells that ran and produced no numbers.
+
+    A timed-out payload counts as COVERED -- its job ran, and "this model
+    could not answer inside the budget" is the result (the call #94 made for
+    cells, applied to payloads). But it is not a MEASURED cell, so it still
+    shows in Cell Coverage, and this section says why, with the elapsed time
+    against the budget so a reader can tell a hang from a slow model.
+    """
+    if not timed_out:
+        return ""
+    lines = ["## Timed Out\n",
+             "These cells ran but every run hit the request wall-clock, so "
+             "they have no scores and are not in the results table:\n"]
+    for r in sorted(timed_out, key=lambda r: (r["model"], r["payload"])):
+        budget = r.get("timeout_seconds")
+        lines.append(f"- `{r['model']}` on `{r['payload']}` — "
+                     f"{r.get('elapsed_seconds', 0):.0f}s elapsed"
+                     + (f" (budget {budget:.0f}s)" if budget else "")
+                     + f", {r.get('timed_out_runs', '?')}/{r.get('runs', '?')} runs")
+    lines.append("")
+    return "\n".join(lines) + "\n"
 
 
 def strip_think(text: str) -> str:
@@ -955,7 +1013,8 @@ def main():
         sys.exit(1)
 
     meta, results, agentic = load_results(*paths)
-    if not results and not agentic:
+    timed_out = load_timed_out(*paths)
+    if not results and not agentic and not timed_out:
         print("ERROR: no results found in file(s)", file=sys.stderr)
         sys.exit(1)
 
@@ -968,8 +1027,13 @@ def main():
     # Computed BEFORE the (slow, failure-prone) LLM call so the marker is
     # emitted even if the summarizer dies — a run that fails at the analysis
     # step must not also lose the record of which families went missing.
-    cov = coverage(parse_expected(args.expect), payloads_seen)
+    # A timed-out row proves the payload's job ran (model-testing#176), so it
+    # counts toward PAYLOAD coverage -- but not toward the cells below, which
+    # ask whether a model produced numbers.
+    cov = coverage(parse_expected(args.expect),
+                   sorted(set(payloads_seen) | {r["payload"] for r in timed_out}))
     print(coverage_marker(cov), file=sys.stderr)
+    print(timeouts_marker(timed_out), file=sys.stderr)
     for m in cov["missing"]:
         print(f"::warning::no results for payload '{m}' — its sweep job "
               f"produced nothing", file=sys.stderr)
@@ -1063,6 +1127,7 @@ def main():
         # compare against a previous, complete sweep.
         f"{render_coverage(cov)}\n"
         f"{render_cell_coverage(cells, parse_expected(args.expect))}"
+        f"{render_timeouts(timed_out)}"
         # Next to coverage, for the same reason: a truncated cell is present
         # in the table and looks complete, so the caveat has to reach the
         # reader before the numbers do.

@@ -20,6 +20,7 @@ import subprocess
 import sys
 import time
 import textwrap
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -67,10 +68,38 @@ SLOWEST_TPS = 8.0
 TIMEOUT_MARGIN = 210
 
 
-def http_timeout_for(payload: dict) -> float:
-    """Wall-clock for one request, sized so the token cap binds first."""
+# model-testing#176: SLOWEST_TPS was still a guess about every model, and
+# ripple-preview:65b-q4_K_M generates at ~5.7 tok/s -- below it -- so in run
+# 44602629787 the 722s timeout fired before the 4096 cap could bind. Each
+# model's eval rate is now MEASURED at warmup (eval_count/eval_duration of
+# the warmup reply) and kept here for the rest of the sweep. Nothing is
+# persisted across sweeps: a rate is only trusted on the hardware and ollama
+# version it was measured on.
+EVAL_TPS: dict[str, float] = {}
+
+
+def eval_rate(resp: dict) -> float | None:
+    """Generation tok/s from an ollama reply, or None if it carries none."""
+    ec, ed = resp.get("eval_count") or 0, resp.get("eval_duration") or 0
+    if ec <= 0 or ed <= 0:
+        return None
+    return ec / (ed / 1e9)
+
+
+def http_timeout_for(payload: dict, eval_tps: float | None = None) -> float:
+    """Wall-clock for one request, sized so the token cap binds first.
+
+    The rate is the model's measured one (EVAL_TPS, from warmup) when there
+    is one, but never FASTER than SLOWEST_TPS: the warmup decodes "hi" at
+    short context, which overstates the rate deep into a 4096-token answer.
+    So a measurement can only lengthen the timeout. A timeout that is too
+    long costs time on a genuine hang; one that is too short loses a cell.
+    """
+    if eval_tps is None:
+        eval_tps = EVAL_TPS.get(payload.get("model"))
+    rate = min(eval_tps, SLOWEST_TPS) if eval_tps and eval_tps > 0 else SLOWEST_TPS
     cap = (payload.get("options") or {}).get("num_predict", NUM_PREDICT)
-    return max(HTTP_TIMEOUT, cap / SLOWEST_TPS + TIMEOUT_MARGIN)
+    return max(HTTP_TIMEOUT, cap / rate + TIMEOUT_MARGIN)
 
 
 def apply_generation_limit(payload: dict,
@@ -1029,6 +1058,9 @@ def warmup_model(ollama_url: str, model: str, attempts: int = 3) -> bool:
     evicted), so it retries: a model that has just landed on disk may need a
     moment before it will answer.
     """
+    # A rate from an earlier warmup of this model must not outlive a failed
+    # or rate-less one: fall back rather than trust a stale number.
+    EVAL_TPS.pop(model, None)
     for i in range(1, attempts + 1):
         info(f"warming up {model} (attempt {i}/{attempts}) — "
              f"ensuring model is fully loaded into VRAM...")
@@ -1045,12 +1077,34 @@ def warmup_model(ollama_url: str, model: str, attempts: int = 3) -> bool:
             # comparable across models. Without the eviction it would only be
             # a load time for whichever model happened not to be resident.
             info(f"warmup done  cold_load={load_ms:.0f}ms")
+            rate = eval_rate(resp)
+            if rate is not None:
+                EVAL_TPS[model] = rate
+            # Once per model, so the sweep log shows which budget every
+            # request for it was sent with, and why.
+            t = http_timeout_for({"model": model})
+            src = (f"measured {rate:.1f} tok/s" if rate is not None
+                   else "no usable rate -- fallback")
+            info(f"eval_rate={src}  SLOWEST_TPS={SLOWEST_TPS}  "
+                 f"timeout={t:.0f}s at num_predict={NUM_PREDICT}")
             return True
         except Exception as e:                     # noqa: BLE001 - reported
             info(f"warmup attempt {i} failed: {e}")
             if i < attempts:
                 time.sleep(i * 5)
     return False
+
+
+def is_timeout(e: BaseException) -> bool:
+    """True when the request ran out of wall-clock, as opposed to failing.
+
+    A read timeout surfaces as TimeoutError (socket.timeout is an alias); a
+    connect-phase one arrives wrapped, as URLError(reason=TimeoutError).
+    """
+    if isinstance(e, TimeoutError):
+        return True
+    return (isinstance(e, urllib.error.URLError)
+            and isinstance(e.reason, TimeoutError))
 
 
 def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
@@ -1060,10 +1114,19 @@ def run_once(spec: dict, ollama_url: str, model: str) -> dict | None:
     payload.setdefault("options", {})["num_gpu"] = -1
     apply_generation_limit(payload)
 
+    t0 = time.monotonic()
     try:
         resp = ollama_chat(ollama_url, payload)
     except Exception as e:
         print(f"  ERROR: {e}", file=sys.stderr)
+        if is_timeout(e):
+            # model-testing#176: a timeout is a measurement ("this model
+            # could not answer inside the budget"), not a missing job. Run
+            # 44602629787 returned None here, wrote no row, and
+            # ANALYZE-COVERAGE failed the sweep as if the job never ran.
+            return {"timed_out": True,
+                    "elapsed_seconds": round(time.monotonic() - t0, 1),
+                    "timeout_seconds": http_timeout_for(payload)}
         return None
 
     content = strip_think(resp.get("message", {}).get("content", ""))
@@ -1153,11 +1216,15 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         return None
 
     raw_results = []
+    timeouts = []
     for i in range(runs):
         run_label = f"run {i+1}/{runs}  " if runs > 1 else ""
         info(f"{run_label}sending request → ollama ({ollama_url})")
         r = run_once(spec, ollama_url, model)
         if r is None:
+            continue
+        if r.get("timed_out"):
+            timeouts.append(r)
             continue
         raw_results.append(r)
         if runs > 1:
@@ -1175,6 +1242,8 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
                 print(f"         SCHEMA VIOLATIONS: {r['schema_violations']}")
 
     if not raw_results:
+        if timeouts:
+            return timed_out_row(name, model, runs, timeouts)
         return None
 
     pec  = raw_results[0]["pec"]
@@ -1244,6 +1313,10 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
         "total_duration": round(avg_td),
         "total_duration_sd": round(stddev(tds)),
         "clean_runs": clean_runs,
+        # Runs that hit the wall-clock and are therefore NOT in the averages
+        # above (model-testing#176). 0 is stated, not omitted: absent means
+        # the row predates the field.
+        "timed_out_runs": len(timeouts),
         "per_run": per_run,
         "prompt_tps": round(prompt_tps, 1),
         "gen_tps": round(gen_tps, 1),
@@ -1262,12 +1335,43 @@ def run_one(spec: dict, ollama_url: str, model: str, runs: int,
     }
 
 
+def timed_out_row(name: str, model: str, runs: int,
+                  timeouts: list[dict]) -> dict:
+    """The row for a cell where EVERY run ran out of wall-clock.
+
+    It carries no score fields on purpose: there is nothing to average, and a
+    zero would read as a measured failure. analyze.py keeps these out of the
+    results table and reports them in their own section (model-testing#176).
+    """
+    return {
+        "ts": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "payload": name,
+        "model": model,
+        "runs": runs,
+        "status": "timed_out",
+        "timed_out_runs": len(timeouts),
+        "elapsed_seconds": max(t["elapsed_seconds"] for t in timeouts),
+        "timeout_seconds": timeouts[0]["timeout_seconds"],
+        "per_run": [{"status": "timed_out",
+                     "elapsed_seconds": t["elapsed_seconds"]}
+                    for t in timeouts],
+    }
+
+
 def print_summary(results: list[dict]) -> None:
     if not results:
         return
 
     agentic = [r for r in results if r.get("type") == "agentic"]
-    standard = [r for r in results if r.get("type") != "agentic"]
+    timed_out = [r for r in results if r.get("status") == "timed_out"]
+    standard = [r for r in results
+                if r.get("type") != "agentic" and r.get("status") != "timed_out"]
+
+    for r in timed_out:
+        print(f"TIMED OUT  {r['model']}  {r['payload']}  "
+              f"after {r['elapsed_seconds']:.0f}s "
+              f"(budget {r['timeout_seconds']:.0f}s, "
+              f"{r['timed_out_runs']}/{r['runs']} runs)")
 
     if agentic:
         print("\n" + "=" * 90)
