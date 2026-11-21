@@ -636,6 +636,138 @@ def test_print_summary_survives_a_timed_out_row(capsys):
 
 
 # ---------------------------------------------------------------------------
+# The same rule for the agentic and log-triage paths (model-testing#180).
+#
+# #179 taught the chat path that a timeout is a result. On origin/main the
+# other two runners still did not know:
+#   * log_triage_replay: every call timing out left `calls` empty, so
+#     run_log_triage_one returned None and the payload looked like a job
+#     that never ran -- the exact #176 failure, one runner over;
+#   * agentic: a timed-out turn set `stalled`, so the cell was graded
+#     `stall` -- "exceeded its turn budget" -- a measured failure the model
+#     never produced. #179's rule is that a zero must not stand in for "no
+#     answer inside the budget".
+# ---------------------------------------------------------------------------
+
+def _agentic_spec():
+    return {"name": "agentic_p", "type": "agentic", "task": "edit it",
+            "scoped_files": ["a.yaml"], "expected_writes": {}, "max_turns": 3}
+
+
+def _raise(exc):
+    def boom(url, payload):
+        raise exc
+    return boom
+
+
+def test_agentic_timeout_row_exists(monkeypatch):
+    monkeypatch.setattr(rb, "ollama_chat", _raise(TimeoutError("timed out")))
+    row = rb.run_agentic_one(_agentic_spec(), "http://x", "ripple", 1, False)
+    assert row is not None, "a timeout must leave a row, not nothing"
+    assert row["status"] == "timed_out"
+    assert row["payload"] == "agentic_p" and row["model"] == "ripple"
+    assert row["timed_out_runs"] == 1 and row["runs"] == 1
+    assert isinstance(row["elapsed_seconds"], float) and row["elapsed_seconds"] >= 0
+    # The agentic turn carries no num_predict, so its budget is the default.
+    assert row["timeout_seconds"] == rb.http_timeout_for({"model": "ripple"})
+    # Not an agentic SCORE row: analyze reads pass_count off every one of
+    # those, and a timed-out cell has nothing to count.
+    assert row.get("type") != "agentic" and "outcome_counts" not in row
+    print("PASS")
+
+
+def test_agentic_wrapped_connect_timeout_is_a_timeout(monkeypatch):
+    monkeypatch.setattr(rb, "ollama_chat",
+                        _raise(urllib.error.URLError(TimeoutError("timed out"))))
+    row = rb.run_agentic_one(_agentic_spec(), "http://x", "m", 1, False)
+    assert row["status"] == "timed_out"
+
+
+def test_agentic_timeout_on_a_later_turn_is_still_a_timeout(monkeypatch):
+    """The model was working (it called a tool) when the clock ran out."""
+    replies = iter([{"message": {"content": "", "tool_calls": [
+        {"function": {"name": "read_file", "arguments": {"path": "a.yaml"}}}]}}])
+
+    def chat(url, payload):
+        try:
+            return next(replies)
+        except StopIteration:
+            raise TimeoutError("timed out") from None
+    monkeypatch.setattr(rb, "ollama_chat", chat)
+    row = rb.run_agentic_one(_agentic_spec(), "http://x", "m", 1, False)
+    assert row["status"] == "timed_out"
+
+
+def test_agentic_non_timeout_error_is_still_a_stall(monkeypatch):
+    """Only a timeout is reclassified; a refused connection keeps its old row."""
+    monkeypatch.setattr(rb, "ollama_chat",
+                        _raise(urllib.error.URLError(ConnectionRefusedError("refused"))))
+    row = rb.run_agentic_one(_agentic_spec(), "http://x", "m", 1, False)
+    assert row["type"] == "agentic" and "status" not in row
+    assert row["outcome_counts"] == {"stall": 1}
+
+
+def test_agentic_some_runs_timed_out_keeps_its_row_and_counts_them(monkeypatch):
+    calls = iter([{"message": {"content": "done"}, "eval_count": 7}, None])
+
+    def chat(url, payload):
+        r = next(calls)
+        if r is None:
+            raise TimeoutError("timed out")
+        return r
+    monkeypatch.setattr(rb, "ollama_chat", chat)
+    row = rb.run_agentic_one(_agentic_spec(), "http://x", "m", 2, False)
+    assert row["type"] == "agentic" and "status" not in row
+    assert row["timed_out_runs"] == 1
+    # The timed-out run is not graded: it is neither a pass nor a stall.
+    assert row["outcome_counts"] == {"pass": 1} and row["pass_count"] == 1
+    assert row["avg_tokens"] == 7
+
+
+def _triage_spec(n_cases=2):
+    s = rb.load_payloads("log_triage_replay")[0]
+    s["cases"] = s["cases"][:n_cases]
+    return s
+
+
+def test_log_triage_timeout_row_exists(monkeypatch):
+    monkeypatch.setattr(rb, "ollama_chat", _raise(TimeoutError("timed out")))
+    s = _triage_spec()
+    row = rb.run_one(s, "http://x", "ripple", 2, 0, False)
+    assert row is not None, "a timeout must leave a row, not nothing"
+    assert row["status"] == "timed_out"
+    assert row["payload"] == s["name"] and row["model"] == "ripple"
+    # runs are reps, as on a scored log-triage row; every rep timed out.
+    assert row["runs"] == 2 and row["timed_out_runs"] == 2
+    assert row["timed_out_calls"] == 4
+    assert isinstance(row["elapsed_seconds"], float)
+    p = json.loads(json.dumps(s["payload"]))
+    p["model"] = "ripple"
+    assert row["timeout_seconds"] == rb.http_timeout_for(rb.apply_generation_limit(p))
+    print("PASS")
+
+
+def test_log_triage_non_timeout_error_still_writes_no_row(monkeypatch):
+    monkeypatch.setattr(rb, "ollama_chat",
+                        _raise(urllib.error.URLError(ConnectionRefusedError("refused"))))
+    assert rb.run_one(_triage_spec(), "http://x", "m", 1, 0, False) is None
+
+
+def test_log_triage_some_calls_timed_out_keeps_its_row_and_counts_them(monkeypatch):
+    answers = iter(['{"overall_severity":"NOISE"}', None])
+
+    def chat(url, payload):
+        a = next(answers)
+        if a is None:
+            raise TimeoutError("timed out")
+        return {"message": {"content": a}}
+    monkeypatch.setattr(rb, "ollama_chat", chat)
+    row = rb.run_one(_triage_spec(), "http://x", "m", 1, 0, False)
+    assert "status" not in row
+    assert row["log_triage"]["calls"] == 1 and row["timed_out_calls"] == 1
+
+
+# ---------------------------------------------------------------------------
 # The wall-clock sized from the model's own measured eval rate (#176 AC2).
 #
 # SLOWEST_TPS=8.0 gave ripple-preview:65b-q4_K_M 4096/8+210 = 722s, but

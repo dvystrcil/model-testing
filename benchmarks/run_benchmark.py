@@ -629,10 +629,18 @@ def run_agentic_once(spec: dict, ollama_url: str, model: str) -> dict:
             "messages": messages,
             "tools": AGENTIC_TOOLS,
         }
+        t0 = time.monotonic()
         try:
             resp = ollama_chat(ollama_url, payload)
         except Exception as e:
             info(f"[agentic] turn={turn+1} ollama error: {e}")
+            if is_timeout(e):
+                # model-testing#180: the run ran out of wall-clock. Grading it
+                # `stall` ("exceeded its turn budget") would record a failure
+                # the model never produced -- the #176 rule, agentic path.
+                return {"timed_out": True,
+                        "elapsed_seconds": round(time.monotonic() - t0, 1),
+                        "timeout_seconds": http_timeout_for(payload)}
             stalled = True
             break
 
@@ -707,14 +715,22 @@ def run_agentic_one(spec: dict, ollama_url: str, model: str, runs: int, dry_run:
         return None
 
     raw: list[dict] = []
+    timeouts: list[dict] = []
     for i in range(runs):
         run_label = f"run {i+1}/{runs}  " if runs > 1 else ""
         info(f"{run_label}starting agentic turn loop")
         r = run_agentic_once(spec, ollama_url, model)
+        if r.get("timed_out"):
+            info(f"{run_label}timed out after {r['elapsed_seconds']:.0f}s")
+            timeouts.append(r)
+            continue
         raw.append(r)
         info(f"{run_label}done  outcome={r['outcome']}  turns={r['turns_used']}  tokens={r['total_ec']}"
              + (f"  scope={r['scope_violations']}" if r["scope_violations"] else "")
              + (f"  content={r['content_violations']}" if r["content_violations"] else ""))
+
+    if not raw:
+        return timed_out_row(name, model, runs, timeouts)
 
     outcomes = [r["outcome"] for r in raw]
     pass_count = outcomes.count("pass")
@@ -733,6 +749,9 @@ def run_agentic_one(spec: dict, ollama_url: str, model: str, runs: int, dry_run:
         "content_violations": list({v for r in raw for v in r["content_violations"]}),
         "forbidden_found": list({v for r in raw for v in r["forbidden_found"]}),
         "writes": list({w for r in raw for w in r["writes"]}),
+        # Runs that hit the wall-clock: not graded, so not in outcome_counts
+        # or the averages above (model-testing#180).
+        "timed_out_runs": len(timeouts),
     }
 
 
@@ -850,7 +869,7 @@ def run_log_triage_one(spec: dict, ollama_url: str, model: str, runs: int,
         print(f"  [dry-run] would POST {len(cases) * runs} requests to {ollama_url}/api/chat")
         return None
 
-    calls, raw = [], []
+    calls, raw, timeouts = [], [], []
     for rep in range(1, runs + 1):
         for case in cases:
             payload = json.loads(json.dumps(spec["payload"]))
@@ -864,6 +883,10 @@ def run_log_triage_one(spec: dict, ollama_url: str, model: str, runs: int,
                 resp = ollama_chat(ollama_url, payload)
             except Exception as e:                     # noqa: BLE001 - recorded
                 info(f"rep {rep} {case['id']} ERROR: {e}")
+                if is_timeout(e):
+                    timeouts.append({"rep": rep,
+                                     "elapsed_seconds": round(time.monotonic() - t0, 1),
+                                     "timeout_seconds": http_timeout_for(payload)})
                 continue
             wall_ms = round((time.monotonic() - t0) * 1000)
             content = strip_think(resp.get("message", {}).get("content", ""))
@@ -878,7 +901,19 @@ def run_log_triage_one(spec: dict, ollama_url: str, model: str, runs: int,
                 call["response_snippet"] = content[:snippet_len]
             calls.append(call)
     if not calls:
-        return None
+        if not timeouts:
+            return None
+        # model-testing#180: every call ran out of wall-clock, which is a
+        # result, not a job that never ran. timed_out_row counts runs, and a
+        # run here is a rep over all cases, so the calls collapse to one
+        # entry per rep (its slowest call); the call count rides alongside.
+        per_rep = {}
+        for t in timeouts:
+            if t["elapsed_seconds"] >= per_rep.get(t["rep"], {"elapsed_seconds": -1})["elapsed_seconds"]:
+                per_rep[t["rep"]] = t
+        row = timed_out_row(name, model, runs, [per_rep[r] for r in sorted(per_rep)])
+        row["timed_out_calls"] = len(timeouts)
+        return row
 
     score = score_log_triage(calls, cases)
     violations = []
@@ -914,6 +949,8 @@ def run_log_triage_one(spec: dict, ollama_url: str, model: str, runs: int,
         "forbidden_violations": [],
         "schema_violations": violations,
         "log_triage": {**score, "per_call": calls},
+        # Calls that hit the wall-clock and are not scored (model-testing#180).
+        "timed_out_calls": len(timeouts),
     }
 
 

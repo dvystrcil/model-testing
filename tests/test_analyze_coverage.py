@@ -251,6 +251,30 @@ class TimedOutPayloadTest(unittest.TestCase):
             self.assertEqual([r["payload"] for r in analyze.load_timed_out(f)],
                              [self.TIMED_OUT[0]])
 
+    def test_timed_out_agentic_and_log_triage_cells_count_toward_coverage(self):
+        """model-testing#180: the rows the agentic and log-triage RUNNERS
+        write on timeout (not hand-built ones) reach coverage as covered and
+        the report as timed out."""
+        import run_benchmark as rb
+        from unittest import mock
+        agentic = {"name": self.TIMED_OUT[0], "type": "agentic", "task": "t",
+                   "scoped_files": [], "expected_writes": {}, "max_turns": 2}
+        triage = rb.load_payloads("log_triage_replay")[0]
+        triage["name"] = self.TIMED_OUT[1]
+        triage["cases"] = triage["cases"][:1]
+        with mock.patch.object(rb, "ollama_chat",
+                               side_effect=TimeoutError("timed out")):
+            rows = [rb.run_one(s, "http://x", self.MODEL, 1, 0, False)
+                    for s in (agentic, triage)]
+        self.assertNotIn(None, rows)
+        err, report = self._run_main([[self._row(self.DONE)], *[[r] for r in rows]])
+        marker = next(l for l in err.splitlines()
+                      if l.startswith("ANALYZE-COVERAGE"))
+        self.assertIn("missing=none", marker)
+        self.assertIn("## Timed Out", report)
+        for p in self.TIMED_OUT:
+            self.assertIn(p, report.split("## Timed Out", 1)[1])
+
 
 if __name__ == "__main__":
     unittest.main()
