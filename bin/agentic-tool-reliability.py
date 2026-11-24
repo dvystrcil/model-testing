@@ -72,12 +72,10 @@ def execute_tool(name, args, state):
         query = args.get("query")
         if not isinstance(query, str) or not query.strip():
             return {"error": "query must be a non-empty string"}
-        matches = [r for slug, r in RECIPES.items()
-                   if query.lower() in slug.lower() or query.lower() in r["name"].lower()
-                   or query.lower() in r["ingredients"].lower()]
-        return {"recipes": [{"slug": slug, "name": r["name"]} for slug, r in
-                            [(s, RECIPES[s]) for s in RECIPES if s in [x for x in RECIPES]]
-                            if r in matches]}
+        matches = [{"slug": slug, "name": recipe["name"]} for slug, recipe in RECIPES.items()
+                   if query.lower() in slug.lower() or query.lower() in recipe["name"].lower()
+                   or query.lower() in recipe["ingredients"].lower()]
+        return {"recipes": matches}
     if name == "recipe_get":
         slug = args.get("slug")
         if not isinstance(slug, str) or not slug:
