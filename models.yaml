@@ -31,11 +31,11 @@ models:
   # NOT assumed good: homelab#571/#577 previously caught this exact tag
   # authoring malformed JSON. That was before the v0.32.1 tool-calling work,
   # so this sweep is the retest -- structured_json_* is the payload to read.
-  - name: gemma4:26b-a4b-it-qat   # ~15 GB
+  #- name: gemma4:26b-a4b-it-qat   # ~15 GB
 
   # Dense gemma4 for a same-family MoE-vs-dense comparison. The it-qat variant
   # specifically: plain gemma4:31b had broken vision on ollama 0.30.x.
-  - name: gemma4:31b-it-qat       # ~18 GB
+  #- name: gemma4:31b-it-qat       # ~18 GB
 
   # The other incumbent: zero tool-call failures across the 1,878-call
   # baseline, and back to 0 failures after the 0.32.15 rollback. Slow (77s vs
@@ -53,7 +53,7 @@ models:
   # renderer=nemotron-3.5-nano parser=nemotron-3.5-nano). 30B MoE with 3B
   # active, 1M context. Architecture added in ollama v0.32.9 — inside the
   # current pin.
-  #- name: nemotron-3.5-lightning:30b-a3b-q4_K_M  # ~25 GB
+  - name: nemotron-3.5-lightning:30b-a3b-q4_K_M  # ~25 GB
 
   # Correctly matched renderer AND parser (verified live: renderer=glm-4.7
   # parser=glm-4.7). "Strongest model in the 30B class", 198K context.
